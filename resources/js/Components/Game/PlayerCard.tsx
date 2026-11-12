@@ -28,12 +28,14 @@ export default function PlayerCard({
         <div
             className={`flex min-w-0 items-center transition-colors duration-200 ${
                 compact ? 'gap-2 px-2.5 py-3' : 'gap-3 px-4 py-3.5'
-            } ${active ? '' : 'bg-white opacity-[0.85]'} ${className}`}
+            } ${
+                active ? 'animate-card-nudge' : 'bg-white opacity-[0.85]'
+            } ${className}`}
             style={
                 active
                     ? {
                           background: palette.soft,
-                          boxShadow: `inset 3px 0 0 0 ${palette.base}`,
+                          boxShadow: `inset 0 0 0 3px ${palette.base}, inset 4px 0 0 0 ${palette.dark}`,
                       }
                     : undefined
             }
@@ -87,7 +89,6 @@ export default function PlayerCard({
                             ? 'mt-0.5 text-[10px] leading-3'
                             : 'mt-1 text-[11px] leading-4'
                     }`}
-                    aria-live={active ? 'polite' : undefined}
                 >
                     {subtitle}
                 </p>
@@ -111,7 +112,11 @@ export default function PlayerCard({
                             }`}
                             style={{
                                 background:
-                                    index < finished ? palette.base : '#e4e8ee',
+                                    index < finished ? palette.base : '#ffffff',
+                                boxShadow:
+                                    index < finished
+                                        ? undefined
+                                        : `inset 0 0 0 1px ${palette.base}45`,
                             }}
                         />
                     ))}

@@ -104,9 +104,7 @@ export default function Register() {
                 </div>
 
                 <div className="mt-4 flex items-center justify-end">
-                    <PrimaryButton disabled={processing}>
-                        Daftar
-                    </PrimaryButton>
+                    <PrimaryButton disabled={processing}>Daftar</PrimaryButton>
                 </div>
             </form>
         </GuestLayout>

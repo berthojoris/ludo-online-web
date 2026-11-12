@@ -237,3 +237,20 @@ export function SoundOffIcon(props: IconProps) {
         </svg>
     );
 }
+
+export function CloseIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="m6.5 6.5 11 11" />
+            <path d="m17.5 6.5-11 11" />
+        </svg>
+    );
+}
+
+export function HomeIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M4.5 10.5 12 4.5l7.5 6v8a1.5 1.5 0 0 1-1.5 1.5h-3.8a.7.7 0 0 1-.7-.7v-4.3a1.5 1.5 0 0 0-3 0v4.3a.7.7 0 0 1-.7.7H6a1.5 1.5 0 0 1-1.5-1.5v-8Z" />
+        </svg>
+    );
+}

@@ -11,6 +11,9 @@ import {
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
+import MatchResultModal, {
+    MatchStanding,
+} from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
 import {
     absoluteTrackIndex,
@@ -77,14 +80,19 @@ type GameState = {
     message: string;
     log: LogEntry[];
     logId: number;
+    rolls: Record<PlayerId, number>;
+    captures: Record<PlayerId, number>;
+    totalMoves: number;
+    startedAt: number | null;
+    finishedAt: number | null;
 };
 
 type Action =
-    | { type: 'START'; human: PlayerId; names: SetupNames }
+    | { type: 'START'; human: PlayerId; names: SetupNames; now: number }
     | { type: 'ROLL_START'; value: number }
     | { type: 'ROLL_RESULT'; value: number }
-    | { type: 'MOVE'; tokenIndex: number }
-    | { type: 'RESET' };
+    | { type: 'MOVE'; tokenIndex: number; now: number }
+    | { type: 'RESET'; now: number };
 
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
 
@@ -108,6 +116,11 @@ const initialState: GameState = {
         },
     ],
     logId: 1,
+    rolls: { blue: 0, green: 0 },
+    captures: { blue: 0, green: 0 },
+    totalMoves: 0,
+    startedAt: null,
+    finishedAt: null,
 };
 
 function otherPlayer(player: PlayerId): PlayerId {
@@ -127,7 +140,11 @@ function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
     } as SetupNames;
 }
 
-function createInitialState(human: PlayerId, rawNames: SetupNames): GameState {
+function createInitialState(
+    human: PlayerId,
+    rawNames: SetupNames,
+    now: number,
+): GameState {
     const names = cleanNames(human, rawNames);
 
     return {
@@ -144,6 +161,11 @@ function createInitialState(human: PlayerId, rawNames: SetupNames): GameState {
             },
         ],
         logId: 1,
+        rolls: { blue: 0, green: 0 },
+        captures: { blue: 0, green: 0 },
+        totalMoves: 0,
+        startedAt: now,
+        finishedAt: null,
     };
 }
 
@@ -223,11 +245,11 @@ function chooseAiMove(state: GameState): LegalMove | null {
 
 function reducer(state: GameState, action: Action): GameState {
     if (action.type === 'START') {
-        return createInitialState(action.human, action.names);
+        return createInitialState(action.human, action.names, action.now);
     }
 
     if (action.type === 'RESET') {
-        return createInitialState(state.human, state.names);
+        return createInitialState(state.human, state.names, action.now);
     }
 
     if (action.type === 'ROLL_START') {
@@ -240,6 +262,10 @@ function reducer(state: GameState, action: Action): GameState {
             phase: 'rolling',
             dice: action.value,
             legalMoves: [],
+            rolls: {
+                ...state.rolls,
+                [state.turn]: state.rolls[state.turn] + 1,
+            },
             message:
                 state.turn === state.human
                     ? 'Melempar dadu…'
@@ -318,7 +344,7 @@ function reducer(state: GameState, action: Action): GameState {
 
         nextTokens[actor][move.tokenIndex] = move.target;
 
-        let captured = false;
+        let capturedCount = 0;
 
         if (move.target <= 50) {
             const absolute = absoluteTrackIndex(actor, move.target);
@@ -326,7 +352,7 @@ function reducer(state: GameState, action: Action): GameState {
             if (!isSafeAbsoluteIndex(absolute)) {
                 nextTokens[opponent] = nextTokens[opponent].map((position) => {
                     if (absoluteTrackIndex(opponent, position) === absolute) {
-                        captured = true;
+                        capturedCount += 1;
 
                         return BASE_POSITION;
                     }
@@ -336,11 +362,19 @@ function reducer(state: GameState, action: Action): GameState {
             }
         }
 
+        const captured = capturedCount > 0;
         const reachedHome = move.target === FINISH_POSITION;
         const won = nextTokens[actor].every(
             (position) => position === FINISH_POSITION,
         );
         const extraTurn = state.dice === 6 || captured || reachedHome || won;
+        const nextCaptures = captured
+            ? {
+                  ...state.captures,
+                  [actor]: state.captures[actor] + capturedCount,
+              }
+            : state.captures;
+        const nextTotalMoves = state.totalMoves + 1;
 
         const moveDescription =
             from === BASE_POSITION
@@ -365,6 +399,9 @@ function reducer(state: GameState, action: Action): GameState {
                 legalMoves: [],
                 phase: 'gameover',
                 winner: actor,
+                captures: nextCaptures,
+                totalMoves: nextTotalMoves,
+                finishedAt: action.now,
                 message:
                     actor === state.human
                         ? `${actorName} membawa semua bidak ke garis akhir. Kamu menang!`
@@ -380,6 +417,8 @@ function reducer(state: GameState, action: Action): GameState {
                 legalMoves: [],
                 phase: 'idle',
                 turn: actor,
+                captures: nextCaptures,
+                totalMoves: nextTotalMoves,
                 message:
                     actor === state.human
                         ? 'Dapat lemparan tambahan. Lempar lagi.'
@@ -394,6 +433,8 @@ function reducer(state: GameState, action: Action): GameState {
             legalMoves: [],
             phase: 'idle',
             turn: opponent,
+            captures: nextCaptures,
+            totalMoves: nextTotalMoves,
             message:
                 opponent === state.human
                     ? 'Giliranmu. Lempar dadu.'
@@ -457,6 +498,7 @@ export default function Play() {
     const [state, dispatch] = useReducer(reducer, initialState);
     const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+    const [resultModalOpen, setResultModalOpen] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
@@ -514,8 +556,12 @@ export default function Play() {
 
     useEffect(() => {
         if (!state.winner) {
+            setResultModalOpen(false);
+
             return;
         }
+
+        setResultModalOpen(true);
 
         if (state.winner === state.human) {
             playWinSound();
@@ -597,7 +643,7 @@ export default function Play() {
                 playFinishSound();
             }
 
-            dispatch({ type: 'MOVE', tokenIndex });
+            dispatch({ type: 'MOVE', tokenIndex, now: Date.now() });
             setMovingToken(null);
             movingRef.current = false;
         },
@@ -686,6 +732,52 @@ export default function Play() {
         state.tokens[color].filter((position) => position !== BASE_POSITION)
             .length;
 
+    const standings = useMemo<MatchStanding[]>(() => {
+        if (!state.winner) {
+            return [];
+        }
+
+        const finishedCount = (color: PlayerId) =>
+            state.tokens[color].filter(
+                (position) => position === FINISH_POSITION,
+            ).length;
+
+        return [...PLAYER_IDS]
+            .sort((a, b) => {
+                if (a === state.winner) {
+                    return -1;
+                }
+                if (b === state.winner) {
+                    return 1;
+                }
+
+                return finishedCount(b) - finishedCount(a);
+            })
+            .map((color) => ({
+                color,
+                name: state.names[color],
+                role: color === state.human ? 'Kamu' : 'Lawan',
+                finished: finishedCount(color),
+                captures: state.captures[color],
+                rolls: state.rolls[color],
+            }));
+    }, [
+        state.winner,
+        state.tokens,
+        state.names,
+        state.human,
+        state.captures,
+        state.rolls,
+    ]);
+
+    const durationSeconds =
+        state.startedAt && state.finishedAt
+            ? Math.max(
+                  1,
+                  Math.round((state.finishedAt - state.startedAt) / 1000),
+              )
+            : 0;
+
     const activeSubtitle = (color: PlayerId) => {
         if (state.winner) {
             return state.winner === color
@@ -767,7 +859,7 @@ export default function Play() {
 
         cue(playStartSound);
         previousTurnRef.current = humanColor;
-        dispatch({ type: 'START', human: humanColor, names });
+        dispatch({ type: 'START', human: humanColor, names, now: Date.now() });
         setMovingToken(null);
         movingRef.current = false;
         setScreen('game');
@@ -786,7 +878,7 @@ export default function Play() {
         previousTurnRef.current = state.human;
         setMovingToken(null);
         movingRef.current = false;
-        dispatch({ type: 'RESET' });
+        dispatch({ type: 'RESET', now: Date.now() });
     };
 
     return (
@@ -1147,20 +1239,45 @@ export default function Play() {
                                         />
                                     </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={handleRoll}
-                                        disabled={!canRoll}
-                                        className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] enabled:hover:brightness-90 disabled:cursor-not-allowed"
-                                        style={rollButtonStyle}
-                                    >
-                                        <DiceIcon className="h-4.5 w-4.5" />
-                                        {rollLabel}
-                                    </button>
+                                    {state.winner ? (
+                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setResultModalOpen(true)
+                                                }
+                                                className="border-line text-ink hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl border bg-white px-3 text-xs font-semibold transition"
+                                            >
+                                                <TrophyIcon className="h-4 w-4" />
+                                                Lihat hasil
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={playAgain}
+                                                className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 text-xs font-semibold text-white transition active:scale-[0.99]"
+                                            >
+                                                <RefreshIcon className="h-4 w-4" />
+                                                Main lagi
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={handleRoll}
+                                                disabled={!canRoll}
+                                                className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] enabled:hover:brightness-90 disabled:cursor-not-allowed"
+                                                style={rollButtonStyle}
+                                            >
+                                                <DiceIcon className="h-4.5 w-4.5" />
+                                                {rollLabel}
+                                            </button>
 
-                                    <p className="text-ink-muted mt-2 text-center text-[10px] font-medium">
-                                        Lempar 6 untuk keluar
-                                    </p>
+                                            <p className="text-ink-muted mt-2 text-center text-[10px] font-medium">
+                                                Lempar 6 untuk keluar
+                                            </p>
+                                        </>
+                                    )}
                                 </section>
 
                                 <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white">
@@ -1179,13 +1296,14 @@ export default function Play() {
                                             !state.winner
                                         }
                                         finished={finished(opponentColor)}
+                                        className="min-h-0 flex-1"
                                     />
                                     <div
                                         className="relative mx-4 shrink-0"
                                         aria-hidden="true"
                                     >
                                         <div className="border-line/60 border-t" />
-                                        <span className="border-line/80 text-ink-muted absolute top-1/2 left-1/2 grid h-[26px] w-[26px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-white text-[8px] font-bold tracking-[0.08em]">
+                                        <span className="border-line/80 text-ink absolute top-1/2 left-1/2 grid h-[26px] w-[26px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-white text-[9px] font-bold tracking-[0.08em]">
                                             VS
                                         </span>
                                     </div>
@@ -1199,8 +1317,9 @@ export default function Play() {
                                             !state.winner
                                         }
                                         finished={finished(state.human)}
+                                        className="min-h-0 flex-1"
                                     />
-                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3">
+                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3 [@media(max-height:640px)]:hidden">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">
                                                 Bidakmu keluar
@@ -1218,7 +1337,7 @@ export default function Play() {
                                                 Total langkah
                                             </p>
                                             <p className="text-ink mt-0.5 text-xs font-bold tabular-nums">
-                                                {state.log.length}
+                                                {state.totalMoves}
                                             </p>
                                         </div>
                                     </div>
@@ -1247,20 +1366,31 @@ export default function Play() {
                                         {state.log[0]?.text}
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={handleRoll}
-                                    disabled={!canRoll}
-                                    className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition active:scale-[0.98] enabled:hover:brightness-90 disabled:cursor-not-allowed"
-                                    style={rollButtonStyle}
-                                >
-                                    <DiceIcon className="h-4 w-4" />
-                                    <span>
-                                        {state.phase === 'rolling'
-                                            ? '…'
-                                            : 'Lempar'}
-                                    </span>
-                                </button>
+                                {state.winner ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setResultModalOpen(true)}
+                                        className="bg-brand hover:bg-brand-dark inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white transition active:scale-[0.98]"
+                                    >
+                                        <TrophyIcon className="h-4 w-4" />
+                                        <span>Hasil</span>
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleRoll}
+                                        disabled={!canRoll}
+                                        className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition active:scale-[0.98] enabled:hover:brightness-90 disabled:cursor-not-allowed"
+                                        style={rollButtonStyle}
+                                    >
+                                        <DiceIcon className="h-4 w-4" />
+                                        <span>
+                                            {state.phase === 'rolling'
+                                                ? '…'
+                                                : 'Lempar'}
+                                        </span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </main>
@@ -1268,72 +1398,17 @@ export default function Play() {
             </div>
 
             {state.winner && screen === 'game' && (
-                <div
-                    className="bg-ink/35 fixed inset-0 z-50 grid place-items-center p-4 backdrop-blur-sm"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="result-title"
-                >
-                    <div className="relative w-full max-w-sm overflow-hidden rounded-[26px] bg-white p-5 text-center shadow-[0_30px_80px_-20px_rgba(32,43,58,0.5)] sm:p-6">
-                        <div
-                            aria-hidden="true"
-                            className="from-ludo-red via-ludo-yellow to-ludo-green absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r"
-                        />
-                        <div
-                            className="mx-auto grid h-14 w-14 place-items-center rounded-[20px]"
-                            style={{
-                                background:
-                                    PLAYER_CONFIG[state.winner].palette.soft,
-                                color: PLAYER_CONFIG[state.winner].palette.text,
-                            }}
-                        >
-                            <TrophyIcon className="h-7 w-7" />
-                        </div>
-                        <h2
-                            id="result-title"
-                            className="text-ink mt-3 text-xl font-semibold tracking-tight sm:text-2xl"
-                        >
-                            {state.winner === state.human
-                                ? 'Kamu menang!'
-                                : `${state.names[state.winner]} menang`}
-                        </h2>
-                        <p className="text-ink-muted mt-1.5 text-xs leading-5 sm:text-sm">
-                            {state.winner === state.human
-                                ? `${state.names[state.human]} membawa keempat bidak ke garis akhir. Permainan bagus.`
-                                : `${state.names[state.winner]} lebih dulu membawa keempat bidaknya ke garis akhir.`}
-                        </p>
-
-                        <div className="mt-4 flex flex-col gap-2">
-                            <button
-                                type="button"
-                                onClick={playAgain}
-                                className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99]"
-                            >
-                                <RefreshIcon className="h-4 w-4" />
-                                Main lagi
-                            </button>
-                            <button
-                                type="button"
-                                onClick={openSetup}
-                                className="border-line text-ink hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-2 rounded-2xl border bg-white text-sm font-semibold transition"
-                            >
-                                <UsersIcon className="h-4 w-4" />
-                                Ubah nama & warna
-                            </button>
-                            <Link
-                                href={route('home')}
-                                className="text-ink-muted hover:text-ink inline-flex h-9 items-center justify-center text-xs font-semibold transition"
-                            >
-                                Kembali ke beranda
-                            </Link>
-                        </div>
-
-                        <p className="text-ink-muted mt-2 inline-flex items-center gap-1 text-[10px] font-medium">
-                            <SparklesIcon className="h-3 w-3" />
-                            Pertandingan latihan · demo lokal
-                        </p>
-                    </div>
-                </div>
+                <MatchResultModal
+                    open={resultModalOpen}
+                    winner={state.winner}
+                    human={state.human}
+                    standings={standings}
+                    durationSeconds={durationSeconds}
+                    totalMoves={state.totalMoves}
+                    onPlayAgain={playAgain}
+                    onOpenSetup={openSetup}
+                    onClose={() => setResultModalOpen(false)}
+                />
             )}
         </>
     );

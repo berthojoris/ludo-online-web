@@ -101,14 +101,7 @@ export default function Home() {
                                         {user.name}
                                     </span>
                                 </Link>
-                            ) : (
-                                <Link
-                                    href={route('register')}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex items-center rounded-full border bg-white px-3.5 py-2 text-sm font-semibold shadow-sm transition"
-                                >
-                                    Buat akun
-                                </Link>
-                            )}
+                            ) : null}
                         </nav>
                     </div>
                 </header>

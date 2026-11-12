@@ -22,6 +22,8 @@ export type BoardToken = {
 type LudoBoardProps = {
     tokens?: BoardToken[];
     playerNames?: Partial<Record<PlayerColor, string>>;
+    activeColor?: PlayerColor;
+    activeLabel?: string;
     className?: string;
 };
 
@@ -93,6 +95,8 @@ function tokenGroups(tokens: BoardToken[]) {
 export default function LudoBoard({
     tokens = [],
     playerNames = {},
+    activeColor,
+    activeLabel,
     className = '',
 }: LudoBoardProps) {
     const layout = new Map<string, { index: number; count: number }>();
@@ -114,6 +118,7 @@ export default function LudoBoard({
                 {QUADRANTS.map(({ color, row, col }) => {
                     const config = PLAYER_CONFIG[color];
                     const palette = config.palette;
+                    const isActive = color === activeColor;
 
                     return (
                         <div
@@ -134,6 +139,50 @@ export default function LudoBoard({
                                         'inset 0 2px 10px rgba(32,43,58,0.13), 0 1px 0 rgba(255,255,255,0.7)',
                                 }}
                             />
+                            {activeColor && !isActive && (
+                                <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-0 z-[1] bg-white/30"
+                                />
+                            )}
+                            {isActive && (
+                                <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-0 z-[3]"
+                                >
+                                    <div
+                                        className="absolute inset-[2.5%] rounded-[9%]"
+                                        style={{
+                                            boxShadow: `inset 0 0 0 2px rgba(255,255,255,0.95), 0 0 0 3px ${palette.base}, 0 0 18px 2px ${palette.base}66`,
+                                        }}
+                                    />
+                                    <div
+                                        className="animate-turn-flash absolute inset-[2.5%] rounded-[9%]"
+                                        style={{
+                                            boxShadow: `0 0 0 6px ${palette.base}, 0 0 30px 8px ${palette.base}80`,
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {isActive && activeLabel && (
+                                <div
+                                    aria-hidden="true"
+                                    className="pointer-events-none absolute inset-x-[10%] top-[6.5%] z-[2] flex justify-center"
+                                >
+                                    <span
+                                        className="max-w-full truncate rounded-full px-2 py-0.5 font-extrabold tracking-[0.08em] text-white uppercase"
+                                        style={{
+                                            background: palette.dark,
+                                            fontSize:
+                                                'clamp(7px, 2.1cqw, 12px)',
+                                            lineHeight: 1.3,
+                                            boxShadow: `0 2px 8px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.28)`,
+                                        }}
+                                    >
+                                        {activeLabel}
+                                    </span>
+                                </div>
+                            )}
                             {playerNames[color] && (
                                 <div className="absolute inset-x-[13%] bottom-[7%] z-[2] flex justify-center">
                                     <span
@@ -298,6 +347,8 @@ export default function LudoBoard({
                         '--token-light': palette.light,
                         '--token-base': palette.base,
                         '--token-dark': palette.dark,
+                        '--legal-color': palette.base,
+                        '--legal-glow': `${palette.base}59`,
                     } as CSSProperties;
 
                     const label =
@@ -318,7 +369,7 @@ export default function LudoBoard({
                                             ? `${label} siap digerakkan`
                                             : label
                                     }
-                                    className={`ludo-token block h-full w-full rounded-full border-2 border-white transition-transform duration-150 hover:scale-110 active:scale-95 ${
+                                    className={`ludo-token relative block h-full w-full rounded-full border-2 border-white transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] hover:scale-110 active:scale-95 ${
                                         token.legal
                                             ? 'animate-legal-pulse cursor-pointer'
                                             : 'cursor-default'
