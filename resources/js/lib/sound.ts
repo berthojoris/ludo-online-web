@@ -25,6 +25,8 @@ type ToneOptions = {
     attack?: number;
     wet?: number;
     detune?: number;
+    vibratoRate?: number;
+    vibratoDepth?: number;
 };
 
 type NoiseOptions = {
@@ -174,6 +176,8 @@ function tone(context: AudioContext, options: ToneOptions) {
         attack = 0.008,
         wet = 0,
         detune = 0,
+        vibratoRate = 0,
+        vibratoDepth = 0,
     } = options;
 
     const oscillator = context.createOscillator();
@@ -188,6 +192,18 @@ function tone(context: AudioContext, options: ToneOptions) {
             endFrequency,
             start + duration * 0.85,
         );
+    }
+
+    if (vibratoRate > 0 && vibratoDepth > 0) {
+        const vibrato = context.createOscillator();
+        const vibratoAmount = context.createGain();
+
+        vibrato.frequency.setValueAtTime(vibratoRate, start);
+        vibratoAmount.gain.setValueAtTime(vibratoDepth, start);
+        vibrato.connect(vibratoAmount);
+        vibratoAmount.connect(oscillator.frequency);
+        vibrato.start(start);
+        vibrato.stop(start + duration + 0.04);
     }
 
     envelope(amplitude, start, start + duration, gain, attack);
@@ -426,7 +442,7 @@ export function playHopSound(step = 0): void {
     });
 }
 
-/** Sub impact, swoosh, and a small sparkle when a token is captured. */
+/** Cartoon slide whistle, springy boing, and bubble pop for a capture. */
 export function playCaptureSound(): void {
     const context = canPlay();
 
@@ -438,39 +454,61 @@ export function playCaptureSound(): void {
 
     tone(context, {
         start: now,
-        duration: 0.34,
-        frequency: 155,
-        endFrequency: 44,
+        duration: 0.22,
+        frequency: 420,
+        endFrequency: 1320,
         type: 'sine',
-        gain: 0.14,
-        attack: 0.006,
+        gain: 0.055,
+        attack: 0.012,
+        wet: 0.18,
     });
     tone(context, {
-        start: now,
-        duration: 0.28,
-        frequency: 420,
+        start: now + 0.1,
+        duration: 0.36,
+        frequency: 300,
         endFrequency: 82,
-        type: 'sawtooth',
-        gain: 0.045,
-        attack: 0.004,
+        type: 'triangle',
+        gain: 0.095,
+        attack: 0.006,
+        wet: 0.12,
+        vibratoRate: 22,
+        vibratoDepth: 38,
     });
     noise(context, {
-        start: now,
-        duration: 0.32,
-        gain: 0.065,
-        frequency: 2300,
-        endFrequency: 260,
-        q: 0.9,
-        wet: 0.14,
+        start: now + 0.03,
+        duration: 0.16,
+        gain: 0.018,
+        frequency: 1900,
+        endFrequency: 700,
+        q: 1.6,
+        wet: 0.1,
     });
-    [740, 1110].forEach((frequency, index) => {
+    tone(context, {
+        start: now + 0.34,
+        duration: 0.085,
+        frequency: 840,
+        endFrequency: 145,
+        type: 'sine',
+        gain: 0.085,
+        attack: 0.003,
+        wet: 0.08,
+    });
+    noise(context, {
+        start: now + 0.34,
+        duration: 0.035,
+        gain: 0.02,
+        filterType: 'highpass',
+        frequency: 1800,
+        q: 0.7,
+    });
+    [1046.5, 1568].forEach((frequency, index) => {
         tone(context, {
-            start: now + 0.2 + index * 0.045,
-            duration: 0.22,
+            start: now + 0.4 + index * 0.055,
+            duration: 0.16,
             frequency,
             type: 'sine',
-            gain: 0.022,
-            wet: 0.5,
+            gain: 0.02,
+            wet: 0.35,
         });
     });
 }
