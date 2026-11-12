@@ -102,20 +102,12 @@ export default function Home() {
                                     </span>
                                 </Link>
                             ) : (
-                                <>
-                                    <Link
-                                        href={route('login')}
-                                        className="text-ink-muted hover:text-ink hidden rounded-full px-3.5 py-2 text-sm font-medium transition hover:bg-white sm:inline-flex"
-                                    >
-                                        Masuk
-                                    </Link>
-                                    <Link
-                                        href={route('register')}
-                                        className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex items-center rounded-full border bg-white px-3.5 py-2 text-sm font-semibold shadow-sm transition"
-                                    >
-                                        Buat akun
-                                    </Link>
-                                </>
+                                <Link
+                                    href={route('register')}
+                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex items-center rounded-full border bg-white px-3.5 py-2 text-sm font-semibold shadow-sm transition"
+                                >
+                                    Buat akun
+                                </Link>
                             )}
                         </nav>
                     </div>
