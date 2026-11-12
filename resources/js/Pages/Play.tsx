@@ -2,7 +2,6 @@ import Dice from '@/Components/Game/Dice';
 import {
     ChevronLeftIcon,
     DiceIcon,
-    InfoIcon,
     RefreshIcon,
     SoundOffIcon,
     SoundOnIcon,
@@ -25,7 +24,15 @@ import {
 import {
     isSoundEnabled,
     playCaptureSound,
+    playDefeatSound,
+    playDiceRollSound,
+    playFinishSound,
     playHopSound,
+    playNoMoveSound,
+    playStartSound,
+    playTurnSound,
+    playUiSound,
+    playWinSound,
     setSoundEnabled,
     unlockAudio,
 } from '@/lib/sound';
@@ -452,6 +459,7 @@ export default function Play() {
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const movingRef = useRef(false);
+    const previousTurnRef = useRef<PlayerId | null>(null);
 
     const opponentColor = otherPlayer(state.human);
     const canRoll =
@@ -475,12 +483,46 @@ export default function Play() {
         }
 
         const value = state.dice;
+
+        playDiceRollSound();
+
         const timeout = window.setTimeout(() => {
+            const hasMoves =
+                computeLegalMoves(state.tokens, state.turn, value).length > 0;
+
             dispatch({ type: 'ROLL_RESULT', value });
+
+            if (!hasMoves) {
+                playNoMoveSound();
+            }
         }, 1080);
 
         return () => window.clearTimeout(timeout);
-    }, [state.phase, state.dice]);
+    }, [state.phase, state.dice, state.tokens, state.turn]);
+
+    useEffect(() => {
+        const previous = previousTurnRef.current;
+
+        previousTurnRef.current = state.turn;
+
+        if (previous === null || previous === state.turn || state.winner) {
+            return;
+        }
+
+        playTurnSound(state.turn === state.human);
+    }, [state.turn, state.human, state.winner]);
+
+    useEffect(() => {
+        if (!state.winner) {
+            return;
+        }
+
+        if (state.winner === state.human) {
+            playWinSound();
+        } else {
+            playDefeatSound();
+        }
+    }, [state.winner, state.human]);
 
     useEffect(() => {
         if (
@@ -551,6 +593,8 @@ export default function Play() {
 
             if (captures) {
                 playCaptureSound();
+            } else if (move.target === FINISH_POSITION) {
+                playFinishSound();
             }
 
             dispatch({ type: 'MOVE', tokenIndex });
@@ -638,6 +682,10 @@ export default function Play() {
         state.tokens[color].filter((position) => position === FINISH_POSITION)
             .length;
 
+    const outOfBase = (color: PlayerId) =>
+        state.tokens[color].filter((position) => position !== BASE_POSITION)
+            .length;
+
     const activeSubtitle = (color: PlayerId) => {
         if (state.winner) {
             return state.winner === color
@@ -689,11 +737,24 @@ export default function Play() {
         dispatch({ type: 'ROLL_START', value: randomDie() });
     };
 
+    const cue = (sound: () => void) => {
+        void unlockAudio().then(sound);
+    };
+
     const toggleSound = () => {
         const next = !soundOn;
 
         setSoundOn(next);
         setSoundEnabled(next);
+
+        if (next) {
+            cue(playUiSound);
+        }
+    };
+
+    const selectColor = (color: PlayerId) => {
+        setHumanColor(color);
+        cue(playUiSound);
     };
 
     const startGame = (event: FormEvent<HTMLFormElement>) => {
@@ -704,7 +765,8 @@ export default function Play() {
             [setupOpponent]: opponentName,
         } as SetupNames;
 
-        void unlockAudio();
+        cue(playStartSound);
+        previousTurnRef.current = humanColor;
         dispatch({ type: 'START', human: humanColor, names });
         setMovingToken(null);
         movingRef.current = false;
@@ -712,6 +774,7 @@ export default function Play() {
     };
 
     const openSetup = () => {
+        cue(playUiSound);
         setHumanColor(state.human);
         setYourName(state.names[state.human]);
         setOpponentName(state.names[opponentColor]);
@@ -719,6 +782,8 @@ export default function Play() {
     };
 
     const playAgain = () => {
+        cue(playStartSound);
+        previousTurnRef.current = state.human;
         setMovingToken(null);
         movingRef.current = false;
         dispatch({ type: 'RESET' });
@@ -851,7 +916,7 @@ export default function Play() {
                                                 key={color}
                                                 type="button"
                                                 onClick={() =>
-                                                    setHumanColor(color)
+                                                    selectColor(color)
                                                 }
                                                 aria-pressed={selected}
                                                 className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition [@media(max-height:620px)]:py-1.5 ${
@@ -1003,19 +1068,38 @@ export default function Play() {
                     <main className="mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
                         <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_280px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4">
                             <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                                <PlayerCard
-                                    compact
-                                    color={opponentColor}
-                                    name={state.names[opponentColor]}
-                                    role="Lawan"
-                                    subtitle={activeSubtitle(opponentColor)}
-                                    active={
-                                        state.turn === opponentColor &&
-                                        !state.winner
-                                    }
-                                    finished={finished(opponentColor)}
-                                    className="[@media(max-height:560px)]:hidden"
-                                />
+                                <div className="border-line/80 shadow-card flex shrink-0 items-stretch overflow-hidden rounded-[18px] border bg-white md:hidden [@media(max-height:560px)]:hidden">
+                                    <PlayerCard
+                                        size="sm"
+                                        color={opponentColor}
+                                        name={state.names[opponentColor]}
+                                        role="Lawan"
+                                        subtitle={activeSubtitle(opponentColor)}
+                                        active={
+                                            state.turn === opponentColor &&
+                                            !state.winner
+                                        }
+                                        finished={finished(opponentColor)}
+                                        className="flex-1"
+                                    />
+                                    <div
+                                        className="bg-line/60 w-px shrink-0 self-stretch"
+                                        aria-hidden="true"
+                                    />
+                                    <PlayerCard
+                                        size="sm"
+                                        color={state.human}
+                                        name={state.names[state.human]}
+                                        role="Kamu"
+                                        subtitle={activeSubtitle(state.human)}
+                                        active={
+                                            state.turn === state.human &&
+                                            !state.winner
+                                        }
+                                        finished={finished(state.human)}
+                                        className="flex-1"
+                                    />
+                                </div>
 
                                 <div
                                     ref={boardRef}
@@ -1040,20 +1124,6 @@ export default function Play() {
                                         </div>
                                     )}
                                 </div>
-
-                                <PlayerCard
-                                    compact
-                                    color={state.human}
-                                    name={state.names[state.human]}
-                                    role="Kamu"
-                                    subtitle={activeSubtitle(state.human)}
-                                    active={
-                                        state.turn === state.human &&
-                                        !state.winner
-                                    }
-                                    finished={finished(state.human)}
-                                    className="[@media(max-height:560px)]:hidden"
-                                />
                             </section>
 
                             <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
@@ -1088,52 +1158,70 @@ export default function Play() {
                                         {rollLabel}
                                     </button>
 
-                                    <div className="text-ink-muted mt-2 flex items-center justify-between gap-2 text-[10px] font-medium">
-                                        <span>
-                                            {state.names[state.human]} vs{' '}
-                                            {state.names[opponentColor]}
-                                        </span>
-                                        <span>Lempar 6 untuk keluar</span>
-                                    </div>
+                                    <p className="text-ink-muted mt-2 text-center text-[10px] font-medium">
+                                        Lempar 6 untuk keluar
+                                    </p>
                                 </section>
 
-                                <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col rounded-[22px] border bg-white p-4">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <h2 className="text-ink text-sm font-semibold">
-                                            Riwayat
+                                <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white">
+                                    <div className="shrink-0 px-4 pt-3.5 pb-2">
+                                        <h2 className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
+                                            PEMAIN
                                         </h2>
-                                        <span className="text-ink-muted inline-flex items-center gap-1 text-[10px] font-medium">
-                                            <InfoIcon className="h-3 w-3" />
-                                            {state.log.length} langkah
+                                    </div>
+                                    <PlayerCard
+                                        color={opponentColor}
+                                        name={state.names[opponentColor]}
+                                        role="Lawan"
+                                        subtitle={activeSubtitle(opponentColor)}
+                                        active={
+                                            state.turn === opponentColor &&
+                                            !state.winner
+                                        }
+                                        finished={finished(opponentColor)}
+                                    />
+                                    <div
+                                        className="relative mx-4 shrink-0"
+                                        aria-hidden="true"
+                                    >
+                                        <div className="border-line/60 border-t" />
+                                        <span className="border-line/80 text-ink-muted absolute top-1/2 left-1/2 grid h-[26px] w-[26px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-white text-[8px] font-bold tracking-[0.08em]">
+                                            VS
                                         </span>
                                     </div>
-                                    <ol className="mt-2 min-h-0 flex-1 space-y-2 overflow-hidden">
-                                        {state.log.map((entry) => {
-                                            const palette = entry.color
-                                                ? PLAYER_CONFIG[entry.color]
-                                                      .palette
-                                                : null;
-
-                                            return (
-                                                <li
-                                                    key={entry.id}
-                                                    className="flex items-start gap-2"
-                                                >
-                                                    <span
-                                                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
-                                                        style={{
-                                                            background:
-                                                                palette?.base ??
-                                                                '#c9d1dd',
-                                                        }}
-                                                    />
-                                                    <span className="text-ink-muted line-clamp-2 text-[11px] leading-4">
-                                                        {entry.text}
-                                                    </span>
-                                                </li>
-                                            );
-                                        })}
-                                    </ol>
+                                    <PlayerCard
+                                        color={state.human}
+                                        name={state.names[state.human]}
+                                        role="Kamu"
+                                        subtitle={activeSubtitle(state.human)}
+                                        active={
+                                            state.turn === state.human &&
+                                            !state.winner
+                                        }
+                                        finished={finished(state.human)}
+                                    />
+                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">
+                                                Bidakmu keluar
+                                            </p>
+                                            <p className="text-ink mt-0.5 text-xs font-bold tabular-nums">
+                                                {outOfBase(state.human)}/4
+                                            </p>
+                                        </div>
+                                        <div
+                                            className="bg-line/60 mx-3 h-7 w-px shrink-0"
+                                            aria-hidden="true"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">
+                                                Total langkah
+                                            </p>
+                                            <p className="text-ink mt-0.5 text-xs font-bold tabular-nums">
+                                                {state.log.length}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </section>
                             </aside>
                         </div>
