@@ -23,7 +23,7 @@ export default function Dice({
     return (
         <div
             role="img"
-            aria-label={`Dice showing ${value}`}
+            aria-label={`Dadu menunjukkan ${value}`}
             className={`dice-face relative rounded-[24%] ${
                 rolling ? 'animate-dice-tumble' : ''
             } ${className}`}
@@ -35,7 +35,7 @@ export default function Dice({
                         className="flex items-center justify-center"
                     >
                         {activePips.includes(index) && (
-                            <span className="h-[58%] w-[58%] rounded-full bg-ink shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)]" />
+                            <span className="bg-ink h-[58%] w-[58%] rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)]" />
                         )}
                     </span>
                 ))}

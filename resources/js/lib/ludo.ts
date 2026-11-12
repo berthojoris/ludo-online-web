@@ -90,7 +90,7 @@ export const START_OWNER: Partial<Record<number, PlayerColor>> = {
 
 export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
     red: {
-        label: 'Red',
+        label: 'Merah',
         startIndex: 0,
         lane: [
             { row: 7, col: 1 },
@@ -115,7 +115,7 @@ export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
         },
     },
     green: {
-        label: 'Green',
+        label: 'Hijau',
         startIndex: 13,
         lane: [
             { row: 1, col: 7 },
@@ -140,7 +140,7 @@ export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
         },
     },
     yellow: {
-        label: 'Yellow',
+        label: 'Kuning',
         startIndex: 26,
         lane: [
             { row: 7, col: 9 },
@@ -165,7 +165,7 @@ export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
         },
     },
     blue: {
-        label: 'Blue',
+        label: 'Biru',
         startIndex: 39,
         lane: [
             { row: 13, col: 7 },

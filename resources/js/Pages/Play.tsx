@@ -56,8 +56,8 @@ type Action =
     | { type: 'RESET' };
 
 const PLAYER_LABEL: Record<PlayerId, string> = {
-    blue: 'You',
-    green: 'Rival',
+    blue: 'Kamu',
+    green: 'Lawan',
 };
 
 const initialState: GameState = {
@@ -70,11 +70,11 @@ const initialState: GameState = {
     dice: null,
     legalMoves: [],
     winner: null,
-    message: 'Your turn. Roll the dice.',
+    message: 'Giliranmu. Lempar dadu.',
     log: [
         {
             id: 0,
-            text: 'Practice match started. Blue moves first.',
+            text: 'Pertandingan latihan dimulai. Biru jalan lebih dulu.',
         },
     ],
     logId: 1,
@@ -94,10 +94,7 @@ function appendLog(
     color?: PlayerId,
 ): Pick<GameState, 'log' | 'logId'> {
     return {
-        log: [
-            { id: state.logId, text, color },
-            ...state.log,
-        ].slice(0, 6),
+        log: [{ id: state.logId, text, color }, ...state.log].slice(0, 6),
         logId: state.logId + 1,
     };
 }
@@ -181,8 +178,8 @@ function reducer(state: GameState, action: Action): GameState {
             legalMoves: [],
             message:
                 state.turn === 'blue'
-                    ? 'Rolling the dice…'
-                    : 'Rival is rolling…',
+                    ? 'Melempar dadu…'
+                    : 'Lawan sedang melempar…',
         };
     }
 
@@ -199,7 +196,7 @@ function reducer(state: GameState, action: Action): GameState {
         const actor = PLAYER_LABEL[state.turn];
         const logged = appendLog(
             state,
-            `${actor} rolled ${action.value}.`,
+            `${actor} melempar ${action.value}.`,
             state.turn,
         );
 
@@ -215,8 +212,8 @@ function reducer(state: GameState, action: Action): GameState {
                 turn: nextPlayer,
                 message:
                     state.turn === 'blue'
-                        ? 'No legal move. Rival’s turn.'
-                        : 'Rival had no legal move. Your turn.',
+                        ? 'Tidak ada langkah yang bisa diambil. Giliran lawan.'
+                        : 'Lawan tidak punya langkah. Giliranmu.',
             };
         }
 
@@ -228,8 +225,8 @@ function reducer(state: GameState, action: Action): GameState {
             phase: 'choosing',
             message:
                 state.turn === 'blue'
-                    ? 'Choose a glowing token to move.'
-                    : 'Rival is picking a move…',
+                    ? 'Pilih bidak yang menyala untuk digerakkan.'
+                    : 'Lawan sedang memilih langkah…',
         };
     }
 
@@ -262,19 +259,15 @@ function reducer(state: GameState, action: Action): GameState {
             const absolute = absoluteTrackIndex(actor, move.target);
 
             if (!isSafeAbsoluteIndex(absolute)) {
-                nextTokens[opponent] = nextTokens[opponent].map(
-                    (position) => {
-                        if (
-                            absoluteTrackIndex(opponent, position) === absolute
-                        ) {
-                            captured = true;
+                nextTokens[opponent] = nextTokens[opponent].map((position) => {
+                    if (absoluteTrackIndex(opponent, position) === absolute) {
+                        captured = true;
 
-                            return BASE_POSITION;
-                        }
+                        return BASE_POSITION;
+                    }
 
-                        return position;
-                    },
-                );
+                    return position;
+                });
             }
         }
 
@@ -282,19 +275,16 @@ function reducer(state: GameState, action: Action): GameState {
         const won = nextTokens[actor].every(
             (position) => position === FINISH_POSITION,
         );
-        const extraTurn =
-            state.dice === 6 || captured || reachedHome || won;
+        const extraTurn = state.dice === 6 || captured || reachedHome || won;
 
         const moveDescription =
             from === BASE_POSITION
-                ? 'released a token from base'
-                : `moved a token ${state.dice} step${
-                      state.dice === 1 ? '' : 's'
-                  }`;
+                ? 'mengeluarkan bidak dari markas'
+                : `menggerakkan bidak ${state.dice} langkah`;
         const extraDescription = reachedHome
-            ? ' and brought it home'
+            ? ' dan membawanya ke garis akhir'
             : captured
-              ? ' and captured an opponent'
+              ? ' dan menangkap bidak lawan'
               : '';
         const logged = appendLog(
             state,
@@ -312,8 +302,8 @@ function reducer(state: GameState, action: Action): GameState {
                 winner: actor,
                 message:
                     actor === 'blue'
-                        ? 'You brought every token home. You win!'
-                        : 'Rival brought every token home.',
+                        ? 'Kamu membawa semua bidak ke garis akhir. Kamu menang!'
+                        : 'Lawan membawa semua bidak ke garis akhir.',
             };
         }
 
@@ -327,8 +317,8 @@ function reducer(state: GameState, action: Action): GameState {
                 turn: actor,
                 message:
                     actor === 'blue'
-                        ? 'Extra roll. Go again.'
-                        : 'Rival gets another roll.',
+                        ? 'Dapat lemparan tambahan. Lempar lagi.'
+                        : 'Lawan mendapat lemparan tambahan.',
             };
         }
 
@@ -341,8 +331,8 @@ function reducer(state: GameState, action: Action): GameState {
             turn: opponent,
             message:
                 opponent === 'blue'
-                    ? 'Your turn. Roll the dice.'
-                    : 'Rival’s turn.',
+                    ? 'Giliranmu. Lempar dadu.'
+                    : 'Giliran lawan.',
         };
     }
 
@@ -387,11 +377,7 @@ export default function Play() {
     }, [state.phase]);
 
     useEffect(() => {
-        if (
-            state.turn !== 'green' ||
-            state.phase !== 'idle' ||
-            state.winner
-        ) {
+        if (state.turn !== 'green' || state.phase !== 'idle' || state.winner) {
             return;
         }
 
@@ -454,76 +440,81 @@ export default function Play() {
                               })
                         : undefined,
                     label: `${
-                        color === 'blue' ? 'Your' : "Rival's"
-                    } token ${tokenIndex + 1}`,
+                        color === 'blue' ? 'Bidakmu' : 'Bidak lawan'
+                    } ${tokenIndex + 1}`,
                 };
             }),
         );
     }, [state.tokens, state.turn, state.phase, state.legalMoves]);
 
     const finished = (color: PlayerId) =>
-        state.tokens[color].filter(
-            (position) => position === FINISH_POSITION,
-        ).length;
+        state.tokens[color].filter((position) => position === FINISH_POSITION)
+            .length;
 
     const activeSubtitle = (color: PlayerId) => {
         if (state.winner) {
-            return state.winner === color ? 'Match winner' : 'Match complete';
+            return state.winner === color
+                ? 'Pemenang pertandingan'
+                : 'Pertandingan selesai';
         }
 
         if (state.turn !== color) {
-            return 'Waiting for their turn';
+            return 'Menunggu giliran';
         }
 
         if (state.phase === 'rolling') {
-            return 'Rolling the dice';
+            return 'Melempar dadu';
         }
 
         if (state.phase === 'choosing') {
             return color === 'blue'
-                ? 'Choose a token to move'
-                : 'Choosing a move';
+                ? 'Pilih bidak untuk digerakkan'
+                : 'Sedang memilih langkah';
         }
 
-        return color === 'blue' ? 'Your turn' : 'Ready to roll';
+        return color === 'blue' ? 'Giliranmu' : 'Siap melempar';
     };
 
     return (
         <>
-            <Head title="Practice board" />
+            <Head title="Papan latihan" />
 
             <div className="min-h-screen">
-                <header className="sticky top-0 z-40 border-b border-line/60 bg-canvas/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+                <header className="border-line/60 bg-canvas/85 sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
                     <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2.5">
                             <Link
                                 href={route('home')}
-                                aria-label="Back to home"
-                                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-white text-ink-muted shadow-sm transition hover:text-ink"
+                                aria-label="Kembali ke beranda"
+                                className="border-line text-ink-muted hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full border bg-white shadow-sm transition"
                             >
                                 <ChevronLeftIcon className="h-4.5 w-4.5" />
                             </Link>
                             <Link href={route('home')} className="rounded-lg">
-                                <Logo className="h-8 w-8" withWordmark compact />
+                                <Logo
+                                    className="h-8 w-8"
+                                    withWordmark
+                                    compact
+                                />
                             </Link>
-                            <span className="hidden rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted sm:inline-flex">
-                                Practice
+                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase sm:inline-flex">
+                                Latihan
                             </span>
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-2.5 py-1.5 text-[11px] font-semibold text-ink-muted">
+                            <span className="border-line text-ink-muted inline-flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[11px] font-semibold">
                                 <span className="relative flex h-1.5 w-1.5">
-                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ludo-green opacity-60" />
-                                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-ludo-green" />
+                                    <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
+                                    <span className="bg-ludo-green relative inline-flex h-1.5 w-1.5 rounded-full" />
                                 </span>
-                                Local demo
+                                Demo lokal
                             </span>
                             <Link
                                 href={route('home')}
-                                className="hidden rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition hover:bg-white hover:text-ink sm:inline-flex"
+                                className="text-ink-muted hover:text-ink hidden rounded-full px-3 py-1.5 text-xs font-semibold transition hover:bg-white sm:inline-flex"
                             >
-                                Exit
+                                Keluar
                             </Link>
                         </div>
                     </div>
@@ -534,44 +525,40 @@ export default function Play() {
                         <section className="mx-auto flex w-full max-w-[560px] flex-col gap-3 sm:gap-4">
                             <PlayerCard
                                 color="green"
-                                name="Rival"
-                                role="Opponent"
+                                name="Lawan"
+                                role="Lawan"
                                 subtitle={activeSubtitle('green')}
-                                active={
-                                    state.turn === 'green' && !state.winner
-                                }
+                                active={state.turn === 'green' && !state.winner}
                                 finished={finished('green')}
                             />
 
-                            <div className="rounded-[26px] border border-line/70 bg-white/80 p-2 shadow-board backdrop-blur-sm sm:p-2.5">
+                            <div className="border-line/70 shadow-board rounded-[26px] border bg-white/80 p-2 backdrop-blur-sm sm:p-2.5">
                                 <LudoBoard tokens={boardTokens} />
                             </div>
 
                             <PlayerCard
                                 color="blue"
                                 name={playerName}
-                                role="You"
+                                role="Kamu"
                                 subtitle={activeSubtitle('blue')}
-                                active={
-                                    state.turn === 'blue' && !state.winner
-                                }
+                                active={state.turn === 'blue' && !state.winner}
                                 finished={finished('blue')}
                             />
                         </section>
 
                         <aside className="flex flex-col gap-4">
-                            <section className="rounded-[24px] border border-line/80 bg-white p-4 shadow-card sm:p-5">
+                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4 sm:p-5">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0">
-                                        <p className="text-[10px] font-semibold tracking-[0.16em] text-brand-ink">
+                                        <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
                                             {state.winner
-                                                ? 'MATCH COMPLETE'
+                                                ? 'PERTANDINGAN SELESAI'
                                                 : state.turn === 'blue'
-                                                  ? 'YOUR TURN'
-                                                  : 'RIVAL’S TURN'}
+                                                  ? 'GILIRANMU'
+                                                  : 'GILIRAN LAWAN'}
                                         </p>
                                         <p
-                                            className="mt-1.5 text-sm font-semibold leading-5 text-ink"
+                                            className="text-ink mt-1.5 text-sm leading-5 font-semibold"
                                             aria-live="polite"
                                         >
                                             {state.message}
@@ -590,60 +577,60 @@ export default function Play() {
                                         dispatch({ type: 'ROLL_START' })
                                     }
                                     disabled={!canRoll}
-                                    className="mt-4 inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.85)] transition hover:bg-brand-dark active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted disabled:shadow-none"
+                                    className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted mt-4 inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.85)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
                                 >
                                     <DiceIcon className="h-5 w-5" />
                                     {state.phase === 'rolling'
-                                        ? 'Rolling…'
+                                        ? 'Melempar…'
                                         : state.phase === 'choosing' &&
                                             state.turn === 'blue'
-                                          ? 'Tap a glowing token'
-                                          : 'Roll dice'}
+                                          ? 'Ketuk bidak yang menyala'
+                                          : 'Lempar dadu'}
                                 </button>
 
-                                <p className="mt-3 text-[11px] leading-5 text-ink-muted">
-                                    Practice mode. Rolls and moves run locally
-                                    in your browser; online matches will use
-                                    the server-authoritative engine.
+                                <p className="text-ink-muted mt-3 text-[11px] leading-5">
+                                    Mode latihan. Lemparan dan langkah berjalan
+                                    lokal di browser kamu; pertandingan online
+                                    akan memakai mesin server.
                                 </p>
                             </section>
 
-                            <section className="rounded-[24px] border border-line/80 bg-white p-4 shadow-card">
+                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4">
                                 <div className="flex items-center gap-2">
-                                    <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/10 text-brand-ink">
+                                    <span className="bg-brand/10 text-brand-ink grid h-7 w-7 place-items-center rounded-lg">
                                         <InfoIcon className="h-4 w-4" />
                                     </span>
-                                    <h2 className="text-sm font-semibold text-ink">
-                                        Practice board
+                                    <h2 className="text-ink text-sm font-semibold">
+                                        Papan latihan
                                     </h2>
                                 </div>
-                                <p className="mt-2.5 text-xs leading-5 text-ink-muted">
-                                    Roll a 6 to leave base. Tap a glowing token
-                                    to move, capture rivals on open squares,
-                                    and bring all four tokens home to win.
+                                <p className="text-ink-muted mt-2.5 text-xs leading-5">
+                                    Lempar 6 untuk keluar dari markas. Ketuk
+                                    bidak yang menyala untuk bergerak, tangkap
+                                    lawan di petak terbuka, dan bawa keempat
+                                    bidak ke garis akhir untuk menang.
                                 </p>
                                 <div className="mt-3 flex flex-wrap gap-1.5">
-                                    <span className="rounded-full bg-surface-muted px-2.5 py-1 text-[10px] font-semibold text-ink-muted">
-                                        2 players
+                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
+                                        2 pemain
                                     </span>
-                                    <span className="rounded-full bg-surface-muted px-2.5 py-1 text-[10px] font-semibold text-ink-muted">
-                                        Blue vs Green
+                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
+                                        Biru vs Hijau
                                     </span>
-                                    <span className="rounded-full bg-surface-muted px-2.5 py-1 text-[10px] font-semibold text-ink-muted">
-                                        Local
+                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
+                                        Lokal
                                     </span>
                                 </div>
                             </section>
 
-                            <section className="rounded-[24px] border border-line/80 bg-white p-4 shadow-card">
-                                <h2 className="text-sm font-semibold text-ink">
-                                    Match timeline
+                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4">
+                                <h2 className="text-ink text-sm font-semibold">
+                                    Riwayat pertandingan
                                 </h2>
                                 <ol className="mt-3 space-y-2.5">
                                     {state.log.map((entry) => {
                                         const palette = entry.color
-                                            ? PLAYER_CONFIG[entry.color]
-                                                  .palette
+                                            ? PLAYER_CONFIG[entry.color].palette
                                             : null;
 
                                         return (
@@ -659,7 +646,7 @@ export default function Play() {
                                                             '#c9d1dd',
                                                     }}
                                                 />
-                                                <span className="text-[11px] leading-4 text-ink-muted">
+                                                <span className="text-ink-muted text-[11px] leading-4">
                                                     {entry.text}
                                                 </span>
                                             </li>
@@ -674,7 +661,7 @@ export default function Play() {
 
             {state.winner && (
                 <div
-                    className="fixed inset-0 z-50 grid place-items-center bg-ink/35 p-4 backdrop-blur-sm"
+                    className="bg-ink/35 fixed inset-0 z-50 grid place-items-center p-4 backdrop-blur-sm"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="result-title"
@@ -682,7 +669,7 @@ export default function Play() {
                     <div className="relative w-full max-w-sm overflow-hidden rounded-[28px] bg-white p-6 text-center shadow-[0_30px_80px_-20px_rgba(32,43,58,0.5)]">
                         <div
                             aria-hidden="true"
-                            className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-ludo-red via-ludo-yellow to-ludo-green"
+                            className="from-ludo-red via-ludo-yellow to-ludo-green absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r"
                         />
                         <div
                             className="mx-auto grid h-16 w-16 place-items-center rounded-[22px]"
@@ -696,38 +683,38 @@ export default function Play() {
                         </div>
                         <h2
                             id="result-title"
-                            className="mt-4 text-2xl font-semibold tracking-tight text-ink"
+                            className="text-ink mt-4 text-2xl font-semibold tracking-tight"
                         >
                             {state.winner === 'blue'
-                                ? 'You win!'
-                                : 'Rival wins'}
+                                ? 'Kamu menang!'
+                                : 'Lawan menang'}
                         </h2>
-                        <p className="mt-2 text-sm leading-6 text-ink-muted">
+                        <p className="text-ink-muted mt-2 text-sm leading-6">
                             {state.winner === 'blue'
-                                ? 'All four tokens are home. Nicely played.'
-                                : 'Rival brought all four tokens home first.'}
+                                ? 'Keempat bidak sudah di garis akhir. Permainan bagus.'
+                                : 'Lawan lebih dulu membawa keempat bidaknya ke garis akhir.'}
                         </p>
 
                         <div className="mt-5 flex flex-col gap-2.5">
                             <button
                                 type="button"
                                 onClick={() => dispatch({ type: 'RESET' })}
-                                className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition hover:bg-brand-dark active:scale-[0.99]"
+                                className="bg-brand hover:bg-brand-dark inline-flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99]"
                             >
                                 <RefreshIcon className="h-4.5 w-4.5" />
-                                Play again
+                                Main lagi
                             </button>
                             <Link
                                 href={route('home')}
-                                className="inline-flex h-12 items-center justify-center rounded-2xl border border-line bg-white text-sm font-semibold text-ink transition hover:bg-surface-muted"
+                                className="border-line text-ink hover:bg-surface-muted inline-flex h-12 items-center justify-center rounded-2xl border bg-white text-sm font-semibold transition"
                             >
-                                Back to home
+                                Kembali ke beranda
                             </Link>
                         </div>
 
-                        <p className="mt-4 inline-flex items-center gap-1 text-[10px] font-medium text-ink-muted">
+                        <p className="text-ink-muted mt-4 inline-flex items-center gap-1 text-[10px] font-medium">
                             <SparklesIcon className="h-3 w-3" />
-                            Practice match · local demo
+                            Pertandingan latihan · demo lokal
                         </p>
                     </div>
                 </div>

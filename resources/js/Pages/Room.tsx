@@ -51,10 +51,7 @@ function generateRoomCode(): string {
 
     return Array.from(
         { length: 6 },
-        () =>
-            CODE_ALPHABET[
-                Math.floor(Math.random() * CODE_ALPHABET.length)
-            ],
+        () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)],
     ).join('');
 }
 
@@ -99,10 +96,8 @@ export default function Room() {
     const joinRequested = params.get('join') === '1';
     const codeFromUrl = normalizeCode(params.get('code') ?? '');
 
-    const playerName = auth?.user?.name?.split(' ')[0] ?? 'Guest';
-    const [code, setCode] = useState(
-        () => codeFromUrl || generateRoomCode(),
-    );
+    const playerName = auth?.user?.name?.split(' ')[0] ?? 'Tamu';
+    const [code, setCode] = useState(() => codeFromUrl || generateRoomCode());
     const [joinCode, setJoinCode] = useState(codeFromUrl);
     const [showJoinForm, setShowJoinForm] = useState(
         joinRequested && !codeFromUrl,
@@ -116,10 +111,7 @@ export default function Room() {
             ? `${window.location.origin}/room?code=${code}`
             : `/room?code=${code}`;
 
-    const copy = async (
-        value: string,
-        target: 'code' | 'link',
-    ) => {
+    const copy = async (value: string, target: 'code' | 'link') => {
         const copied = await copyText(value);
         setCopyState(copied ? target : 'error');
         window.setTimeout(() => setCopyState('idle'), 1800);
@@ -140,99 +132,103 @@ export default function Room() {
         ? [
               {
                   kind: 'host',
-                  name: 'Room host',
-                  label: 'Host',
+                  name: 'Tuan rumah',
+                  label: 'Tuan rumah',
               },
               {
                   kind: 'you',
                   name: playerName,
-                  label: 'You',
+                  label: 'Kamu',
                   ready,
               },
               {
                   kind: 'empty',
-                  name: 'Open seat',
-                  label: 'Waiting',
+                  name: 'Kursi kosong',
+                  label: 'Menunggu',
               },
               {
                   kind: 'empty',
-                  name: 'Open seat',
-                  label: 'Waiting',
+                  name: 'Kursi kosong',
+                  label: 'Menunggu',
               },
           ]
         : [
               {
                   kind: 'you',
                   name: playerName,
-                  label: 'Host',
+                  label: 'Tuan rumah',
                   ready,
               },
               {
                   kind: 'empty',
-                  name: 'Open seat',
-                  label: 'Waiting',
+                  name: 'Kursi kosong',
+                  label: 'Menunggu',
               },
               {
                   kind: 'empty',
-                  name: 'Open seat',
-                  label: 'Waiting',
+                  name: 'Kursi kosong',
+                  label: 'Menunggu',
               },
               {
                   kind: 'empty',
-                  name: 'Open seat',
-                  label: 'Waiting',
+                  name: 'Kursi kosong',
+                  label: 'Menunggu',
               },
           ];
 
     return (
         <>
-            <Head title="Private room" />
+            <Head title="Ruang privat" />
 
             <div className="relative min-h-screen overflow-x-clip">
                 <div
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-x-0 top-0 h-[520px] overflow-hidden"
                 >
-                    <div className="absolute -left-24 top-16 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
-                    <div className="absolute right-0 top-24 h-80 w-80 rounded-full bg-ludo-yellow/10 blur-3xl" />
-                    <div className="dot-grid absolute inset-0 opacity-30 [mask-image:linear-gradient(to_bottom,black,transparent_78%)]" />
+                    <div className="bg-brand/10 absolute top-16 -left-24 h-72 w-72 rounded-full blur-3xl" />
+                    <div className="bg-ludo-yellow/10 absolute top-24 right-0 h-80 w-80 rounded-full blur-3xl" />
+                    <div className="dot-grid absolute inset-0 [mask-image:linear-gradient(to_bottom,black,transparent_78%)] opacity-30" />
                 </div>
 
-                <header className="sticky top-0 z-40 border-b border-line/60 bg-canvas/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+                <header className="border-line/60 bg-canvas/85 sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
                     <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2.5">
                             <Link
                                 href={route('home')}
-                                aria-label="Back to home"
-                                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-white text-ink-muted shadow-sm transition hover:text-ink"
+                                aria-label="Kembali ke beranda"
+                                className="border-line text-ink-muted hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full border bg-white shadow-sm transition"
                             >
                                 <ChevronLeftIcon className="h-4.5 w-4.5" />
                             </Link>
                             <Link href={route('home')} className="rounded-lg">
-                                <Logo className="h-8 w-8" withWordmark compact />
+                                <Logo
+                                    className="h-8 w-8"
+                                    withWordmark
+                                    compact
+                                />
                             </Link>
-                            <span className="hidden rounded-full border border-line bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted sm:inline-flex">
-                                Room
+                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase sm:inline-flex">
+                                Ruang
                             </span>
                         </div>
 
                         <div className="flex items-center gap-2">
                             {showJoinForm ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-2.5 py-1.5 text-[11px] font-semibold text-ink-muted">
+                                <span className="border-line text-ink-muted inline-flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[11px] font-semibold">
                                     <InfoIcon className="h-3.5 w-3.5" />
-                                    UI preview
+                                    Pratinjau UI
                                 </span>
                             ) : (
-                                <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/20 bg-warning/10 px-2.5 py-1.5 text-[11px] font-semibold text-warning-ink">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-                                    Waiting for players
+                                <span className="border-warning/20 bg-warning/10 text-warning-ink inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold">
+                                    <span className="bg-warning h-1.5 w-1.5 rounded-full" />
+                                    Menunggu pemain
                                 </span>
                             )}
                             <Link
                                 href={route('home')}
-                                className="hidden rounded-full px-3 py-1.5 text-xs font-semibold text-ink-muted transition hover:bg-white hover:text-ink sm:inline-flex"
+                                className="text-ink-muted hover:text-ink hidden rounded-full px-3 py-1.5 text-xs font-semibold transition hover:bg-white sm:inline-flex"
                             >
-                                Exit
+                                Keluar
                             </Link>
                         </div>
                     </div>
@@ -240,28 +236,26 @@ export default function Room() {
 
                 <main className="relative mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
                     {showJoinForm ? (
-                        <div className="mx-auto max-w-md animate-fade-up">
-                            <div className="rounded-[28px] border border-line/80 bg-white p-6 shadow-card sm:p-8">
-                                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand-ink">
+                        <div className="animate-fade-up mx-auto max-w-md">
+                            <div className="border-line/80 shadow-card rounded-[28px] border bg-white p-6 sm:p-8">
+                                <span className="bg-brand/10 text-brand-ink grid h-12 w-12 place-items-center rounded-2xl">
                                     <HashIcon className="h-6 w-6" />
                                 </span>
-                                <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">
-                                    Join a room
+                                <h1 className="text-ink mt-4 text-2xl font-semibold tracking-tight">
+                                    Gabung ke ruang
                                 </h1>
-                                <p className="mt-2 text-sm leading-6 text-ink-muted">
-                                    Enter the six-character code your host
-                                    shared. No account needed to look around.
+                                <p className="text-ink-muted mt-2 text-sm leading-6">
+                                    Masukkan kode enam karakter yang dibagikan
+                                    tuan rumah. Tidak perlu akun untuk
+                                    melihat-lihat.
                                 </p>
 
-                                <form
-                                    onSubmit={handleJoin}
-                                    className="mt-6"
-                                >
+                                <form onSubmit={handleJoin} className="mt-6">
                                     <label
                                         htmlFor="room-code"
-                                        className="text-xs font-semibold text-ink"
+                                        className="text-ink text-xs font-semibold"
                                     >
-                                        Room code
+                                        Kode ruang
                                     </label>
                                     <input
                                         id="room-code"
@@ -279,32 +273,33 @@ export default function Room() {
                                         spellCheck={false}
                                         maxLength={6}
                                         placeholder="ABC123"
-                                        aria-label="Six character room code"
-                                        className="mt-2 h-16 w-full rounded-2xl border border-line bg-surface-muted/60 px-4 text-center text-2xl font-semibold uppercase tracking-[0.32em] text-ink transition placeholder:text-ink-muted/40 focus:border-brand focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand/10"
+                                        aria-label="Kode ruang enam karakter"
+                                        className="border-line bg-surface-muted/60 text-ink placeholder:text-ink-muted/40 focus:border-brand focus:ring-brand/10 mt-2 h-16 w-full rounded-2xl border px-4 text-center text-2xl font-semibold tracking-[0.32em] uppercase transition focus:bg-white focus:ring-4 focus:outline-none"
                                     />
 
                                     <button
                                         type="submit"
                                         disabled={joinCode.length !== 6}
-                                        className="mt-3 inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition hover:bg-brand-dark active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted disabled:shadow-none"
+                                        className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted mt-3 inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
                                     >
-                                        Join room
+                                        Gabung ruang
                                         <ArrowRightIcon className="h-4 w-4" />
                                     </button>
                                 </form>
 
-                                <p className="mt-4 flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2.5 text-[11px] leading-5 text-ink-muted">
+                                <p className="bg-surface-muted text-ink-muted mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[11px] leading-5">
                                     <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                                    Room joining is a UI preview. Live room
-                                    sync arrives with the matchmaking backend.
+                                    Bergabung ke ruang masih berupa pratinjau
+                                    UI. Sinkronisasi ruang langsung hadir
+                                    bersama backend pencarian lawan.
                                 </p>
 
                                 <Link
                                     href={route('home')}
-                                    className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition hover:text-ink"
+                                    className="text-ink-muted hover:text-ink mt-5 inline-flex items-center gap-1.5 text-xs font-semibold transition"
                                 >
                                     <ChevronLeftIcon className="h-3.5 w-3.5" />
-                                    Back to home
+                                    Kembali ke beranda
                                 </Link>
                             </div>
                         </div>
@@ -312,40 +307,41 @@ export default function Room() {
                         <div className="animate-fade-up">
                             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
-                                    <p className="text-[11px] font-semibold tracking-[0.16em] text-brand-ink">
-                                        PRIVATE ROOM
+                                    <p className="text-brand-ink text-[11px] font-semibold tracking-[0.16em]">
+                                        RUANG PRIVAT
                                     </p>
-                                    <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+                                    <h1 className="text-ink mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
                                         {isGuest
-                                            ? 'You joined the room.'
-                                            : 'Your table is ready.'}
+                                            ? 'Kamu sudah bergabung ke ruang.'
+                                            : 'Meja kamu sudah siap.'}
                                     </h1>
-                                    <p className="mt-2 max-w-xl text-sm leading-6 text-ink-muted">
-                                        Share the code, wait for friends, and
-                                        start when everyone is seated. This
-                                        preview keeps the lobby client-side.
+                                    <p className="text-ink-muted mt-2 max-w-xl text-sm leading-6">
+                                        Bagikan kode, tunggu temanmu, dan mulai
+                                        saat semua sudah duduk. Pratinjau ini
+                                        menyimpan lobi di sisi klien.
                                     </p>
                                 </div>
-                                <span className="inline-flex w-fit items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-xs font-semibold text-ink-muted shadow-sm">
-                                    <UsersIcon className="h-4 w-4" />
-                                    1 of 4 seated
+                                <span className="border-line text-ink-muted inline-flex w-fit items-center gap-2 rounded-full border bg-white px-3 py-2 text-xs font-semibold shadow-sm">
+                                    <UsersIcon className="h-4 w-4" />1 dari 4
+                                    duduk
                                 </span>
                             </div>
 
                             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
                                 <div className="space-y-4">
-                                    <section className="rounded-[24px] border border-brand/15 bg-brand/[0.04] p-5 sm:p-6">
+                                    <section className="border-brand/15 bg-brand/[0.04] rounded-[24px] border p-5 sm:p-6">
                                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                             <div>
-                                                <p className="text-[10px] font-semibold tracking-[0.18em] text-brand-ink">
-                                                    ROOM CODE
+                                                <p className="text-brand-ink text-[10px] font-semibold tracking-[0.18em]">
+                                                    KODE RUANG
                                                 </p>
-                                                <p className="mt-2 font-mono text-3xl font-semibold tracking-[0.3em] text-ink sm:text-4xl">
+                                                <p className="text-ink mt-2 font-mono text-3xl font-semibold tracking-[0.3em] sm:text-4xl">
                                                     {code}
                                                 </p>
-                                                <p className="mt-2 text-xs text-ink-muted">
-                                                    Six characters. Case does
-                                                    not matter.
+                                                <p className="text-ink-muted mt-2 text-xs">
+                                                    Enam karakter. Huruf
+                                                    besar-kecil tidak
+                                                    berpengaruh.
                                                 </p>
                                             </div>
                                             <button
@@ -353,23 +349,22 @@ export default function Room() {
                                                 onClick={() =>
                                                     copy(code, 'code')
                                                 }
-                                                className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 text-xs font-semibold text-ink shadow-sm transition hover:border-ink/15 hover:bg-surface-muted"
+                                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border bg-white px-4 text-xs font-semibold shadow-sm transition"
                                             >
                                                 {copyState === 'code' ? (
                                                     <>
-                                                        <CheckIcon className="h-4 w-4 text-success-ink" />
-                                                        Copied
+                                                        <CheckIcon className="text-success-ink h-4 w-4" />
+                                                        Tersalin
                                                     </>
-                                                ) : copyState ===
-                                                  'error' ? (
+                                                ) : copyState === 'error' ? (
                                                     <>
                                                         <CopyIcon className="h-4 w-4" />
-                                                        Copy failed
+                                                        Gagal menyalin
                                                     </>
                                                 ) : (
                                                     <>
                                                         <CopyIcon className="h-4 w-4" />
-                                                        Copy code
+                                                        Salin kode
                                                     </>
                                                 )}
                                             </button>
@@ -378,11 +373,11 @@ export default function Room() {
 
                                     <section>
                                         <div className="mb-3 flex items-center justify-between gap-3">
-                                            <h2 className="text-sm font-semibold text-ink">
-                                                Players
+                                            <h2 className="text-ink text-sm font-semibold">
+                                                Pemain
                                             </h2>
-                                            <span className="text-[11px] font-medium text-ink-muted">
-                                                Seat 1 is the host
+                                            <span className="text-ink-muted text-[11px] font-medium">
+                                                Kursi 1 adalah tuan rumah
                                             </span>
                                         </div>
                                         <div className="grid gap-3 sm:grid-cols-2">
@@ -391,12 +386,12 @@ export default function Room() {
                                                     key={`${seat.kind}-${index}`}
                                                     className={`flex min-h-[88px] items-center gap-3 rounded-[20px] border p-4 ${
                                                         seat.kind === 'empty'
-                                                            ? 'border-dashed border-line bg-surface-muted/35'
+                                                            ? 'border-line bg-surface-muted/35 border-dashed'
                                                             : 'border-line/80 bg-white shadow-sm'
                                                     }`}
                                                 >
                                                     {seat.kind === 'empty' ? (
-                                                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-dashed border-line bg-white text-lg font-medium text-ink-muted/60">
+                                                        <span className="border-line text-ink-muted/60 grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-dashed bg-white text-lg font-medium">
                                                             +
                                                         </span>
                                                     ) : (
@@ -427,7 +422,7 @@ export default function Room() {
                                                         </p>
                                                         <div className="mt-1 flex items-center gap-1.5">
                                                             <span
-                                                                className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] ${
+                                                                className={`rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[0.08em] uppercase ${
                                                                     seat.kind ===
                                                                     'host'
                                                                         ? 'bg-ink/8 text-ink-muted'
@@ -449,8 +444,8 @@ export default function Room() {
                                                                     }`}
                                                                 >
                                                                     {seat.ready
-                                                                        ? 'Ready'
-                                                                        : 'Not ready'}
+                                                                        ? 'Siap'
+                                                                        : 'Belum siap'}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -465,10 +460,10 @@ export default function Room() {
                                                                     'link',
                                                                 )
                                                             }
-                                                            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold text-brand-ink transition hover:bg-brand/8"
+                                                            className="text-brand-ink hover:bg-brand/8 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition"
                                                         >
                                                             <LinkIcon className="h-3.5 w-3.5" />
-                                                            Invite
+                                                            Undang
                                                         </button>
                                                     )}
                                                 </div>
@@ -478,9 +473,9 @@ export default function Room() {
                                 </div>
 
                                 <aside className="space-y-4">
-                                    <section className="rounded-[24px] border border-line/80 bg-white p-4 shadow-card sm:p-5">
-                                        <h2 className="text-sm font-semibold text-ink">
-                                            Match actions
+                                    <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4 sm:p-5">
+                                        <h2 className="text-ink text-sm font-semibold">
+                                            Aksi pertandingan
                                         </h2>
                                         <div className="mt-4 flex flex-col gap-2.5">
                                             <button
@@ -490,17 +485,17 @@ export default function Room() {
                                                 }
                                                 className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-semibold transition ${
                                                     ready
-                                                        ? 'border border-success/20 bg-success/10 text-success-ink'
-                                                        : 'bg-brand text-white shadow-[0_10px_22px_-12px_rgba(47,107,239,0.8)] hover:bg-brand-dark'
+                                                        ? 'border-success/20 bg-success/10 text-success-ink border'
+                                                        : 'bg-brand hover:bg-brand-dark text-white shadow-[0_10px_22px_-12px_rgba(47,107,239,0.8)]'
                                                 }`}
                                             >
                                                 {ready ? (
                                                     <>
                                                         <CheckIcon className="h-4 w-4" />
-                                                        Ready to play
+                                                        Siap bermain
                                                     </>
                                                 ) : (
-                                                    'Mark as ready'
+                                                    'Tandai siap'
                                                 )}
                                             </button>
 
@@ -509,62 +504,62 @@ export default function Room() {
                                                 onClick={() =>
                                                     copy(shareLink, 'link')
                                                 }
-                                                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-line bg-white text-xs font-semibold text-ink transition hover:border-ink/15 hover:bg-surface-muted"
+                                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-2 rounded-xl border bg-white text-xs font-semibold transition"
                                             >
                                                 {copyState === 'link' ? (
                                                     <>
-                                                        <CheckIcon className="h-4 w-4 text-success-ink" />
-                                                        Invite copied
+                                                        <CheckIcon className="text-success-ink h-4 w-4" />
+                                                        Undangan tersalin
                                                     </>
                                                 ) : (
                                                     <>
                                                         <LinkIcon className="h-4 w-4" />
-                                                        Copy invite link
+                                                        Salin tautan undangan
                                                     </>
                                                 )}
                                             </button>
 
                                             <Link
                                                 href={route('play')}
-                                                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink text-xs font-semibold text-white transition hover:bg-ink/90 active:scale-[0.99]"
+                                                className="bg-ink hover:bg-ink/90 inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white transition active:scale-[0.99]"
                                             >
                                                 <ArrowRightIcon className="h-4 w-4" />
-                                                Start practice match
+                                                Mulai pertandingan latihan
                                             </Link>
 
                                             <Link
                                                 href={route('home')}
-                                                className="inline-flex h-10 items-center justify-center rounded-xl text-xs font-semibold text-ink-muted transition hover:bg-surface-muted hover:text-ink"
+                                                className="text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 items-center justify-center rounded-xl text-xs font-semibold transition"
                                             >
-                                                Leave room
+                                                Tinggalkan ruang
                                             </Link>
                                         </div>
 
-                                        <p className="mt-3 flex items-start gap-2 rounded-xl bg-surface-muted px-3 py-2.5 text-[11px] leading-5 text-ink-muted">
+                                        <p className="bg-surface-muted text-ink-muted mt-3 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[11px] leading-5">
                                             <InfoIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                                            Room codes and seats are a UI
-                                            preview. Online room start will
-                                            unlock when matchmaking is
-                                            connected.
+                                            Kode ruang dan kursi masih berupa
+                                            pratinjau UI. Pertandingan ruang
+                                            online akan aktif saat pencarian
+                                            lawan terhubung.
                                         </p>
                                     </section>
 
-                                    <section className="rounded-[24px] border border-line/80 bg-white p-4 shadow-card sm:p-5">
-                                        <h2 className="text-sm font-semibold text-ink">
-                                            House rules
+                                    <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4 sm:p-5">
+                                        <h2 className="text-ink text-sm font-semibold">
+                                            Aturan main
                                         </h2>
                                         <ul className="mt-3 space-y-2.5">
                                             {[
-                                                'Roll a 6 to bring a token out of base.',
-                                                'Land on a rival to send it home, unless the square is safe.',
-                                                'An exact roll is required to finish.',
-                                                'Online turns are 15 seconds each.',
+                                                'Dapat 6 untuk mengeluarkan bidak dari markas.',
+                                                'Mendarat di bidak lawan akan memulangkannya, kecuali di petak aman.',
+                                                'Butuh angka pas untuk masuk garis akhir.',
+                                                'Setiap giliran online berdurasi 15 detik.',
                                             ].map((rule) => (
                                                 <li
                                                     key={rule}
-                                                    className="flex items-start gap-2 text-[11px] leading-5 text-ink-muted"
+                                                    className="text-ink-muted flex items-start gap-2 text-[11px] leading-5"
                                                 >
-                                                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand/50" />
+                                                    <span className="bg-brand/50 mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" />
                                                     {rule}
                                                 </li>
                                             ))}

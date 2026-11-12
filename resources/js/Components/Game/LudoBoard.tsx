@@ -34,8 +34,7 @@ const QUADRANTS: { color: PlayerColor; row: number; col: number }[] = [
 ];
 
 const LANE_CELLS: { color: PlayerColor; cell: Cell }[] = QUADRANTS.flatMap(
-    ({ color }) =>
-        PLAYER_CONFIG[color].lane.map((cell) => ({ color, cell })),
+    ({ color }) => PLAYER_CONFIG[color].lane.map((cell) => ({ color, cell })),
 );
 
 function cellStyle(cell: Cell): CSSProperties {
@@ -99,9 +98,9 @@ export default function LudoBoard({
         <div
             className={`relative aspect-square w-full select-none ${className}`}
             role="group"
-            aria-label="Ludo board"
+            aria-label="Papan Ludo"
         >
-            <div className="absolute inset-0 overflow-hidden rounded-[5.5%] border border-line/80 bg-white shadow-[0_18px_45px_-24px_rgba(32,43,58,0.45)]">
+            <div className="border-line/80 absolute inset-0 overflow-hidden rounded-[5.5%] border bg-white shadow-[0_18px_45px_-24px_rgba(32,43,58,0.45)]">
                 {QUADRANTS.map(({ color, row, col }) => {
                     const config = PLAYER_CONFIG[color];
                     const palette = config.palette;
@@ -227,29 +226,27 @@ export default function LudoBoard({
                 >
                     <div className="absolute inset-0 overflow-hidden rounded-[6%]">
                         <div
-                            className="absolute inset-0 bg-ludo-red"
+                            className="bg-ludo-red absolute inset-0"
                             style={{
                                 clipPath: 'polygon(0 0, 50% 50%, 0 100%)',
                             }}
                         />
                         <div
-                            className="absolute inset-0 bg-ludo-green"
+                            className="bg-ludo-green absolute inset-0"
                             style={{
                                 clipPath: 'polygon(0 0, 100% 0, 50% 50%)',
                             }}
                         />
                         <div
-                            className="absolute inset-0 bg-ludo-yellow"
+                            className="bg-ludo-yellow absolute inset-0"
                             style={{
-                                clipPath:
-                                    'polygon(100% 0, 100% 100%, 50% 50%)',
+                                clipPath: 'polygon(100% 0, 100% 100%, 50% 50%)',
                             }}
                         />
                         <div
-                            className="absolute inset-0 bg-ludo-blue"
+                            className="bg-ludo-blue absolute inset-0"
                             style={{
-                                clipPath:
-                                    'polygon(0 100%, 100% 100%, 50% 50%)',
+                                clipPath: 'polygon(0 100%, 100% 100%, 50% 50%)',
                             }}
                         />
                     </div>
@@ -276,8 +273,7 @@ export default function LudoBoard({
                         } as CSSProperties;
 
                         const label =
-                            token.label ??
-                            `${config.label} token ${index + 1}`;
+                            token.label ?? `Bidak ${config.label} ${index + 1}`;
 
                         return (
                             <div
@@ -291,7 +287,7 @@ export default function LudoBoard({
                                         onClick={token.onClick}
                                         aria-label={
                                             token.legal
-                                                ? `${label} is available to move`
+                                                ? `${label} siap digerakkan`
                                                 : label
                                         }
                                         className={`ludo-token block h-full w-full rounded-full border-2 border-white transition-transform duration-150 hover:scale-110 active:scale-95 ${

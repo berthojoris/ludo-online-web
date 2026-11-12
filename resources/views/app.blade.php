@@ -6,7 +6,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="theme-color" content="#F7F8FA">
         <meta name="color-scheme" content="light">
-        <meta name="description" content="Ludo Arena is a clean, mobile-first Ludo board for quick matches and private rooms.">
+        <meta name="description" content="Ludo Arena adalah papan Ludo yang bersih dan mengutamakan perangkat mobile untuk pertandingan cepat dan ruang privat.">
 
         <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 
