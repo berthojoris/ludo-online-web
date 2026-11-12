@@ -9,7 +9,7 @@ Ludo Arena is a mobile-first, installable multiplayer Ludo PWA. It targets 2-4 p
 
 **No voice chat, no WebRTC audio, and no microphone permissions.**
 
-> **Status: pre-alpha foundation.** The Laravel, Inertia, React, Reverb, and authentication foundation is in place. The Ludo rules engine, match schema, board renderer, and gameplay screens are not implemented yet.
+> **Status: pre-alpha foundation.** The Laravel, Inertia, React, Reverb, and authentication foundation is in place. The responsive Home screen, CSS board, local practice match, and room lobby preview are implemented. The server-authoritative rules engine, match schema, and online matchmaking are not implemented yet.
 
 ## Contents
 
@@ -57,9 +57,10 @@ The initial product languages are Indonesian and English. The interface must rem
 | Laravel Reverb and Echo transport | Installed, configured, and verified locally |
 | `php artisan test` | Passing |
 | TypeScript check | Passing |
-| Game rules engine | Not started |
+| Home, practice board, and room lobby UI | Working |
+| Game rules engine | Not started; the practice board runs a local demo loop |
 | Match, player, and action schema | Not started |
-| Board renderer and PixiJS/GSAP animation | Not started |
+| Board renderer | React/CSS board working; PixiJS/GSAP not started |
 | PWA manifest and service worker | Not started |
 | Match channel authorization | Waiting for match schema |
 | Database | SQLite locally, MySQL is the target |
@@ -349,15 +350,17 @@ database/
   factories/               Model factories
   seeders/                 Database seeders
 resources/
-  css/app.css              Tailwind entry point
+  css/app.css              Tailwind entry point and design tokens
   js/app.tsx               Inertia and Echo entry point
   js/Components/           Shared UI components
+  js/Components/Game/      Board, dice, player card, logo, and icons
+  js/lib/ludo.ts           15x15 board geometry and player configs
   js/Layouts/              Guest and authenticated layouts
-  js/Pages/                Inertia pages
+  js/Pages/                Home, Play, Room, auth, and profile pages
   js/types/                TypeScript declarations
   views/app.blade.php      Inertia root template and CSRF meta
 routes/
-  web.php                  Home, dashboard, and profile routes
+  web.php                  Home, practice board, room lobby, dashboard, and profile routes
   auth.php                 Authentication routes
   channels.php             Broadcast channel authorization
 tests/

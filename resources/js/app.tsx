@@ -17,7 +17,7 @@ configureEcho({
     enabledTransports: ['ws', 'wss'],
 });
 
-const appName = import.meta.env.VITE_APP_NAME || 'Ludo Arena';
+const appName = 'Ludo Arena';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),

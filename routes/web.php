@@ -1,18 +1,14 @@
 <?php
 
+use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-})->name('home');
+Route::get('/', [PageController::class, 'home'])->name('home');
+
+Route::get('/play', [PageController::class, 'play'])->name('play');
+
+Route::get('/room', [PageController::class, 'room'])->name('room');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
