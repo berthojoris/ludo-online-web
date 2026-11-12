@@ -1,17 +1,17 @@
 import Dice from '@/Components/Game/Dice';
+import HowItWorksModal from '@/Components/Game/HowItWorksModal';
 import {
     ArrowRightIcon,
     DiceIcon,
-    LinkIcon,
-    ShieldIcon,
+    InfoIcon,
     SparklesIcon,
-    UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
 import { User } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PREVIEW_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
 
@@ -25,33 +25,56 @@ function previewTokens(): BoardToken[] {
     );
 }
 
-const FEATURES = [
-    {
-        icon: UsersIcon,
-        title: 'Pertandingan cepat',
-        body: 'Tata letak yang mengutamakan papan untuk dua sampai empat pemain, dengan giliran yang jelas dan tanpa gangguan antara kamu dan permainan.',
-        tint: 'bg-brand/10 text-brand',
-    },
-    {
-        icon: LinkIcon,
-        title: 'Ruang privat',
-        body: 'Buat ruang, bagikan kode singkat, dan simpan kursi untuk teman yang memang ingin kamu ajak bermain.',
-        tint: 'bg-ludo-green/12 text-ludo-green',
-    },
-    {
-        icon: ShieldIcon,
-        title: 'Dirancang untuk permainan adil',
-        body: 'Dadu dan validasi langkah dipegang server sebagai fondasi mesin pertandingan, bukan kepercayaan sepihak di sisi klien.',
-        tint: 'bg-ludo-yellow/15 text-ludo-yellow',
-    },
-];
-
 export default function Home() {
     const { auth } = usePage().props as unknown as {
         auth?: { user: User | null };
     };
     const user = auth?.user ?? null;
     const tokens = previewTokens();
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const [howItWorksOpen, setHowItWorksOpen] = useState(
+        () =>
+            typeof window !== 'undefined' &&
+            window.location.hash === '#how-it-works',
+    );
+
+    useEffect(() => {
+        const syncFromHash = () => {
+            if (window.location.hash === '#how-it-works') {
+                setHowItWorksOpen(true);
+            }
+        };
+
+        window.addEventListener('hashchange', syncFromHash);
+
+        return () => {
+            window.removeEventListener('hashchange', syncFromHash);
+        };
+    }, []);
+
+    const openHowItWorks = useCallback(() => {
+        setHowItWorksOpen(true);
+
+        if (window.location.hash !== '#how-it-works') {
+            window.history.replaceState(null, '', '#how-it-works');
+        }
+    }, []);
+
+    const closeHowItWorks = useCallback(() => {
+        setHowItWorksOpen(false);
+
+        if (window.location.hash === '#how-it-works') {
+            window.history.replaceState(
+                null,
+                '',
+                `${window.location.pathname}${window.location.search}`,
+            );
+        }
+
+        window.requestAnimationFrame(() => {
+            triggerRef.current?.focus();
+        });
+    }, []);
 
     return (
         <>
@@ -83,12 +106,20 @@ export default function Home() {
                         </Link>
 
                         <nav className="flex items-center gap-1.5">
-                            <a
-                                href="#how-it-works"
-                                className="text-ink-muted hover:text-ink hidden rounded-full px-3.5 py-2 text-sm font-medium transition hover:bg-white sm:inline-flex"
+                            <button
+                                ref={triggerRef}
+                                type="button"
+                                onClick={openHowItWorks}
+                                aria-label="Cara bermain"
+                                aria-haspopup="dialog"
+                                aria-expanded={howItWorksOpen}
+                                className="border-line/80 text-ink-muted hover:border-ink/15 hover:text-ink inline-flex h-9 items-center gap-1.5 rounded-full border bg-white/90 px-3 text-xs font-semibold shadow-sm transition hover:bg-white sm:h-auto sm:border-transparent sm:bg-transparent sm:px-3.5 sm:py-2 sm:text-sm sm:font-medium sm:shadow-none sm:hover:border-transparent sm:hover:bg-white"
                             >
-                                Cara bermain
-                            </a>
+                                <InfoIcon className="h-4 w-4 shrink-0 sm:hidden" />
+                                <span className="hidden min-[360px]:inline">
+                                    Cara bermain
+                                </span>
+                            </button>
                             {user ? (
                                 <Link
                                     href={route('dashboard')}
@@ -107,7 +138,7 @@ export default function Home() {
                 </header>
 
                 <main>
-                    <section className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pt-12 pb-16 sm:px-6 sm:pt-16 lg:grid-cols-[1.02fr_0.98fr] lg:gap-10 lg:pt-20 lg:pb-24">
+                    <section className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pt-10 pb-12 sm:px-6 sm:pt-14 sm:pb-16 lg:grid-cols-[1.02fr_0.98fr] lg:gap-10 lg:pt-16 lg:pb-20">
                         <div className="animate-fade-up">
                             <span className="border-line text-ink-muted inline-flex items-center gap-2 rounded-full border bg-white/80 px-3 py-1.5 text-[11px] font-semibold tracking-[0.12em] shadow-sm backdrop-blur">
                                 <span className="flex gap-1" aria-hidden="true">
@@ -210,51 +241,7 @@ export default function Home() {
                         </div>
                     </section>
 
-                    <section
-                        id="how-it-works"
-                        className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:pb-24"
-                    >
-                        <div className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
-                            <div>
-                                <p className="text-brand-ink text-[11px] font-semibold tracking-[0.16em]">
-                                    UNTUK PERTANDINGAN SINGKAT
-                                </p>
-                                <h2 className="text-ink mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-                                    Semua yang kamu butuhkan untuk permainan
-                                    yang bersih.
-                                </h2>
-                            </div>
-                            <p className="text-ink-muted hidden max-w-xs text-right text-sm leading-6 sm:block">
-                                Aturan sederhana, bidak yang cerah, dan papan
-                                yang tetap jadi bintang.
-                            </p>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-3">
-                            {FEATURES.map(
-                                ({ icon: Icon, title, body, tint }) => (
-                                    <article
-                                        key={title}
-                                        className="group border-line/80 shadow-card rounded-[24px] border bg-white p-5 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_-18px_rgba(32,43,58,0.35)] sm:p-6"
-                                    >
-                                        <span
-                                            className={`grid h-11 w-11 place-items-center rounded-2xl ${tint}`}
-                                        >
-                                            <Icon className="h-5.5 w-5.5" />
-                                        </span>
-                                        <h3 className="text-ink mt-4 text-base font-semibold">
-                                            {title}
-                                        </h3>
-                                        <p className="text-ink-muted mt-2 text-sm leading-6">
-                                            {body}
-                                        </p>
-                                    </article>
-                                ),
-                            )}
-                        </div>
-                    </section>
-
-                    <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:pb-24">
+                    <section className="mx-auto max-w-6xl px-4 pb-12 sm:px-6 sm:pb-16 lg:pb-20">
                         <div className="bg-brand relative overflow-hidden rounded-[30px] px-6 py-8 text-white shadow-[0_24px_60px_-24px_rgba(47,107,239,0.65)] sm:px-10 sm:py-10">
                             <div
                                 aria-hidden="true"
@@ -309,6 +296,11 @@ export default function Home() {
                     </div>
                 </footer>
             </div>
+
+            <HowItWorksModal
+                open={howItWorksOpen}
+                onClose={closeHowItWorks}
+            />
         </>
     );
 }
