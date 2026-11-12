@@ -64,10 +64,10 @@
 
     .dice-face {
         background: linear-gradient(150deg, #ffffff 0%, #f6f8fc 58%, #e9edf4 100%);
+        border: 1px solid rgb(213 220 231 / 80%);
         box-shadow:
             inset 0 2px 2px rgb(255 255 255 / 90%),
-            inset 0 -4px 5px rgb(32 43 58 / 10%),
-            0 16px 30px -12px rgb(32 43 58 / 45%);
+            inset 0 -4px 5px rgb(32 43 58 / 10%);
     }
 
     .dot-grid {
@@ -120,6 +120,19 @@
     }
 }
 
+@keyframes token-hop {
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+    45% {
+        transform: translateY(-24%) scale(1.07);
+    }
+    72% {
+        transform: translateY(-5%) scale(0.98);
+    }
+}
+
 @keyframes token-pop {
     0% {
         transform: scale(0.6);
@@ -165,6 +178,10 @@
 
 .animate-legal-pulse {
     animation: legal-pulse 1.6s ease-in-out infinite;
+}
+
+.animate-token-hop {
+    animation: token-hop 0.26s ease-in-out infinite;
 }
 
 .animate-token-pop {

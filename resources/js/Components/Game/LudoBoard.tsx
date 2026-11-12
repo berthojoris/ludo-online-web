@@ -14,12 +14,14 @@ export type BoardToken = {
     color: PlayerColor;
     point: Cell;
     legal?: boolean;
+    moving?: boolean;
     onClick?: () => void;
     label?: string;
 };
 
 type LudoBoardProps = {
     tokens?: BoardToken[];
+    playerNames?: Partial<Record<PlayerColor, string>>;
     className?: string;
 };
 
@@ -90,15 +92,23 @@ function tokenGroups(tokens: BoardToken[]) {
 
 export default function LudoBoard({
     tokens = [],
+    playerNames = {},
     className = '',
 }: LudoBoardProps) {
-    const groups = tokenGroups(tokens);
+    const layout = new Map<string, { index: number; count: number }>();
+
+    for (const group of tokenGroups(tokens).values()) {
+        group.forEach((token, index) => {
+            layout.set(token.id, { index, count: group.length });
+        });
+    }
 
     return (
         <div
             className={`relative aspect-square w-full select-none ${className}`}
             role="group"
             aria-label="Papan Ludo"
+            style={{ containerType: 'inline-size' }}
         >
             <div className="border-line/80 absolute inset-0 overflow-hidden rounded-[5.5%] border bg-white shadow-[0_18px_45px_-24px_rgba(32,43,58,0.45)]">
                 {QUADRANTS.map(({ color, row, col }) => {
@@ -124,6 +134,21 @@ export default function LudoBoard({
                                         'inset 0 2px 10px rgba(32,43,58,0.13), 0 1px 0 rgba(255,255,255,0.7)',
                                 }}
                             />
+                            {playerNames[color] && (
+                                <div className="absolute inset-x-[13%] bottom-[7%] z-[2] flex justify-center">
+                                    <span
+                                        className="max-w-full truncate rounded-full bg-white/95 px-1.5 py-px font-extrabold shadow-[0_1px_4px_rgba(32,43,58,0.16)]"
+                                        style={{
+                                            color: palette.text,
+                                            fontSize:
+                                                'clamp(6.5px, 1.75cqw, 11px)',
+                                            lineHeight: 1.35,
+                                        }}
+                                    >
+                                        {playerNames[color]}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -253,64 +278,70 @@ export default function LudoBoard({
                     <div className="absolute inset-[37%] rotate-45 rounded-[22%] bg-white/95 shadow-[0_2px_6px_rgba(32,43,58,0.22)]" />
                 </div>
 
-                {Array.from(groups.entries()).map(([key, group]) =>
-                    group.map((token, index) => {
-                        const config = PLAYER_CONFIG[token.color];
-                        const palette = config.palette;
-                        const [dx, dy] = groupOffset(index, group.length);
-                        const positionStyle = {
-                            left: `${(token.point.col / BOARD_SIZE) * 100}%`,
-                            top: `${(token.point.row / BOARD_SIZE) * 100}%`,
-                            width: '5.9%',
-                            aspectRatio: '1 / 1',
-                            transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
-                        } as CSSProperties;
+                {tokens.map((token) => {
+                    const config = PLAYER_CONFIG[token.color];
+                    const palette = config.palette;
+                    const { index, count } = layout.get(token.id) ?? {
+                        index: 0,
+                        count: 1,
+                    };
+                    const [dx, dy] = groupOffset(index, count);
+                    const positionStyle = {
+                        left: `${(token.point.col / BOARD_SIZE) * 100}%`,
+                        top: `${(token.point.row / BOARD_SIZE) * 100}%`,
+                        width: '5.9%',
+                        aspectRatio: '1 / 1',
+                        transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
+                    } as CSSProperties;
 
-                        const tokenStyle = {
-                            '--token-light': palette.light,
-                            '--token-base': palette.base,
-                            '--token-dark': palette.dark,
-                        } as CSSProperties;
+                    const tokenStyle = {
+                        '--token-light': palette.light,
+                        '--token-base': palette.base,
+                        '--token-dark': palette.dark,
+                    } as CSSProperties;
 
-                        const label =
-                            token.label ?? `Bidak ${config.label} ${index + 1}`;
+                    const label =
+                        token.label ?? `Bidak ${config.label} ${index + 1}`;
 
-                        return (
-                            <div
-                                key={`${key}-${token.id}`}
-                                className="absolute z-20"
-                                style={positionStyle}
-                            >
-                                {token.onClick ? (
-                                    <button
-                                        type="button"
-                                        onClick={token.onClick}
-                                        aria-label={
-                                            token.legal
-                                                ? `${label} siap digerakkan`
-                                                : label
-                                        }
-                                        className={`ludo-token block h-full w-full rounded-full border-2 border-white transition-transform duration-150 hover:scale-110 active:scale-95 ${
-                                            token.legal
-                                                ? 'animate-legal-pulse cursor-pointer'
-                                                : 'cursor-default'
-                                        }`}
-                                        style={tokenStyle}
-                                    />
-                                ) : (
-                                    <div
-                                        className={`ludo-token h-full w-full rounded-full border-2 border-white ${
-                                            token.legal
-                                                ? 'animate-legal-pulse'
-                                                : ''
-                                        }`}
-                                        style={tokenStyle}
-                                    />
-                                )}
-                            </div>
-                        );
-                    }),
-                )}
+                    return (
+                        <div
+                            key={token.id}
+                            className="absolute z-20 transition-[left,top] duration-[140ms] ease-out"
+                            style={positionStyle}
+                        >
+                            {token.onClick ? (
+                                <button
+                                    type="button"
+                                    onClick={token.onClick}
+                                    aria-label={
+                                        token.legal
+                                            ? `${label} siap digerakkan`
+                                            : label
+                                    }
+                                    className={`ludo-token block h-full w-full rounded-full border-2 border-white transition-transform duration-150 hover:scale-110 active:scale-95 ${
+                                        token.legal
+                                            ? 'animate-legal-pulse cursor-pointer'
+                                            : 'cursor-default'
+                                    } ${
+                                        token.moving
+                                            ? 'animate-token-hop pointer-events-none'
+                                            : ''
+                                    }`}
+                                    style={tokenStyle}
+                                />
+                            ) : (
+                                <div
+                                    className={`ludo-token h-full w-full rounded-full border-2 border-white ${
+                                        token.legal ? 'animate-legal-pulse' : ''
+                                    } ${
+                                        token.moving ? 'animate-token-hop' : ''
+                                    }`}
+                                    style={tokenStyle}
+                                />
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

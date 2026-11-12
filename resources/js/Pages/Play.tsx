@@ -4,8 +4,11 @@ import {
     DiceIcon,
     InfoIcon,
     RefreshIcon,
+    SoundOffIcon,
+    SoundOnIcon,
     SparklesIcon,
     TrophyIcon,
+    UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
@@ -19,12 +22,28 @@ import {
     PlayerColor,
     tokenPoint,
 } from '@/lib/ludo';
+import {
+    isSoundEnabled,
+    playCaptureSound,
+    playHopSound,
+    setSoundEnabled,
+    unlockAudio,
+} from '@/lib/sound';
 import { User } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import {
+    FormEvent,
+    useCallback,
+    useEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+} from 'react';
 
 type PlayerId = Extract<PlayerColor, 'blue' | 'green'>;
 type Phase = 'idle' | 'rolling' | 'choosing' | 'gameover';
+type Screen = 'setup' | 'game';
 
 type LegalMove = {
     tokenIndex: number;
@@ -37,9 +56,13 @@ type LogEntry = {
     color?: PlayerId;
 };
 
+type SetupNames = Record<PlayerId, string>;
+
 type GameState = {
     tokens: Record<PlayerId, number[]>;
     turn: PlayerId;
+    human: PlayerId;
+    names: SetupNames;
     phase: Phase;
     dice: number | null;
     legalMoves: LegalMove[];
@@ -50,15 +73,13 @@ type GameState = {
 };
 
 type Action =
-    | { type: 'ROLL_START' }
+    | { type: 'START'; human: PlayerId; names: SetupNames }
+    | { type: 'ROLL_START'; value: number }
     | { type: 'ROLL_RESULT'; value: number }
     | { type: 'MOVE'; tokenIndex: number }
     | { type: 'RESET' };
 
-const PLAYER_LABEL: Record<PlayerId, string> = {
-    blue: 'Kamu',
-    green: 'Lawan',
-};
+const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
 
 const initialState: GameState = {
     tokens: {
@@ -66,6 +87,8 @@ const initialState: GameState = {
         green: [-1, -1, -1, -1],
     },
     turn: 'blue',
+    human: 'blue',
+    names: { blue: 'Kamu', green: 'Lawan' },
     phase: 'idle',
     dice: null,
     legalMoves: [],
@@ -86,6 +109,35 @@ function otherPlayer(player: PlayerId): PlayerId {
 
 function randomDie(): number {
     return 1 + Math.floor(Math.random() * 6);
+}
+
+function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
+    const opponent = otherPlayer(human);
+
+    return {
+        [human]: names[human].trim().slice(0, 16) || 'Pemain',
+        [opponent]: names[opponent].trim().slice(0, 16) || 'Lawan',
+    } as SetupNames;
+}
+
+function createInitialState(human: PlayerId, rawNames: SetupNames): GameState {
+    const names = cleanNames(human, rawNames);
+
+    return {
+        ...initialState,
+        human,
+        names,
+        turn: human,
+        message: `${names[human]}, giliranmu. Lempar dadu.`,
+        log: [
+            {
+                id: 0,
+                text: `${names[human]} (${PLAYER_CONFIG[human].label}) jalan lebih dulu.`,
+                color: human,
+            },
+        ],
+        logId: 1,
+    };
 }
 
 function appendLog(
@@ -163,8 +215,12 @@ function chooseAiMove(state: GameState): LegalMove | null {
 }
 
 function reducer(state: GameState, action: Action): GameState {
+    if (action.type === 'START') {
+        return createInitialState(action.human, action.names);
+    }
+
     if (action.type === 'RESET') {
-        return initialState;
+        return createInitialState(state.human, state.names);
     }
 
     if (action.type === 'ROLL_START') {
@@ -175,11 +231,12 @@ function reducer(state: GameState, action: Action): GameState {
         return {
             ...state,
             phase: 'rolling',
+            dice: action.value,
             legalMoves: [],
             message:
-                state.turn === 'blue'
+                state.turn === state.human
                     ? 'Melempar dadu…'
-                    : 'Lawan sedang melempar…',
+                    : `${state.names[state.turn]} sedang melempar…`,
         };
     }
 
@@ -193,7 +250,7 @@ function reducer(state: GameState, action: Action): GameState {
             state.turn,
             action.value,
         );
-        const actor = PLAYER_LABEL[state.turn];
+        const actor = state.names[state.turn];
         const logged = appendLog(
             state,
             `${actor} melempar ${action.value}.`,
@@ -211,9 +268,9 @@ function reducer(state: GameState, action: Action): GameState {
                 phase: 'idle',
                 turn: nextPlayer,
                 message:
-                    state.turn === 'blue'
+                    state.turn === state.human
                         ? 'Tidak ada langkah yang bisa diambil. Giliran lawan.'
-                        : 'Lawan tidak punya langkah. Giliranmu.',
+                        : `${actor} tidak punya langkah. Giliranmu.`,
             };
         }
 
@@ -224,9 +281,9 @@ function reducer(state: GameState, action: Action): GameState {
             legalMoves,
             phase: 'choosing',
             message:
-                state.turn === 'blue'
+                state.turn === state.human
                     ? 'Pilih bidak yang menyala untuk digerakkan.'
-                    : 'Lawan sedang memilih langkah…',
+                    : `${actor} sedang memilih langkah…`,
         };
     }
 
@@ -245,6 +302,7 @@ function reducer(state: GameState, action: Action): GameState {
 
         const actor = state.turn;
         const opponent = otherPlayer(actor);
+        const actorName = state.names[actor];
         const from = state.tokens[actor][move.tokenIndex];
         const nextTokens: Record<PlayerId, number[]> = {
             blue: [...state.tokens.blue],
@@ -288,7 +346,7 @@ function reducer(state: GameState, action: Action): GameState {
               : '';
         const logged = appendLog(
             state,
-            `${PLAYER_LABEL[actor]} ${moveDescription}${extraDescription}.`,
+            `${actorName} ${moveDescription}${extraDescription}.`,
             actor,
         );
 
@@ -301,9 +359,9 @@ function reducer(state: GameState, action: Action): GameState {
                 phase: 'gameover',
                 winner: actor,
                 message:
-                    actor === 'blue'
-                        ? 'Kamu membawa semua bidak ke garis akhir. Kamu menang!'
-                        : 'Lawan membawa semua bidak ke garis akhir.',
+                    actor === state.human
+                        ? `${actorName} membawa semua bidak ke garis akhir. Kamu menang!`
+                        : `${actorName} membawa semua bidak ke garis akhir.`,
             };
         }
 
@@ -316,9 +374,9 @@ function reducer(state: GameState, action: Action): GameState {
                 phase: 'idle',
                 turn: actor,
                 message:
-                    actor === 'blue'
+                    actor === state.human
                         ? 'Dapat lemparan tambahan. Lempar lagi.'
-                        : 'Lawan mendapat lemparan tambahan.',
+                        : `${actorName} mendapat lemparan tambahan.`,
             };
         }
 
@@ -330,77 +388,195 @@ function reducer(state: GameState, action: Action): GameState {
             phase: 'idle',
             turn: opponent,
             message:
-                opponent === 'blue'
+                opponent === state.human
                     ? 'Giliranmu. Lempar dadu.'
-                    : 'Giliran lawan.',
+                    : `Giliran ${state.names[opponent]}.`,
         };
     }
 
     return state;
 }
 
+type MovingToken = {
+    color: PlayerId;
+    tokenIndex: number;
+    position: number;
+};
+
+function useBoardSize(active: boolean) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [size, setSize] = useState(0);
+
+    useEffect(() => {
+        const element = ref.current;
+
+        if (!active || !element) {
+            return;
+        }
+
+        const measure = () => {
+            const rect = element.getBoundingClientRect();
+
+            setSize(Math.max(0, Math.floor(Math.min(rect.width, rect.height))));
+        };
+
+        measure();
+
+        const observer = new ResizeObserver(measure);
+        observer.observe(element);
+        window.addEventListener('resize', measure);
+        window.addEventListener('orientationchange', measure);
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', measure);
+            window.removeEventListener('orientationchange', measure);
+        };
+    }, [active]);
+
+    return [ref, size] as const;
+}
+
 export default function Play() {
     const { auth } = usePage().props as unknown as {
         auth?: { user: User | null };
     };
-    const playerName = auth?.user?.name?.split(' ')[0] ?? 'Guest';
+    const accountName = auth?.user?.name?.split(' ')[0] ?? 'Pemain';
+
+    const [screen, setScreen] = useState<Screen>('setup');
+    const [humanColor, setHumanColor] = useState<PlayerId>('blue');
+    const [yourName, setYourName] = useState(accountName);
+    const [opponentName, setOpponentName] = useState('Lawan');
     const [state, dispatch] = useReducer(reducer, initialState);
-    const [rollingFace, setRollingFace] = useState(1);
+    const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
+    const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+    const [boardRef, boardSize] = useBoardSize(screen === 'game');
+    const movingRef = useRef(false);
 
+    const opponentColor = otherPlayer(state.human);
     const canRoll =
-        state.turn === 'blue' && state.phase === 'idle' && !state.winner;
-    const displayDice =
-        state.phase === 'rolling' ? rollingFace : (state.dice ?? 6);
+        state.turn === state.human && state.phase === 'idle' && !state.winner;
+    const displayDice = state.dice ?? 6;
+    const setupOpponent = otherPlayer(humanColor);
 
     useEffect(() => {
-        if (state.phase !== 'rolling') {
+        const previous = document.body.style.overflow;
+
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = previous;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (state.phase !== 'rolling' || state.dice === null) {
             return;
         }
 
-        const interval = window.setInterval(() => {
-            setRollingFace(randomDie());
-        }, 90);
+        const value = state.dice;
+        const timeout = window.setTimeout(() => {
+            dispatch({ type: 'ROLL_RESULT', value });
+        }, 1080);
 
-        return () => window.clearInterval(interval);
-    }, [state.phase]);
+        return () => window.clearTimeout(timeout);
+    }, [state.phase, state.dice]);
 
     useEffect(() => {
-        if (state.phase !== 'rolling') {
+        if (
+            state.turn === state.human ||
+            state.phase !== 'idle' ||
+            state.winner
+        ) {
             return;
         }
 
         const timeout = window.setTimeout(() => {
-            dispatch({ type: 'ROLL_RESULT', value: randomDie() });
-        }, 950);
+            dispatch({ type: 'ROLL_START', value: randomDie() });
+        }, 900);
 
         return () => window.clearTimeout(timeout);
-    }, [state.phase]);
+    }, [state.turn, state.phase, state.winner, state.human]);
+
+    const animateMove = useCallback(
+        async (tokenIndex: number) => {
+            if (movingRef.current || state.phase !== 'choosing') {
+                return;
+            }
+
+            const move = state.legalMoves.find(
+                (candidate) => candidate.tokenIndex === tokenIndex,
+            );
+
+            if (!move) {
+                return;
+            }
+
+            const color = state.turn;
+            const opponent = otherPlayer(color);
+            const from = state.tokens[color][tokenIndex];
+            const steps =
+                from === BASE_POSITION
+                    ? [0]
+                    : Array.from(
+                          { length: move.target - from },
+                          (_, index) => from + index + 1,
+                      );
+
+            if (steps.length === 0) {
+                return;
+            }
+
+            let captures = false;
+
+            if (move.target <= 50) {
+                const absolute = absoluteTrackIndex(color, move.target);
+
+                if (!isSafeAbsoluteIndex(absolute)) {
+                    captures = state.tokens[opponent].some(
+                        (position) =>
+                            absoluteTrackIndex(opponent, position) === absolute,
+                    );
+                }
+            }
+
+            movingRef.current = true;
+            void unlockAudio();
+
+            for (const [index, position] of steps.entries()) {
+                setMovingToken({ color, tokenIndex, position });
+                playHopSound(index);
+                await new Promise((resolve) => window.setTimeout(resolve, 140));
+            }
+
+            if (captures) {
+                playCaptureSound();
+            }
+
+            dispatch({ type: 'MOVE', tokenIndex });
+            setMovingToken(null);
+            movingRef.current = false;
+        },
+        [state.phase, state.legalMoves, state.tokens, state.turn],
+    );
 
     useEffect(() => {
-        if (state.turn !== 'green' || state.phase !== 'idle' || state.winner) {
+        if (
+            state.phase !== 'choosing' ||
+            state.legalMoves.length === 0 ||
+            state.winner
+        ) {
             return;
         }
 
-        const timeout = window.setTimeout(() => {
-            dispatch({ type: 'ROLL_START' });
-        }, 1050);
-
-        return () => window.clearTimeout(timeout);
-    }, [state.turn, state.phase, state.winner]);
-
-    useEffect(() => {
-        if (state.phase !== 'choosing' || state.legalMoves.length === 0) {
-            return;
-        }
-
-        if (state.turn === 'blue' && state.legalMoves.length !== 1) {
+        if (state.turn === state.human && state.legalMoves.length !== 1) {
             return;
         }
 
         const tokenIndex =
-            state.turn === 'green'
-                ? chooseAiMove(state)?.tokenIndex
-                : state.legalMoves[0].tokenIndex;
+            state.turn === state.human
+                ? state.legalMoves[0].tokenIndex
+                : chooseAiMove(state)?.tokenIndex;
 
         if (tokenIndex === undefined) {
             return;
@@ -408,17 +584,23 @@ export default function Play() {
 
         const timeout = window.setTimeout(
             () => {
-                dispatch({ type: 'MOVE', tokenIndex });
+                void animateMove(tokenIndex);
             },
-            state.turn === 'green' ? 850 : 650,
+            state.turn === state.human ? 600 : 800,
         );
 
         return () => window.clearTimeout(timeout);
-    }, [state]);
+    }, [state, animateMove]);
 
     const boardTokens = useMemo<BoardToken[]>(() => {
-        return (['blue', 'green'] as PlayerId[]).flatMap((color) =>
+        return PLAYER_IDS.flatMap((color) =>
             state.tokens[color].map((position, tokenIndex) => {
+                const isMoving =
+                    movingToken?.color === color &&
+                    movingToken.tokenIndex === tokenIndex;
+                const displayPosition = isMoving
+                    ? movingToken.position
+                    : position;
                 const move =
                     state.turn === color && state.phase === 'choosing'
                         ? state.legalMoves.find(
@@ -430,22 +612,27 @@ export default function Play() {
                 return {
                     id: `${color}-${tokenIndex}`,
                     color,
-                    point: tokenPoint(color, position, tokenIndex),
-                    legal: Boolean(move),
+                    point: tokenPoint(color, displayPosition, tokenIndex),
+                    legal: Boolean(move) && !isMoving,
+                    moving: isMoving,
                     onClick: move
-                        ? () =>
-                              dispatch({
-                                  type: 'MOVE',
-                                  tokenIndex,
-                              })
+                        ? () => {
+                              void animateMove(tokenIndex);
+                          }
                         : undefined,
-                    label: `${
-                        color === 'blue' ? 'Bidakmu' : 'Bidak lawan'
-                    } ${tokenIndex + 1}`,
+                    label: `${state.names[color]} bidak ${tokenIndex + 1}`,
                 };
             }),
         );
-    }, [state.tokens, state.turn, state.phase, state.legalMoves]);
+    }, [
+        state.tokens,
+        state.turn,
+        state.phase,
+        state.legalMoves,
+        state.names,
+        movingToken,
+        animateMove,
+    ]);
 
     const finished = (color: PlayerId) =>
         state.tokens[color].filter((position) => position === FINISH_POSITION)
@@ -467,252 +654,593 @@ export default function Play() {
         }
 
         if (state.phase === 'choosing') {
-            return color === 'blue'
+            return color === state.human
                 ? 'Pilih bidak untuk digerakkan'
                 : 'Sedang memilih langkah';
         }
 
-        return color === 'blue' ? 'Giliranmu' : 'Siap melempar';
+        return color === state.human ? 'Giliranmu' : 'Siap melempar';
+    };
+
+    const turnLabel = state.winner
+        ? 'PERTANDINGAN SELESAI'
+        : state.turn === state.human
+          ? 'GILIRANMU'
+          : `GILIRAN ${state.names[state.turn].toUpperCase()}`;
+
+    const rollLabel =
+        state.phase === 'rolling'
+            ? 'Melempar…'
+            : state.phase === 'choosing' && state.turn === state.human
+              ? 'Ketuk bidak yang menyala'
+              : 'Lempar dadu';
+
+    const rollPalette = PLAYER_CONFIG[state.turn].palette;
+    const rollButtonStyle = {
+        background: canRoll ? rollPalette.dark : rollPalette.soft,
+        color: canRoll ? '#ffffff' : rollPalette.text,
+        boxShadow: canRoll
+            ? `0 12px 26px -12px ${rollPalette.dark}D9`
+            : `inset 0 0 0 1px ${rollPalette.base}2e`,
+    };
+
+    const handleRoll = () => {
+        void unlockAudio();
+        dispatch({ type: 'ROLL_START', value: randomDie() });
+    };
+
+    const toggleSound = () => {
+        const next = !soundOn;
+
+        setSoundOn(next);
+        setSoundEnabled(next);
+    };
+
+    const startGame = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const names = {
+            [humanColor]: yourName,
+            [setupOpponent]: opponentName,
+        } as SetupNames;
+
+        void unlockAudio();
+        dispatch({ type: 'START', human: humanColor, names });
+        setMovingToken(null);
+        movingRef.current = false;
+        setScreen('game');
+    };
+
+    const openSetup = () => {
+        setHumanColor(state.human);
+        setYourName(state.names[state.human]);
+        setOpponentName(state.names[opponentColor]);
+        setScreen('setup');
+    };
+
+    const playAgain = () => {
+        setMovingToken(null);
+        movingRef.current = false;
+        dispatch({ type: 'RESET' });
     };
 
     return (
         <>
-            <Head title="Papan latihan" />
+            <Head
+                title={screen === 'setup' ? 'Siapkan pemain' : 'Papan latihan'}
+            />
 
-            <div className="min-h-screen">
-                <header className="border-line/60 bg-canvas/85 sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-                    <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-                        <div className="flex min-w-0 items-center gap-2.5">
+            <div className="bg-canvas flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
+                <header className="border-line/60 bg-canvas/90 shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+                    <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-6">
+                        <div className="flex min-w-0 items-center gap-2">
                             <Link
                                 href={route('home')}
                                 aria-label="Kembali ke beranda"
-                                className="border-line text-ink-muted hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full border bg-white shadow-sm transition"
+                                className="border-line text-ink-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white shadow-sm transition"
                             >
-                                <ChevronLeftIcon className="h-4.5 w-4.5" />
+                                <ChevronLeftIcon className="h-4 w-4" />
                             </Link>
                             <Link href={route('home')} className="rounded-lg">
                                 <Logo
-                                    className="h-8 w-8"
+                                    className="h-7 w-7"
                                     withWordmark
                                     compact
                                 />
                             </Link>
-                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase sm:inline-flex">
+                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase md:inline-flex">
                                 Latihan
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <span className="border-line text-ink-muted inline-flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[11px] font-semibold">
+                        <div className="flex items-center gap-1.5">
+                            {screen === 'game' && (
+                                <span
+                                    className="border-line hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-semibold sm:inline-flex"
+                                    style={{
+                                        color: PLAYER_CONFIG[state.human]
+                                            .palette.text,
+                                    }}
+                                >
+                                    <span
+                                        className="h-1.5 w-1.5 rounded-full"
+                                        style={{
+                                            background:
+                                                PLAYER_CONFIG[state.human]
+                                                    .palette.base,
+                                        }}
+                                    />
+                                    {state.names[state.human]}
+                                </span>
+                            )}
+                            <button
+                                type="button"
+                                onClick={toggleSound}
+                                aria-pressed={soundOn}
+                                aria-label={
+                                    soundOn
+                                        ? 'Matikan efek suara'
+                                        : 'Nyalakan efek suara'
+                                }
+                                title={
+                                    soundOn
+                                        ? 'Matikan efek suara'
+                                        : 'Nyalakan efek suara'
+                                }
+                                className="border-line text-ink-muted hover:text-ink grid h-8 w-8 place-items-center rounded-full border bg-white transition"
+                            >
+                                {soundOn ? (
+                                    <SoundOnIcon className="h-4 w-4" />
+                                ) : (
+                                    <SoundOffIcon className="h-4 w-4" />
+                                )}
+                            </button>
+                            <span className="border-line text-ink-muted hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[10px] font-semibold min-[380px]:inline-flex sm:text-[11px]">
                                 <span className="relative flex h-1.5 w-1.5">
                                     <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
                                     <span className="bg-ludo-green relative inline-flex h-1.5 w-1.5 rounded-full" />
                                 </span>
                                 Demo lokal
                             </span>
-                            <Link
-                                href={route('home')}
-                                className="text-ink-muted hover:text-ink hidden rounded-full px-3 py-1.5 text-xs font-semibold transition hover:bg-white sm:inline-flex"
-                            >
-                                Keluar
-                            </Link>
+                            {screen === 'game' && (
+                                <button
+                                    type="button"
+                                    onClick={openSetup}
+                                    className="border-line text-ink-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-[11px] font-semibold transition"
+                                    aria-label="Atur nama dan warna pemain"
+                                >
+                                    <UsersIcon className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">
+                                        Atur pemain
+                                    </span>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </header>
 
-                <main className="mx-auto w-full max-w-6xl px-3 py-4 sm:px-6 sm:py-6 lg:py-8">
-                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-                        <section className="mx-auto flex w-full max-w-[560px] flex-col gap-3 sm:gap-4">
-                            <PlayerCard
-                                color="green"
-                                name="Lawan"
-                                role="Lawan"
-                                subtitle={activeSubtitle('green')}
-                                active={state.turn === 'green' && !state.winner}
-                                finished={finished('green')}
-                            />
+                {screen === 'setup' ? (
+                    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+                        <form
+                            onSubmit={startGame}
+                            className="border-line/80 shadow-card animate-fade-up w-full max-w-lg rounded-[26px] border bg-white p-4 sm:p-6 [@media(max-height:620px)]:p-3"
+                        >
+                            <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
+                                SEBELUM BERMAIN
+                            </p>
+                            <h1 className="text-ink mt-1.5 text-xl font-semibold tracking-tight sm:text-2xl [@media(max-height:620px)]:text-lg">
+                                Siapkan nama & warna
+                            </h1>
+                            <p className="text-ink-muted mt-1 text-[11px] leading-5 sm:text-xs [@media(max-height:620px)]:hidden">
+                                Pilih warnamu, tulis nama pemain, lalu mulai.
+                                Nama akan tampil di kartu dan area warna papan.
+                            </p>
 
-                            <div className="border-line/70 shadow-board rounded-[26px] border bg-white/80 p-2 backdrop-blur-sm sm:p-2.5">
-                                <LudoBoard tokens={boardTokens} />
-                            </div>
-
-                            <PlayerCard
-                                color="blue"
-                                name={playerName}
-                                role="Kamu"
-                                subtitle={activeSubtitle('blue')}
-                                active={state.turn === 'blue' && !state.winner}
-                                finished={finished('blue')}
-                            />
-                        </section>
-
-                        <aside className="flex flex-col gap-4">
-                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4 sm:p-5">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="min-w-0">
-                                        <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
-                                            {state.winner
-                                                ? 'PERTANDINGAN SELESAI'
-                                                : state.turn === 'blue'
-                                                  ? 'GILIRANMU'
-                                                  : 'GILIRAN LAWAN'}
-                                        </p>
-                                        <p
-                                            className="text-ink mt-1.5 text-sm leading-5 font-semibold"
-                                            aria-live="polite"
-                                        >
-                                            {state.message}
-                                        </p>
-                                    </div>
-                                    <Dice
-                                        value={displayDice}
-                                        rolling={state.phase === 'rolling'}
-                                        className="h-14 w-14 shrink-0"
-                                    />
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        dispatch({ type: 'ROLL_START' })
-                                    }
-                                    disabled={!canRoll}
-                                    className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted mt-4 inline-flex h-13 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.85)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
-                                >
-                                    <DiceIcon className="h-5 w-5" />
-                                    {state.phase === 'rolling'
-                                        ? 'Melempar…'
-                                        : state.phase === 'choosing' &&
-                                            state.turn === 'blue'
-                                          ? 'Ketuk bidak yang menyala'
-                                          : 'Lempar dadu'}
-                                </button>
-
-                                <p className="text-ink-muted mt-3 text-[11px] leading-5">
-                                    Mode latihan. Lemparan dan langkah berjalan
-                                    lokal di browser kamu; pertandingan online
-                                    akan memakai mesin server.
-                                </p>
-                            </section>
-
-                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4">
-                                <div className="flex items-center gap-2">
-                                    <span className="bg-brand/10 text-brand-ink grid h-7 w-7 place-items-center rounded-lg">
-                                        <InfoIcon className="h-4 w-4" />
-                                    </span>
-                                    <h2 className="text-ink text-sm font-semibold">
-                                        Papan latihan
-                                    </h2>
-                                </div>
-                                <p className="text-ink-muted mt-2.5 text-xs leading-5">
-                                    Lempar 6 untuk keluar dari markas. Ketuk
-                                    bidak yang menyala untuk bergerak, tangkap
-                                    lawan di petak terbuka, dan bawa keempat
-                                    bidak ke garis akhir untuk menang.
-                                </p>
-                                <div className="mt-3 flex flex-wrap gap-1.5">
-                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
-                                        2 pemain
-                                    </span>
-                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
-                                        Biru vs Hijau
-                                    </span>
-                                    <span className="bg-surface-muted text-ink-muted rounded-full px-2.5 py-1 text-[10px] font-semibold">
-                                        Lokal
-                                    </span>
-                                </div>
-                            </section>
-
-                            <section className="border-line/80 shadow-card rounded-[24px] border bg-white p-4">
-                                <h2 className="text-ink text-sm font-semibold">
-                                    Riwayat pertandingan
-                                </h2>
-                                <ol className="mt-3 space-y-2.5">
-                                    {state.log.map((entry) => {
-                                        const palette = entry.color
-                                            ? PLAYER_CONFIG[entry.color].palette
-                                            : null;
+                            <fieldset className="mt-4 [@media(max-height:620px)]:mt-2">
+                                <legend className="text-ink text-xs font-semibold">
+                                    Pilih warnamu
+                                </legend>
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    {PLAYER_IDS.map((color) => {
+                                        const palette =
+                                            PLAYER_CONFIG[color].palette;
+                                        const selected = humanColor === color;
 
                                         return (
-                                            <li
-                                                key={entry.id}
-                                                className="flex items-start gap-2.5"
+                                            <button
+                                                key={color}
+                                                type="button"
+                                                onClick={() =>
+                                                    setHumanColor(color)
+                                                }
+                                                aria-pressed={selected}
+                                                className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition [@media(max-height:620px)]:py-1.5 ${
+                                                    selected
+                                                        ? 'border-transparent'
+                                                        : 'border-line hover:border-ink/15 bg-white'
+                                                }`}
+                                                style={
+                                                    selected
+                                                        ? {
+                                                              background:
+                                                                  palette.soft,
+                                                              boxShadow: `0 0 0 2px ${palette.base}55`,
+                                                          }
+                                                        : undefined
+                                                }
                                             >
                                                 <span
-                                                    className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                                                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white [@media(max-height:620px)]:h-7 [@media(max-height:620px)]:w-7"
                                                     style={{
                                                         background:
-                                                            palette?.base ??
-                                                            '#c9d1dd',
+                                                            palette.base,
                                                     }}
-                                                />
-                                                <span className="text-ink-muted text-[11px] leading-4">
-                                                    {entry.text}
+                                                >
+                                                    {selected ? '✓' : ''}
                                                 </span>
-                                            </li>
+                                                <span className="min-w-0">
+                                                    <span
+                                                        className="block text-xs font-semibold"
+                                                        style={{
+                                                            color: palette.text,
+                                                        }}
+                                                    >
+                                                        {
+                                                            PLAYER_CONFIG[color]
+                                                                .label
+                                                        }
+                                                    </span>
+                                                    <span className="text-ink-muted block text-[10px]">
+                                                        {selected
+                                                            ? 'Kamu'
+                                                            : 'Pilih ini'}
+                                                    </span>
+                                                </span>
+                                            </button>
                                         );
                                     })}
-                                </ol>
+                                </div>
+                            </fieldset>
+
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 [@media(max-height:620px)]:grid-cols-2">
+                                <label className="block">
+                                    <span className="text-ink text-xs font-semibold">
+                                        Nama kamu
+                                    </span>
+                                    <input
+                                        value={yourName}
+                                        onChange={(event) =>
+                                            setYourName(event.target.value)
+                                        }
+                                        maxLength={16}
+                                        autoComplete="off"
+                                        placeholder="Nama kamu"
+                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="text-ink text-xs font-semibold">
+                                        Nama lawan
+                                    </span>
+                                    <input
+                                        value={opponentName}
+                                        onChange={(event) =>
+                                            setOpponentName(event.target.value)
+                                        }
+                                        maxLength={16}
+                                        autoComplete="off"
+                                        placeholder="Nama lawan"
+                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="bg-surface-muted mt-3 flex items-center gap-2 rounded-xl px-3 py-2 [@media(max-height:620px)]:hidden">
+                                <span className="flex shrink-0 -space-x-1">
+                                    <span
+                                        className="h-4 w-4 rounded-full border-2 border-white"
+                                        style={{
+                                            background:
+                                                PLAYER_CONFIG[humanColor]
+                                                    .palette.base,
+                                        }}
+                                    />
+                                    <span
+                                        className="h-4 w-4 rounded-full border-2 border-white"
+                                        style={{
+                                            background:
+                                                PLAYER_CONFIG[setupOpponent]
+                                                    .palette.base,
+                                        }}
+                                    />
+                                </span>
+                                <p className="text-ink-muted min-w-0 text-[10px] leading-4">
+                                    Kamu memakai{' '}
+                                    <strong
+                                        style={{
+                                            color: PLAYER_CONFIG[humanColor]
+                                                .palette.text,
+                                        }}
+                                    >
+                                        {PLAYER_CONFIG[humanColor].label}
+                                    </strong>
+                                    , lawan memakai{' '}
+                                    <strong
+                                        style={{
+                                            color: PLAYER_CONFIG[setupOpponent]
+                                                .palette.text,
+                                        }}
+                                    >
+                                        {PLAYER_CONFIG[setupOpponent].label}
+                                    </strong>
+                                    .
+                                </p>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="bg-brand hover:bg-brand-dark mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.85)] transition active:scale-[0.99] [@media(max-height:620px)]:mt-2 [@media(max-height:620px)]:h-10"
+                            >
+                                <DiceIcon className="h-4.5 w-4.5" />
+                                Mulai bermain
+                            </button>
+
+                            <div className="mt-3 flex items-center justify-between gap-2 [@media(max-height:620px)]:mt-2">
+                                <Link
+                                    href={route('home')}
+                                    className="text-ink-muted hover:text-ink text-[11px] font-semibold transition"
+                                >
+                                    Kembali ke beranda
+                                </Link>
+                                <span className="text-ink-muted inline-flex items-center gap-1 text-[10px] font-medium">
+                                    <SparklesIcon className="h-3 w-3" />
+                                    Latihan lokal
+                                </span>
+                            </div>
+                        </form>
+                    </main>
+                ) : (
+                    <main className="mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
+                        <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_280px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4">
+                            <section className="flex min-h-0 min-w-0 flex-col gap-2">
+                                <PlayerCard
+                                    compact
+                                    color={opponentColor}
+                                    name={state.names[opponentColor]}
+                                    role="Lawan"
+                                    subtitle={activeSubtitle(opponentColor)}
+                                    active={
+                                        state.turn === opponentColor &&
+                                        !state.winner
+                                    }
+                                    finished={finished(opponentColor)}
+                                    className="[@media(max-height:560px)]:hidden"
+                                />
+
+                                <div
+                                    ref={boardRef}
+                                    className="flex min-h-0 min-w-0 flex-1 items-center justify-center"
+                                >
+                                    {boardSize > 0 && (
+                                        <div
+                                            className="shrink-0"
+                                            style={{
+                                                width: boardSize,
+                                                height: boardSize,
+                                            }}
+                                        >
+                                            <LudoBoard
+                                                tokens={boardTokens}
+                                                playerNames={{
+                                                    blue: state.names.blue,
+                                                    green: state.names.green,
+                                                }}
+                                                className="h-full w-full"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                <PlayerCard
+                                    compact
+                                    color={state.human}
+                                    name={state.names[state.human]}
+                                    role="Kamu"
+                                    subtitle={activeSubtitle(state.human)}
+                                    active={
+                                        state.turn === state.human &&
+                                        !state.winner
+                                    }
+                                    finished={finished(state.human)}
+                                    className="[@media(max-height:560px)]:hidden"
+                                />
                             </section>
-                        </aside>
-                    </div>
-                </main>
+
+                            <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
+                                <section className="border-line/80 shadow-card shrink-0 rounded-[22px] border bg-white p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
+                                                {turnLabel}
+                                            </p>
+                                            <p
+                                                className="text-ink mt-1 text-sm leading-5 font-semibold"
+                                                aria-live="polite"
+                                            >
+                                                {state.message}
+                                            </p>
+                                        </div>
+                                        <Dice
+                                            value={displayDice}
+                                            rolling={state.phase === 'rolling'}
+                                            className="h-14 w-14 shrink-0"
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleRoll}
+                                        disabled={!canRoll}
+                                        className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] enabled:hover:brightness-90 disabled:cursor-not-allowed"
+                                        style={rollButtonStyle}
+                                    >
+                                        <DiceIcon className="h-4.5 w-4.5" />
+                                        {rollLabel}
+                                    </button>
+
+                                    <div className="text-ink-muted mt-2 flex items-center justify-between gap-2 text-[10px] font-medium">
+                                        <span>
+                                            {state.names[state.human]} vs{' '}
+                                            {state.names[opponentColor]}
+                                        </span>
+                                        <span>Lempar 6 untuk keluar</span>
+                                    </div>
+                                </section>
+
+                                <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col rounded-[22px] border bg-white p-4">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h2 className="text-ink text-sm font-semibold">
+                                            Riwayat
+                                        </h2>
+                                        <span className="text-ink-muted inline-flex items-center gap-1 text-[10px] font-medium">
+                                            <InfoIcon className="h-3 w-3" />
+                                            {state.log.length} langkah
+                                        </span>
+                                    </div>
+                                    <ol className="mt-2 min-h-0 flex-1 space-y-2 overflow-hidden">
+                                        {state.log.map((entry) => {
+                                            const palette = entry.color
+                                                ? PLAYER_CONFIG[entry.color]
+                                                      .palette
+                                                : null;
+
+                                            return (
+                                                <li
+                                                    key={entry.id}
+                                                    className="flex items-start gap-2"
+                                                >
+                                                    <span
+                                                        className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                                                        style={{
+                                                            background:
+                                                                palette?.base ??
+                                                                '#c9d1dd',
+                                                        }}
+                                                    />
+                                                    <span className="text-ink-muted line-clamp-2 text-[11px] leading-4">
+                                                        {entry.text}
+                                                    </span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                </section>
+                            </aside>
+                        </div>
+
+                        <div className="border-line/80 shadow-card mt-2 shrink-0 rounded-[20px] border bg-white p-2 md:hidden">
+                            <div className="flex items-center gap-2">
+                                <Dice
+                                    value={displayDice}
+                                    rolling={state.phase === 'rolling'}
+                                    className="h-11 w-11 shrink-0"
+                                />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-brand-ink truncate text-[9px] font-bold tracking-[0.12em]">
+                                        {turnLabel}
+                                    </p>
+                                    <p
+                                        className="text-ink truncate text-[11px] font-semibold"
+                                        aria-live="polite"
+                                    >
+                                        {state.message}
+                                    </p>
+                                    <p className="text-ink-muted truncate text-[10px]">
+                                        {state.log[0]?.text}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleRoll}
+                                    disabled={!canRoll}
+                                    className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition active:scale-[0.98] enabled:hover:brightness-90 disabled:cursor-not-allowed"
+                                    style={rollButtonStyle}
+                                >
+                                    <DiceIcon className="h-4 w-4" />
+                                    <span>
+                                        {state.phase === 'rolling'
+                                            ? '…'
+                                            : 'Lempar'}
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                )}
             </div>
 
-            {state.winner && (
+            {state.winner && screen === 'game' && (
                 <div
                     className="bg-ink/35 fixed inset-0 z-50 grid place-items-center p-4 backdrop-blur-sm"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="result-title"
                 >
-                    <div className="relative w-full max-w-sm overflow-hidden rounded-[28px] bg-white p-6 text-center shadow-[0_30px_80px_-20px_rgba(32,43,58,0.5)]">
+                    <div className="relative w-full max-w-sm overflow-hidden rounded-[26px] bg-white p-5 text-center shadow-[0_30px_80px_-20px_rgba(32,43,58,0.5)] sm:p-6">
                         <div
                             aria-hidden="true"
                             className="from-ludo-red via-ludo-yellow to-ludo-green absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r"
                         />
                         <div
-                            className="mx-auto grid h-16 w-16 place-items-center rounded-[22px]"
+                            className="mx-auto grid h-14 w-14 place-items-center rounded-[20px]"
                             style={{
                                 background:
                                     PLAYER_CONFIG[state.winner].palette.soft,
                                 color: PLAYER_CONFIG[state.winner].palette.text,
                             }}
                         >
-                            <TrophyIcon className="h-8 w-8" />
+                            <TrophyIcon className="h-7 w-7" />
                         </div>
                         <h2
                             id="result-title"
-                            className="text-ink mt-4 text-2xl font-semibold tracking-tight"
+                            className="text-ink mt-3 text-xl font-semibold tracking-tight sm:text-2xl"
                         >
-                            {state.winner === 'blue'
+                            {state.winner === state.human
                                 ? 'Kamu menang!'
-                                : 'Lawan menang'}
+                                : `${state.names[state.winner]} menang`}
                         </h2>
-                        <p className="text-ink-muted mt-2 text-sm leading-6">
-                            {state.winner === 'blue'
-                                ? 'Keempat bidak sudah di garis akhir. Permainan bagus.'
-                                : 'Lawan lebih dulu membawa keempat bidaknya ke garis akhir.'}
+                        <p className="text-ink-muted mt-1.5 text-xs leading-5 sm:text-sm">
+                            {state.winner === state.human
+                                ? `${state.names[state.human]} membawa keempat bidak ke garis akhir. Permainan bagus.`
+                                : `${state.names[state.winner]} lebih dulu membawa keempat bidaknya ke garis akhir.`}
                         </p>
 
-                        <div className="mt-5 flex flex-col gap-2.5">
+                        <div className="mt-4 flex flex-col gap-2">
                             <button
                                 type="button"
-                                onClick={() => dispatch({ type: 'RESET' })}
-                                className="bg-brand hover:bg-brand-dark inline-flex h-12 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99]"
+                                onClick={playAgain}
+                                className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99]"
                             >
-                                <RefreshIcon className="h-4.5 w-4.5" />
+                                <RefreshIcon className="h-4 w-4" />
                                 Main lagi
+                            </button>
+                            <button
+                                type="button"
+                                onClick={openSetup}
+                                className="border-line text-ink hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-2 rounded-2xl border bg-white text-sm font-semibold transition"
+                            >
+                                <UsersIcon className="h-4 w-4" />
+                                Ubah nama & warna
                             </button>
                             <Link
                                 href={route('home')}
-                                className="border-line text-ink hover:bg-surface-muted inline-flex h-12 items-center justify-center rounded-2xl border bg-white text-sm font-semibold transition"
+                                className="text-ink-muted hover:text-ink inline-flex h-9 items-center justify-center text-xs font-semibold transition"
                             >
                                 Kembali ke beranda
                             </Link>
                         </div>
 
-                        <p className="text-ink-muted mt-4 inline-flex items-center gap-1 text-[10px] font-medium">
+                        <p className="text-ink-muted mt-2 inline-flex items-center gap-1 text-[10px] font-medium">
                             <SparklesIcon className="h-3 w-3" />
                             Pertandingan latihan · demo lokal
                         </p>

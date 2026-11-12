@@ -143,11 +143,11 @@ export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
         label: 'Kuning',
         startIndex: 26,
         lane: [
-            { row: 7, col: 9 },
-            { row: 7, col: 10 },
-            { row: 7, col: 11 },
-            { row: 7, col: 12 },
             { row: 7, col: 13 },
+            { row: 7, col: 12 },
+            { row: 7, col: 11 },
+            { row: 7, col: 10 },
+            { row: 7, col: 9 },
         ],
         base: [
             { row: 10.75, col: 10.75 },
@@ -206,7 +206,9 @@ export function tokenCell(color: PlayerColor, position: number): Cell {
         return { row: cell.row + 0.5, col: cell.col + 0.5 };
     }
 
-    return config.lane[position - FIRST_LANE_POSITION];
+    const cell = config.lane[position - FIRST_LANE_POSITION];
+
+    return { row: cell.row + 0.5, col: cell.col + 0.5 };
 }
 
 export function tokenPoint(

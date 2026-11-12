@@ -17,10 +17,28 @@ export function DiceIcon(props: IconProps) {
         <svg {...base} {...props}>
             <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" />
             <circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
-            <circle cx="15.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
+            <circle
+                cx="15.5"
+                cy="8.5"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+            />
             <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-            <circle cx="8.5" cy="15.5" r="1" fill="currentColor" stroke="none" />
-            <circle cx="15.5" cy="15.5" r="1" fill="currentColor" stroke="none" />
+            <circle
+                cx="8.5"
+                cy="15.5"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+            />
+            <circle
+                cx="15.5"
+                cy="15.5"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+            />
         </svg>
     );
 }
@@ -142,7 +160,13 @@ export function LockIcon(props: IconProps) {
         <svg {...base} {...props}>
             <rect x="5" y="10.5" width="14" height="9.5" rx="2.5" />
             <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
-            <circle cx="12" cy="15.2" r="1.1" fill="currentColor" stroke="none" />
+            <circle
+                cx="12"
+                cy="15.2"
+                r="1.1"
+                fill="currentColor"
+                stroke="none"
+            />
         </svg>
     );
 }
@@ -190,6 +214,26 @@ export function LogoutIcon(props: IconProps) {
             <path d="M15 4.5h3A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5h-3" />
             <path d="M10 8.5 6.5 12l3.5 3.5" />
             <path d="M6.5 12H16" />
+        </svg>
+    );
+}
+
+export function SoundOnIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M4.5 9.5v5h3l4 3.5v-12l-4 3.5h-3Z" />
+            <path d="M15 9a4 4 0 0 1 0 6" />
+            <path d="M17.8 6.6a7.5 7.5 0 0 1 0 10.8" />
+        </svg>
+    );
+}
+
+export function SoundOffIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M4.5 9.5v5h3l4 3.5v-12l-4 3.5h-3Z" />
+            <path d="m15.5 9.5 5 5" />
+            <path d="m20.5 9.5-5 5" />
         </svg>
     );
 }
