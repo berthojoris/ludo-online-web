@@ -1427,8 +1427,7 @@ export default function Play() {
                                         <span>
                                             {state.phase === 'rolling'
                                                 ? '…'
-                                                : state.phase ===
-                                                        'choosing' &&
+                                                : state.phase === 'choosing' &&
                                                     state.turn === state.human
                                                   ? 'Pilih bidak'
                                                   : 'Lempar'}

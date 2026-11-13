@@ -80,6 +80,24 @@ Every screen/page in this app **must fill 100% of the device width and 100% of t
 - [ ] Safe-area insets respected in portrait and landscape (notch, home indicator).
 - [ ] Works with mobile browser UI shown and hidden, and after orientation change.
 - [ ] 200% text zoom keeps all controls reachable (reflow allowed, clipping not).
-- [ ] Checked in DevTools emulation for at least iPhone SE (320×568), iPhone 15 Pro, Pixel 8, iPad, and desktop 1920×1080.
+- [ ] Verified in a real browser via the **browse MCP** (section 5) at iPhone SE (320×568), iPhone 15 Pro, Pixel 8, iPad, and desktop 1920×1080 — DevTools emulation alone is not accepted.
 - [ ] Landscape uses the board + side-rail layout and still fills the viewport in both axes.
+- [ ] Measured `scrollHeight`/`scrollWidth` and PASS/FAIL evidence reported per viewport (no estimates).
+
+## 5. Mandatory browser verification with the browse MCP
+
+UI work is not complete until it has been validated in a real browser. Never claim a screen "fits" based only on source review, `curl`, or a successful `vite build`.
+
+1. **Start the app**: `php artisan serve --host=127.0.0.1 --port=8000` and `npm run dev` (or `npm run build`), then note the URL.
+2. **Open it with the browse MCP** (`browse` MCP server; in OpenCode Code Mode use `tools.browse.*` via `execute`). Use the real Chrome session: `page.goto`, `snapshot`, `page.evaluate`, and screenshots. Do not substitute static HTML fetches for a browser check.
+3. **Measure in the live page, not from estimates**:
+   - `document.documentElement.scrollHeight <= window.innerHeight`
+   - `document.documentElement.scrollWidth <= window.innerWidth`
+   - shell `scrollHeight === clientHeight` and `scrollWidth === clientWidth` (catches clipped/overlapping content)
+   - main content bottom < footer top; the board/hero rect width === height (no distortion)
+   - every CTA/modal trigger is in the DOM, visible, and has the correct accessible name and `href`
+   - no console errors; the modal opens, closes with Escape, and returns focus to its trigger
+4. **Resize/emulate at minimum**: 320×568, 360×640, 375×667, 390×844, 414×896, 768×1024, 1024×768, 1280×800, 1366×768, 1920×1080, plus phone landscape. Check portrait and landscape.
+5. **Capture screenshots** at 320×568, a mid-size phone, and desktop, and report their paths together with a PASS/FAIL table of the measured numbers.
+6. **If the browse MCP is unavailable**, say so explicitly. A headless Chrome/Playwright script may be used only as a documented fallback, and the report must name the tool that produced the evidence. Never fabricate browser results.
 </viewport-fitting-guidelines>
