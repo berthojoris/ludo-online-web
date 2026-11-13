@@ -27,7 +27,9 @@ export default function PlayerCard({
     return (
         <div
             className={`flex min-w-0 items-center transition-colors duration-200 ${
-                compact ? 'gap-2 px-2.5 py-3' : 'gap-3 px-4 py-3.5'
+                compact
+                    ? 'gap-2 px-2.5 py-3'
+                    : 'gap-3 px-4 py-3.5 [@media(max-height:700px)]:py-2'
             } ${
                 active ? 'animate-card-nudge' : 'bg-white opacity-[0.85]'
             } ${className}`}
@@ -35,7 +37,7 @@ export default function PlayerCard({
                 active
                     ? {
                           background: palette.soft,
-                          boxShadow: `inset 0 0 0 3px ${palette.base}, inset 4px 0 0 0 ${palette.dark}`,
+                          boxShadow: `inset 0 0 0 1px ${palette.base}40, inset 3px 0 0 0 ${palette.base}`,
                       }
                     : undefined
             }

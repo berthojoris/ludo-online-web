@@ -1,11 +1,6 @@
 import Dice from '@/Components/Game/Dice';
 import HowItWorksModal from '@/Components/Game/HowItWorksModal';
-import {
-    ArrowRightIcon,
-    DiceIcon,
-    InfoIcon,
-    SparklesIcon,
-} from '@/Components/Game/Icons';
+import { ArrowRightIcon, DiceIcon, InfoIcon } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
@@ -240,42 +235,6 @@ export default function Home() {
                             </div>
                         </div>
                     </section>
-
-                    <section className="mx-auto max-w-6xl px-4 pb-12 sm:px-6 sm:pb-16 lg:pb-20">
-                        <div className="bg-brand relative overflow-hidden rounded-[30px] px-6 py-8 text-white shadow-[0_24px_60px_-24px_rgba(47,107,239,0.65)] sm:px-10 sm:py-10">
-                            <div
-                                aria-hidden="true"
-                                className="absolute -top-16 -right-10 h-52 w-52 rounded-full bg-white/10 blur-2xl"
-                            />
-                            <div
-                                aria-hidden="true"
-                                className="bg-ludo-yellow/20 absolute -bottom-20 left-1/3 h-52 w-52 rounded-full blur-3xl"
-                            />
-                            <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="max-w-xl">
-                                    <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-white">
-                                        <SparklesIcon className="h-3.5 w-3.5" />
-                                        MEJA KAMU SIAP
-                                    </p>
-                                    <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-                                        Masuk dan lempar dadu pertama.
-                                    </h2>
-                                    <p className="mt-2 text-sm leading-6 text-white">
-                                        Coba papan latihan sekarang. Pencarian
-                                        lawan online dan ruang privat hadir
-                                        seiring mesin pertandingan selesai.
-                                    </p>
-                                </div>
-                                <Link
-                                    href={route('play')}
-                                    className="text-brand-ink inline-flex h-13 shrink-0 items-center justify-center gap-2 rounded-2xl bg-white px-6 text-sm font-semibold shadow-sm transition hover:bg-white/90 active:scale-[0.985]"
-                                >
-                                    Buka papan
-                                    <ArrowRightIcon className="h-4 w-4" />
-                                </Link>
-                            </div>
-                        </div>
-                    </section>
                 </main>
 
                 <footer className="border-line/70 border-t">
@@ -297,10 +256,7 @@ export default function Home() {
                 </footer>
             </div>
 
-            <HowItWorksModal
-                open={howItWorksOpen}
-                onClose={closeHowItWorks}
-            />
+            <HowItWorksModal open={howItWorksOpen} onClose={closeHowItWorks} />
         </>
     );
 }

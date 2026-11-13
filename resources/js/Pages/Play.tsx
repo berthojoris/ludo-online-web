@@ -815,6 +815,23 @@ export default function Play() {
               ? 'Ketuk bidak yang menyala'
               : 'Lempar dadu';
 
+    const canExitBase =
+        state.turn === state.human &&
+        state.phase === 'choosing' &&
+        state.dice === 6 &&
+        state.legalMoves.some(
+            (move) =>
+                state.tokens[state.turn][move.tokenIndex] === BASE_POSITION,
+        );
+
+    const instruction = canExitBase
+        ? 'Dadu 6! Ketuk bidak di markas untuk keluar'
+        : state.message;
+
+    const mobileInstruction = canExitBase
+        ? 'Dadu 6 — keluarkan bidak'
+        : state.message;
+
     const rollPalette = PLAYER_CONFIG[state.turn].palette;
     const rollButtonStyle = {
         background: canRoll ? rollPalette.dark : rollPalette.soft,
@@ -1211,6 +1228,16 @@ export default function Play() {
                                                     blue: state.names.blue,
                                                     green: state.names.green,
                                                 }}
+                                                activeColor={
+                                                    state.winner
+                                                        ? undefined
+                                                        : state.turn
+                                                }
+                                                activeLabel={
+                                                    state.winner
+                                                        ? undefined
+                                                        : turnLabel
+                                                }
                                                 className="h-full w-full"
                                             />
                                         </div>
@@ -1222,14 +1249,21 @@ export default function Play() {
                                 <section className="border-line/80 shadow-card shrink-0 rounded-[22px] border bg-white p-4">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
+                                            <p
+                                                className="text-[10px] font-semibold tracking-[0.16em]"
+                                                style={{
+                                                    color: PLAYER_CONFIG[
+                                                        state.turn
+                                                    ].palette.text,
+                                                }}
+                                            >
                                                 {turnLabel}
                                             </p>
                                             <p
                                                 className="text-ink mt-1 text-sm leading-5 font-semibold"
                                                 aria-live="polite"
                                             >
-                                                {state.message}
+                                                {instruction}
                                             </p>
                                         </div>
                                         <Dice
@@ -1353,14 +1387,20 @@ export default function Play() {
                                     className="h-11 w-11 shrink-0"
                                 />
                                 <div className="min-w-0 flex-1">
-                                    <p className="text-brand-ink truncate text-[9px] font-bold tracking-[0.12em]">
+                                    <p
+                                        className="truncate text-[9px] font-bold tracking-[0.12em]"
+                                        style={{
+                                            color: PLAYER_CONFIG[state.turn]
+                                                .palette.text,
+                                        }}
+                                    >
                                         {turnLabel}
                                     </p>
                                     <p
                                         className="text-ink truncate text-[11px] font-semibold"
                                         aria-live="polite"
                                     >
-                                        {state.message}
+                                        {mobileInstruction}
                                     </p>
                                     <p className="text-ink-muted truncate text-[10px]">
                                         {state.log[0]?.text}
@@ -1387,7 +1427,11 @@ export default function Play() {
                                         <span>
                                             {state.phase === 'rolling'
                                                 ? '…'
-                                                : 'Lempar'}
+                                                : state.phase ===
+                                                        'choosing' &&
+                                                    state.turn === state.human
+                                                  ? 'Pilih bidak'
+                                                  : 'Lempar'}
                                         </span>
                                     </button>
                                 )}
