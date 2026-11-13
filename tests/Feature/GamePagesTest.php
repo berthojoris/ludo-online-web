@@ -14,6 +14,15 @@ class GamePagesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->component('Home'));
     }
 
+    public function test_how_it_works_renders_the_home_page_with_the_guide_open(): void
+    {
+        $this->get('/how-it-works')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Home')
+                ->where('howItWorksOpen', true));
+    }
+
     public function test_practice_board_renders(): void
     {
         $this->get('/play')

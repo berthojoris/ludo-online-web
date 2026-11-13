@@ -5,7 +5,7 @@ import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
 import { User } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PREVIEW_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
@@ -60,60 +60,55 @@ function usePreviewBoardSize() {
 }
 
 export default function Home() {
-    const { auth } = usePage().props as unknown as {
+    const { auth, howItWorksOpen: initialHowItWorksOpen } = usePage()
+        .props as unknown as {
         auth?: { user: User | null };
+        howItWorksOpen?: boolean;
     };
     const user = auth?.user ?? null;
     const tokens = previewTokens();
-    const triggerRef = useRef<HTMLButtonElement>(null);
+    const triggerRef = useRef<HTMLAnchorElement>(null);
     const [boardAreaRef, boardSize] = usePreviewBoardSize();
     const [howItWorksOpen, setHowItWorksOpen] = useState(
-        () =>
-            typeof window !== 'undefined' &&
-            window.location.hash === '#how-it-works',
+        Boolean(initialHowItWorksOpen),
     );
 
     useEffect(() => {
-        const syncFromHash = () => {
-            if (window.location.hash === '#how-it-works') {
-                setHowItWorksOpen(true);
-            }
-        };
-
-        window.addEventListener('hashchange', syncFromHash);
-
-        return () => {
-            window.removeEventListener('hashchange', syncFromHash);
-        };
-    }, []);
+        setHowItWorksOpen(Boolean(initialHowItWorksOpen));
+    }, [initialHowItWorksOpen]);
 
     const openHowItWorks = useCallback(() => {
         setHowItWorksOpen(true);
-
-        if (window.location.hash !== '#how-it-works') {
-            window.history.replaceState(null, '', '#how-it-works');
-        }
     }, []);
 
     const closeHowItWorks = useCallback(() => {
         setHowItWorksOpen(false);
 
-        if (window.location.hash === '#how-it-works') {
-            window.history.replaceState(
-                null,
-                '',
-                `${window.location.pathname}${window.location.search}`,
-            );
-        }
-
-        window.requestAnimationFrame(() => {
-            triggerRef.current?.focus();
+        router.visit(route('home'), {
+            preserveScroll: true,
+            preserveState: true,
+            replace: true,
+            onFinish: () => {
+                window.requestAnimationFrame(() => {
+                    triggerRef.current?.focus();
+                });
+            },
         });
+    }, []);
+
+    const startPlaying = useCallback(() => {
+        setHowItWorksOpen(false);
     }, []);
 
     return (
         <>
-            <Head title="Lempar. Berlomba. Kuasai papan.">
+            <Head
+                title={
+                    howItWorksOpen
+                        ? 'Cara bermain'
+                        : 'Lempar. Berlomba. Kuasai papan.'
+                }
+            >
                 <meta
                     name="description"
                     content="Papan Ludo yang bersih dan modern untuk pertandingan online cepat dan ruang privat."
@@ -137,24 +132,30 @@ export default function Home() {
                             aria-label="Beranda Ludo Arena"
                             className="rounded-xl"
                         >
-                            <Logo className="h-8 w-8 sm:h-9 sm:w-9" withWordmark />
+                            <Logo
+                                className="h-8 w-8 sm:h-9 sm:w-9"
+                                withWordmark
+                            />
                         </Link>
 
                         <nav className="flex flex-wrap items-center justify-end gap-1.5">
-                            <button
+                            <Link
                                 ref={triggerRef}
-                                type="button"
+                                href={route('how-it-works')}
                                 onClick={openHowItWorks}
+                                preserveScroll
+                                preserveState
+                                prefetch
                                 aria-label="Cara bermain"
                                 aria-haspopup="dialog"
                                 aria-expanded={howItWorksOpen}
-                                className="border-line/80 text-ink hover:border-ink/15 inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border bg-white/95 px-3 text-xs font-semibold shadow-sm transition hover:bg-white sm:h-auto sm:min-w-0 sm:border-transparent sm:bg-transparent sm:px-3.5 sm:py-2 sm:text-sm sm:font-medium sm:text-ink-muted sm:shadow-none sm:hover:border-transparent sm:hover:bg-white sm:hover:text-ink"
+                                className="border-line/80 text-ink hover:border-ink/15 sm:text-ink-muted sm:hover:text-ink inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-full border bg-white/95 px-3 text-xs font-semibold shadow-sm transition hover:bg-white sm:h-auto sm:min-w-0 sm:border-transparent sm:bg-transparent sm:px-3.5 sm:py-2 sm:text-sm sm:font-medium sm:shadow-none sm:hover:border-transparent sm:hover:bg-white"
                             >
                                 <InfoIcon className="h-5 w-5 shrink-0 sm:hidden" />
                                 <span className="hidden min-[360px]:inline">
                                     Cara bermain
                                 </span>
-                            </button>
+                            </Link>
                             {user ? (
                                 <Link
                                     href={route('dashboard')}
@@ -254,7 +255,7 @@ export default function Home() {
                             >
                                 <div
                                     aria-hidden="true"
-                                    className="from-brand/15 to-ludo-yellow/20 absolute -inset-6 rounded-[3rem] bg-gradient-to-br via-transparent blur-2xl"
+                                    className="from-brand/15 to-ludo-yellow/20 absolute -inset-4 rounded-[3rem] bg-gradient-to-br via-transparent blur-2xl sm:-inset-6"
                                 />
                                 <div className="shadow-board relative h-full w-full rounded-[32px] border border-white/80 bg-white/75 p-1.5 backdrop-blur-sm sm:p-3">
                                     <div className="bg-surface-muted/70 h-full w-full rounded-[26px] p-2 sm:p-4">
@@ -316,7 +317,11 @@ export default function Home() {
                 </footer>
             </div>
 
-            <HowItWorksModal open={howItWorksOpen} onClose={closeHowItWorks} />
+            <HowItWorksModal
+                open={howItWorksOpen}
+                onClose={closeHowItWorks}
+                onStart={startPlaying}
+            />
         </>
     );
 }

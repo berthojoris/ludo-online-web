@@ -101,3 +101,31 @@ UI work is not complete until it has been validated in a real browser. Never cla
 5. **Capture screenshots** at 320×568, a mid-size phone, and desktop, and report their paths together with a PASS/FAIL table of the measured numbers.
 6. **If the browse MCP is unavailable**, say so explicitly. A headless Chrome/Playwright script may be used only as a documented fallback, and the report must name the tool that produced the evidence. Never fabricate browser results.
 </viewport-fitting-guidelines>
+
+<routing-guidelines>
+# Routing rules — clean, server-backed URLs only
+
+These rules apply to every screen, overlay, link, and state change in this Inertia + Laravel application.
+
+## 1. Never use hash routing
+- Do not use `window.location.hash`, `hashchange`, or `#` fragments for navigation, modals, tabs, filters, or any shareable UI state.
+- Forbidden: `/#how-it-works`, `#how-it-works`, or equivalent hash-based routing.
+- Required: a real path such as `/how-it-works`.
+- A hash may only target an existing in-page element (for example `#main-content`), never represent a page or overlay.
+
+## 2. Every routable UI state needs a named server route
+- Register each page and deep-linkable overlay in `routes/web.php` with a name and a controller action, for example:
+  `Route::get('/how-it-works', [PageController::class, 'howItWorks'])->name('how-it-works');`
+- A direct visit, refresh, incognito visit, and shared link must render the same UI. The server must return the page with explicit props needed to restore the state (for example `howItWorksOpen => true`).
+- Sync those props into local React state with an effect so Inertia back/forward navigation opens and closes the UI correctly.
+- Do not use `window.history.pushState` or `replaceState` to invent a URL that the server does not also serve.
+- Prefer Inertia `<Link>` or `router.visit()` so page props, history, scroll restoration, and the progress bar stay consistent.
+
+## 3. Build and use URLs correctly
+- Always call Ziggy `route('name')` in React when a named route exists. Do not hardcode paths in `href` values.
+- Use query strings only for optional state (`/room?join=1`, filters, pagination). State that changes which screen is shown belongs in the path.
+- Paths are lowercase, hyphenated, and have no trailing slash: `/how-it-works`, not `/HowItWorks`, `/how_it_works`, or `/how-it-works/`.
+- Use links (`<Link>`/`<a>`) for navigation and buttons for actions. Any control that changes the URL must expose a real `href`.
+- Closing an overlay must return to its parent route. Escape, backdrop click, the close button, and any navigation CTA must leave history in a valid state without stale overlay URLs.
+- Add a feature test for every new public route: `assertOk`, Inertia component, and required props.
+</routing-guidelines>

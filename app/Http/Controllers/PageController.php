@@ -12,6 +12,13 @@ class PageController extends Controller
         return Inertia::render('Home');
     }
 
+    public function howItWorks(): Response
+    {
+        return Inertia::render('Home', [
+            'howItWorksOpen' => true,
+        ]);
+    }
+
     public function play(): Response
     {
         return Inertia::render('Play');

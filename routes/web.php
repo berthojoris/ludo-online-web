@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
 
+Route::get('/how-it-works', [PageController::class, 'howItWorks'])->name('how-it-works');
+
 Route::get('/play', [PageController::class, 'play'])->name('play');
 
 Route::get('/room', [PageController::class, 'room'])->name('room');
