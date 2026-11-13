@@ -486,15 +486,35 @@ function useBoardSize(active: boolean) {
 }
 
 export default function Play() {
-    const { auth } = usePage().props as unknown as {
+    const { auth, room, me } = usePage().props as unknown as {
         auth?: { user: User | null };
+        room?: {
+            code: string;
+            max_players: number;
+            status: string;
+            players: {
+                id: number;
+                name: string;
+                seat_color: PlayerColor | null;
+                is_ready: boolean;
+                is_host: boolean;
+            }[];
+        } | null;
+        me?: {
+            id: number;
+            name: string;
+            seat_color: PlayerColor | null;
+        } | null;
     };
-    const accountName = auth?.user?.name?.split(' ')[0] ?? 'Pemain';
+    const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
+    const roomOtherPlayer = room?.players.find((p) => p.id !== me?.id);
 
-    const [screen, setScreen] = useState<Screen>('setup');
+    const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
     const [humanColor, setHumanColor] = useState<PlayerId>('blue');
     const [yourName, setYourName] = useState(accountName);
-    const [opponentName, setOpponentName] = useState('Lawan');
+    const [opponentName, setOpponentName] = useState(
+        roomOtherPlayer?.name ?? 'Lawan',
+    );
     const [state, dispatch] = useReducer(reducer, initialState);
     const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
@@ -502,6 +522,24 @@ export default function Play() {
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
+
+    useEffect(() => {
+        if (!room) {
+            return;
+        }
+
+        const other = room.players.find((p) => p.id !== me?.id);
+        dispatch({
+            type: 'START',
+            human: 'blue',
+            names: {
+                blue: accountName,
+                green: other?.name ?? 'Lawan',
+            },
+            now: Date.now(),
+        });
+        setScreen('game');
+    }, [room?.code]);
 
     const opponentColor = otherPlayer(state.human);
     const canRoll =
@@ -923,7 +961,7 @@ export default function Play() {
                                 />
                             </Link>
                             <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase md:inline-flex">
-                                Latihan
+                                {room ? `Ruang ${room.code}` : 'Latihan'}
                             </span>
                         </div>
 

@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class GamePagesTest extends TestCase
 {
+    use RefreshDatabase;
     public function test_home_page_renders_the_game_home(): void
     {
         $this->get('/')
