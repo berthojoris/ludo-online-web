@@ -37,8 +37,9 @@ function usePreviewBoardSize() {
 
         const measure = () => {
             const rect = element.getBoundingClientRect();
+            const next = Math.floor(Math.min(rect.width, rect.height));
 
-            setSize(Math.max(0, Math.floor(Math.min(rect.width, rect.height))));
+            setSize(next > 0 ? Math.max(140, next) : 0);
         };
 
         measure();
@@ -275,7 +276,7 @@ export default function Home() {
                                         </div>
                                     </div>
 
-                                    <div className="border-line/80 shadow-card absolute -right-4 bottom-12 hidden items-center gap-2 rounded-full border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
+                                    <div className="border-line/80 shadow-card absolute -right-4 bottom-12 z-30 hidden items-center gap-2 rounded-full border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
                                         <span className="relative flex h-2 w-2">
                                             <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
                                             <span className="bg-ludo-green relative inline-flex h-2 w-2 rounded-full" />
@@ -294,7 +295,10 @@ export default function Home() {
                     <div className="text-ink-muted mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-[11px] sm:px-6 sm:py-3 sm:text-xs [@media(max-height:520px)_and_(orientation:landscape)]:py-1.5">
                         <div className="flex min-w-0 items-center gap-2">
                             <Logo className="h-5 w-5 shrink-0" />
-                            <span className="truncate">
+                            <span className="sm:hidden">
+                                Ludo Arena · Papan yang tenang.
+                            </span>
+                            <span className="hidden sm:inline">
                                 Ludo Arena · Papan yang lebih tenang untuk
                                 pertandingan singkat.
                             </span>
@@ -302,7 +306,10 @@ export default function Home() {
                         <div className="flex shrink-0 items-center gap-4">
                             <span className="inline-flex items-center gap-1.5">
                                 <span className="bg-ludo-green h-1.5 w-1.5 rounded-full" />
-                                Bahasa Indonesia
+                                <span className="sm:hidden">ID</span>
+                                <span className="hidden sm:inline">
+                                    Bahasa Indonesia
+                                </span>
                             </span>
                         </div>
                     </div>
