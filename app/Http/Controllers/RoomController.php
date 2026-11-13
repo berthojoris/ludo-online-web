@@ -284,7 +284,10 @@ class RoomController extends Controller
             ]);
         }
 
+        $startingPlayer = $players->random();
+
         $room->status = 'started';
+        $room->starting_player_id = $startingPlayer->id;
         $room->started_at = now();
         $room->save();
 

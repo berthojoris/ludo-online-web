@@ -15,6 +15,7 @@ export type BoardToken = {
     point: Cell;
     legal?: boolean;
     moving?: boolean;
+    returning?: boolean;
     onClick?: () => void;
     label?: string;
 };
@@ -357,7 +358,11 @@ export default function LudoBoard({
                     return (
                         <div
                             key={token.id}
-                            className="absolute z-20 transition-[left,top] duration-[140ms] ease-out"
+                            className={`absolute transition-[left,top] ${
+                                token.returning
+                                    ? 'z-30 duration-[50ms] ease-linear'
+                                    : 'z-20 duration-[140ms] ease-out'
+                            }`}
                             style={positionStyle}
                         >
                             {token.onClick ? (
@@ -377,6 +382,10 @@ export default function LudoBoard({
                                         token.moving
                                             ? 'animate-token-hop pointer-events-none'
                                             : ''
+                                    } ${
+                                        token.returning
+                                            ? 'animate-token-retreat pointer-events-none'
+                                            : ''
                                     }`}
                                     style={tokenStyle}
                                 />
@@ -386,6 +395,10 @@ export default function LudoBoard({
                                         token.legal ? 'animate-legal-pulse' : ''
                                     } ${
                                         token.moving ? 'animate-token-hop' : ''
+                                    } ${
+                                        token.returning
+                                            ? 'animate-token-retreat'
+                                            : ''
                                     }`}
                                     style={tokenStyle}
                                 />

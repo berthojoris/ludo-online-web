@@ -90,11 +90,17 @@ type GameState = {
 };
 
 type Action =
-    | { type: 'START'; human: PlayerId; names: SetupNames; now: number }
+    | {
+          type: 'START';
+          human: PlayerId;
+          names: SetupNames;
+          now: number;
+          turn?: PlayerId;
+      }
     | { type: 'ROLL_START'; value: number }
     | { type: 'ROLL_RESULT'; value: number }
     | { type: 'MOVE'; tokenIndex: number; now: number }
-    | { type: 'RESET'; now: number };
+    | { type: 'RESET'; now: number; turn?: PlayerId };
 
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
 
@@ -133,6 +139,10 @@ function randomDie(): number {
     return 1 + Math.floor(Math.random() * 6);
 }
 
+function randomPlayer(): PlayerId {
+    return PLAYER_IDS[Math.floor(Math.random() * PLAYER_IDS.length)];
+}
+
 function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
     const opponent = otherPlayer(human);
 
@@ -146,20 +156,25 @@ function createInitialState(
     human: PlayerId,
     rawNames: SetupNames,
     now: number,
+    startingTurn?: PlayerId,
 ): GameState {
     const names = cleanNames(human, rawNames);
+    const turn = startingTurn ?? human;
 
     return {
         ...initialState,
         human,
         names,
-        turn: human,
-        message: `${names[human]}, giliranmu. Lempar dadu.`,
+        turn,
+        message:
+            turn === human
+                ? `${names[human]}, giliranmu. Lempar dadu.`
+                : `Giliran ${names[turn]}.`,
         log: [
             {
                 id: 0,
-                text: `${names[human]} (${PLAYER_CONFIG[human].label}) jalan lebih dulu.`,
-                color: human,
+                text: `${names[turn]} (${PLAYER_CONFIG[turn].label}) jalan lebih dulu.`,
+                color: turn,
             },
         ],
         logId: 1,
@@ -247,11 +262,21 @@ function chooseAiMove(state: GameState): LegalMove | null {
 
 function reducer(state: GameState, action: Action): GameState {
     if (action.type === 'START') {
-        return createInitialState(action.human, action.names, action.now);
+        return createInitialState(
+            action.human,
+            action.names,
+            action.now,
+            action.turn,
+        );
     }
 
     if (action.type === 'RESET') {
-        return createInitialState(state.human, state.names, action.now);
+        return createInitialState(
+            state.human,
+            state.names,
+            action.now,
+            action.turn,
+        );
     }
 
     if (action.type === 'ROLL_START') {
@@ -494,6 +519,7 @@ export default function Play() {
             code: string;
             max_players: number;
             status: string;
+            starting_player_id?: number | null;
             players: {
                 id: number;
                 name: string;
@@ -525,6 +551,7 @@ export default function Play() {
     );
     const [state, dispatch] = useReducer(reducer, initialState);
     const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
+    const [returningTokens, setReturningTokens] = useState<MovingToken[]>([]);
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [resultModalOpen, setResultModalOpen] = useState(false);
     const [endGameModalOpen, setEndGameModalOpen] = useState(false);
@@ -540,9 +567,18 @@ export default function Play() {
             return;
         }
 
+        const initialTurn: PlayerId =
+            room.starting_player_id &&
+            roomGreenPlayer &&
+            room.starting_player_id === roomGreenPlayer.id
+                ? 'green'
+                : 'blue';
+
+        previousTurnRef.current = initialTurn;
         dispatch({
             type: 'START',
             human: myRoomColor,
+            turn: initialTurn,
             names: {
                 blue: roomBluePlayer?.name ?? 'Pemain 1',
                 green: roomGreenPlayer?.name ?? 'Pemain 2',
@@ -688,15 +724,29 @@ export default function Play() {
                 return;
             }
 
-            let captures = false;
+            const capturedTargets: {
+                tokenIndex: number;
+                fromPosition: number;
+            }[] = [];
 
             if (move.target <= 50) {
                 const absolute = absoluteTrackIndex(color, move.target);
 
                 if (!isSafeAbsoluteIndex(absolute)) {
-                    captures = state.tokens[opponent].some(
-                        (position) =>
-                            absoluteTrackIndex(opponent, position) === absolute,
+                    state.tokens[opponent].forEach(
+                        (position, opponentTokenIndex) => {
+                            if (
+                                position >= 0 &&
+                                position <= 50 &&
+                                absoluteTrackIndex(opponent, position) ===
+                                    absolute
+                            ) {
+                                capturedTargets.push({
+                                    tokenIndex: opponentTokenIndex,
+                                    fromPosition: position,
+                                });
+                            }
+                        },
                     );
                 }
             }
@@ -710,14 +760,56 @@ export default function Play() {
                 await new Promise((resolve) => window.setTimeout(resolve, 140));
             }
 
-            if (captures) {
+            if (capturedTargets.length > 0) {
                 playCaptureSound();
+
+                const reducedMotion = window.matchMedia(
+                    '(prefers-reduced-motion: reduce)',
+                ).matches;
+
+                if (!reducedMotion) {
+                    const maxPos = Math.max(
+                        ...capturedTargets.map((item) => item.fromPosition),
+                    );
+                    const stepDelay = Math.max(
+                        26,
+                        Math.min(
+                            55,
+                            Math.floor(1400 / Math.max(1, maxPos + 1)),
+                        ),
+                    );
+
+                    for (let pos = maxPos; pos >= 0; pos--) {
+                        setReturningTokens(
+                            capturedTargets.map((item) => ({
+                                color: opponent,
+                                tokenIndex: item.tokenIndex,
+                                position: Math.min(item.fromPosition, pos),
+                            })),
+                        );
+                        await new Promise((resolve) =>
+                            window.setTimeout(resolve, stepDelay),
+                        );
+                    }
+
+                    setReturningTokens(
+                        capturedTargets.map((item) => ({
+                            color: opponent,
+                            tokenIndex: item.tokenIndex,
+                            position: BASE_POSITION,
+                        })),
+                    );
+                    await new Promise((resolve) =>
+                        window.setTimeout(resolve, 140),
+                    );
+                }
             } else if (move.target === FINISH_POSITION) {
                 playFinishSound();
             }
 
             dispatch({ type: 'MOVE', tokenIndex, now: Date.now() });
             setMovingToken(null);
+            setReturningTokens([]);
             movingRef.current = false;
         },
         [room, state.phase, state.legalMoves, state.tokens, state.turn, state.human],
@@ -852,12 +944,19 @@ export default function Play() {
     const boardTokens = useMemo<BoardToken[]>(() => {
         return PLAYER_IDS.flatMap((color) =>
             state.tokens[color].map((position, tokenIndex) => {
+                const returning = returningTokens.find(
+                    (item) =>
+                        item.color === color && item.tokenIndex === tokenIndex,
+                );
                 const isMoving =
                     movingToken?.color === color &&
                     movingToken.tokenIndex === tokenIndex;
+                const isReturning = Boolean(returning);
                 const displayPosition = isMoving
                     ? movingToken.position
-                    : position;
+                    : returning
+                      ? returning.position
+                      : position;
                 const move =
                     state.turn === color && state.phase === 'choosing'
                         ? state.legalMoves.find(
@@ -869,6 +968,7 @@ export default function Play() {
                 const canClickMove =
                     Boolean(move) &&
                     !isMoving &&
+                    !isReturning &&
                     (!room || state.turn === state.human);
 
                 return {
@@ -877,6 +977,7 @@ export default function Play() {
                     point: tokenPoint(color, displayPosition, tokenIndex),
                     legal: canClickMove,
                     moving: isMoving,
+                    returning: isReturning,
                     onClick: canClickMove
                         ? () => {
                               void animateMove(tokenIndex);
@@ -892,7 +993,10 @@ export default function Play() {
         state.phase,
         state.legalMoves,
         state.names,
+        state.human,
+        room,
         movingToken,
+        returningTokens,
         animateMove,
     ]);
 
@@ -985,7 +1089,9 @@ export default function Play() {
             ? 'Melempar…'
             : state.phase === 'choosing' && state.turn === state.human
               ? 'Ketuk bidak yang menyala'
-              : 'Lempar dadu';
+              : state.turn !== state.human
+                ? `Giliran ${state.names[state.turn]}`
+                : 'Lempar dadu';
 
     const canExitBase =
         state.turn === state.human &&
@@ -1110,10 +1216,19 @@ export default function Play() {
             [setupOpponent]: opponentName,
         } as SetupNames;
 
+        const starter = randomPlayer();
+
         cue(playStartSound);
-        previousTurnRef.current = humanColor;
-        dispatch({ type: 'START', human: humanColor, names, now: Date.now() });
+        previousTurnRef.current = starter;
+        dispatch({
+            type: 'START',
+            human: humanColor,
+            turn: starter,
+            names,
+            now: Date.now(),
+        });
         setMovingToken(null);
+        setReturningTokens([]);
         movingRef.current = false;
         setScreen('game');
     };
@@ -1127,11 +1242,14 @@ export default function Play() {
     };
 
     const playAgain = () => {
+        const starter = randomPlayer();
+
         cue(playStartSound);
-        previousTurnRef.current = state.human;
+        previousTurnRef.current = starter;
         setMovingToken(null);
+        setReturningTokens([]);
         movingRef.current = false;
-        dispatch({ type: 'RESET', now: Date.now() });
+        dispatch({ type: 'RESET', turn: starter, now: Date.now() });
     };
 
     return (
@@ -1680,7 +1798,9 @@ export default function Play() {
                                                 : state.phase === 'choosing' &&
                                                     state.turn === state.human
                                                   ? 'Pilih bidak'
-                                                  : 'Lempar'}
+                                                  : state.turn !== state.human
+                                                    ? 'Menunggu'
+                                                    : 'Lempar'}
                                         </span>
                                     </button>
                                 )}

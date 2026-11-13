@@ -107,14 +107,18 @@ class RoomFlowTest extends TestCase
         $this->post("/rooms/{$room->code}/start")
             ->assertRedirect(route('play', ['room' => $room->code]));
 
-        $this->assertSame('started', $room->fresh()->status);
+        $freshRoom = $room->fresh('players');
+        $this->assertSame('started', $freshRoom->status);
+        $this->assertNotNull($freshRoom->starting_player_id);
+        $this->assertContains($freshRoom->starting_player_id, $freshRoom->players->pluck('id')->all());
 
-        // /play?room=CODE renders Play with room props
+        // /play?room=CODE renders Play with room props including starting_player_id
         $this->get("/play?room={$room->code}")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Play')
                 ->where('room.code', $room->code)
+                ->where('room.starting_player_id', $freshRoom->starting_player_id)
                 ->has('room.players', 2));
 
         // Roll & move broadcast MatchAction to all players in the room

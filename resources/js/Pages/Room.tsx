@@ -939,6 +939,17 @@ export default function Room() {
                                                     )}
                                                 </div>
 
+                                                <div className="room-seat-scene" style={tokenStyle} aria-hidden="true">
+                                                    <div className="room-seat-orbit room-seat-orbit-outer" />
+                                                    <div className="room-seat-orbit room-seat-orbit-inner" />
+                                                    <div className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}>
+                                                        <span className="ludo-token room-seat-token" />
+                                                        <span className="room-seat-piece-base" />
+                                                    </div>
+                                                    <div className="room-seat-marker room-seat-marker-one" />
+                                                    <div className="room-seat-marker room-seat-marker-two" />
+                                                </div>
+
                                                 {occupant ? (
                                                     <div className="mt-auto flex items-center justify-between gap-2 pt-2">
                                                         <div className="flex min-w-0 items-center gap-2.5">

@@ -18,6 +18,7 @@ class Room extends Model
         'host_token',
         'max_players',
         'status',
+        'starting_player_id',
         'started_at',
     ];
 
@@ -25,6 +26,7 @@ class Room extends Model
     {
         return [
             'max_players' => 'integer',
+            'starting_player_id' => 'integer',
             'started_at' => 'datetime',
         ];
     }
@@ -53,6 +55,7 @@ class Room extends Model
             'code' => $this->code,
             'max_players' => $this->max_players,
             'status' => $this->status,
+            'starting_player_id' => $this->starting_player_id,
             'players' => $this->players->map(fn (RoomPlayer $player) => [
                 'id' => $player->id,
                 'name' => $player->name,
