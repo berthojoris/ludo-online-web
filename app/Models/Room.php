@@ -20,6 +20,8 @@ class Room extends Model
         'status',
         'starting_player_id',
         'started_at',
+        'host_advantage',
+        'match_state',
     ];
 
     protected function casts(): array
@@ -28,6 +30,8 @@ class Room extends Model
             'max_players' => 'integer',
             'starting_player_id' => 'integer',
             'started_at' => 'datetime',
+            'host_advantage' => 'boolean',
+            'match_state' => 'array',
         ];
     }
 
@@ -54,8 +58,10 @@ class Room extends Model
         return [
             'code' => $this->code,
             'max_players' => $this->max_players,
+            'host_advantage' => $this->host_advantage,
             'status' => $this->status,
             'starting_player_id' => $this->starting_player_id,
+            'match_state' => $this->match_state,
             'players' => $this->players->map(fn (RoomPlayer $player) => [
                 'id' => $player->id,
                 'name' => $player->name,

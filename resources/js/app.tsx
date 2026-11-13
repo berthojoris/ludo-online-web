@@ -3,6 +3,7 @@ import '../css/app.css';
 import { createInertiaApp } from '@inertiajs/react';
 import { configureEcho } from '@laravel/echo-react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
+import type { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 
 const reverbPort = Number(import.meta.env.VITE_REVERB_PORT ?? 8080);
@@ -21,11 +22,15 @@ const appName = 'Ludo Arena';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    resolve: (name) =>
-        resolvePageComponent(
-            `./Pages/${name}.tsx`,
-            import.meta.glob('./Pages/**/*.tsx'),
-        ),
+    resolve: async (name) =>
+        (
+            await resolvePageComponent(
+                `./Pages/${name}.tsx`,
+                import.meta.glob<{ default: ComponentType }>(
+                    './Pages/**/*.tsx',
+                ),
+            )
+        ).default,
     setup({ el, App, props }) {
         createRoot(el).render(<App {...props} />);
     },

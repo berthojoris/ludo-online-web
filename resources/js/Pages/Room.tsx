@@ -32,6 +32,7 @@ type RoomPlayerData = {
 
 type RoomData = {
     code: string;
+    host_advantage: boolean;
     max_players: PlayerCount;
     status: 'waiting' | 'started';
     players: RoomPlayerData[];
@@ -66,14 +67,18 @@ const ROOM_RULES = [
 
 function RoomSettingsSummary({
     playerCount,
+    hostAdvantage,
     isHost,
     pending,
     onSelectPlayerCount,
+    onToggleAdvantage,
 }: {
     playerCount: PlayerCount;
+    hostAdvantage: boolean;
     isHost: boolean;
     pending: boolean;
     onSelectPlayerCount: (count: PlayerCount) => void;
+    onToggleAdvantage: () => void;
 }) {
     return (
         <>
@@ -108,6 +113,29 @@ function RoomSettingsSummary({
                 </div>
             </div>
 
+            <div className="border-line mt-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
+                <div className="min-w-0">
+                    <p className="text-ink text-xs font-semibold">
+                        Keuntungan tuan rumah
+                    </p>
+                    <p className="text-ink-muted mt-1 text-xs">
+                        Peluang 50% untuk keluar markas atau menangkap saat
+                        tersedia.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    role="switch"
+                    aria-label="Keuntungan tuan rumah"
+                    aria-checked={hostAdvantage}
+                    aria-busy={pending}
+                    disabled={!isHost || pending}
+                    onClick={onToggleAdvantage}
+                    className={`focus-visible:ring-primary flex h-11 min-w-14 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
+                >
+                    {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
+                </button>
+            </div>
             <dl className="divide-line border-line mt-4 divide-y rounded-2xl border px-3.5">
                 {ROOM_RULES.map((item) => (
                     <div
@@ -182,9 +210,7 @@ export default function Room() {
 
     useEffect(() => {
         setLiveRoom(serverRoom ?? null);
-        setViewMode(
-            initialMode === 'join' || !serverRoom ? 'join' : 'lobby',
-        );
+        setViewMode(initialMode === 'join' || !serverRoom ? 'join' : 'lobby');
         if (serverRoom?.code) {
             setJoinCode(serverRoom.code);
         }
@@ -235,14 +261,11 @@ export default function Room() {
         const channelName = `room.${roomCode}`;
         const channel = echo().channel(channelName);
 
-        channel.listen(
-            '.room.updated',
-            (payload: { room?: RoomData }) => {
-                if (payload?.room) {
-                    setLiveRoom(payload.room);
-                }
-            },
-        );
+        channel.listen('.room.updated', (payload: { room?: RoomData }) => {
+            if (payload?.room) {
+                setLiveRoom(payload.room);
+            }
+        });
 
         return () => {
             echo().leave(channelName);
@@ -278,7 +301,9 @@ export default function Room() {
     };
 
     const currentMe: RoomPlayerData | null =
-        liveRoom?.players.find((p) => p.id === serverMe?.id) ?? serverMe ?? null;
+        liveRoom?.players.find((p) => p.id === serverMe?.id) ??
+        serverMe ??
+        null;
     const isHost = Boolean(currentMe?.is_host);
     const playerCount: PlayerCount = liveRoom?.max_players ?? 4;
     const activeSeats = SEATS_BY_COUNT[playerCount];
@@ -288,16 +313,18 @@ export default function Room() {
     const allSeated =
         players.length > 0 && players.every((p) => p.seat_color !== null);
     const allReady =
-        players.length >= 2 && allSeated && players.every((p) => p.is_ready);
+        players.length === 2 && allSeated && players.every((p) => p.is_ready);
 
     const startBlockedReason =
         players.length < 2
             ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
-            : !allSeated
-              ? 'Semua pemain harus memilih kursi terlebih dahulu.'
-              : !allReady
-                ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
-                : null;
+            : players.length > 2
+              ? 'Pertandingan saat ini mendukung dua pemain.'
+              : !allSeated
+                ? 'Semua pemain harus memilih kursi terlebih dahulu.'
+                : !allReady
+                  ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
+                  : null;
 
     const shareLink =
         typeof window !== 'undefined' && liveRoom
@@ -341,6 +368,27 @@ export default function Room() {
         );
     };
 
+    const handleToggleAdvantage = () => {
+        if (!liveRoom || !isHost || pendingAction) return;
+        const next = !liveRoom.host_advantage;
+        cue();
+        setActionError(null);
+        setPendingAction(true);
+        router
+            .optimistic((props: RoomPageProps) => ({
+                room: { ...(props.room as RoomData), host_advantage: next },
+            }))
+            .patch(
+                route('rooms.settings', { code: liveRoom.code }),
+                { host_advantage: next },
+                {
+                    preserveScroll: true,
+                    onError: handleFirstError,
+                    onFinish: () => setPendingAction(false),
+                },
+            );
+    };
+
     const handleSelectSeat = (color: PlayerColor | null) => {
         if (!liveRoom || pendingAction) {
             return;
@@ -364,7 +412,9 @@ export default function Room() {
             return;
         }
         if (!currentMe?.seat_color) {
-            setActionError('Pilih kursi terlebih dahulu sebelum menandai siap.');
+            setActionError(
+                'Pilih kursi terlebih dahulu sebelum menandai siap.',
+            );
             return;
         }
         cue();
@@ -939,10 +989,16 @@ export default function Room() {
                                                     )}
                                                 </div>
 
-                                                <div className="room-seat-scene" style={tokenStyle} aria-hidden="true">
+                                                <div
+                                                    className="room-seat-scene"
+                                                    style={tokenStyle}
+                                                    aria-hidden="true"
+                                                >
                                                     <div className="room-seat-orbit room-seat-orbit-outer" />
                                                     <div className="room-seat-orbit room-seat-orbit-inner" />
-                                                    <div className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}>
+                                                    <div
+                                                        className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}
+                                                    >
                                                         <span className="ludo-token room-seat-token" />
                                                         <span className="room-seat-piece-base" />
                                                     </div>
@@ -1064,6 +1120,12 @@ export default function Room() {
 
                                     <RoomSettingsSummary
                                         playerCount={playerCount}
+                                        hostAdvantage={Boolean(
+                                            liveRoom?.host_advantage,
+                                        )}
+                                        onToggleAdvantage={
+                                            handleToggleAdvantage
+                                        }
                                         isHost={isHost}
                                         pending={pendingAction}
                                         onSelectPlayerCount={
@@ -1211,6 +1273,8 @@ export default function Room() {
 
                         <RoomSettingsSummary
                             playerCount={playerCount}
+                            hostAdvantage={Boolean(liveRoom?.host_advantage)}
+                            onToggleAdvantage={handleToggleAdvantage}
                             isHost={isHost}
                             pending={pendingAction}
                             onSelectPlayerCount={handleSelectPlayerCount}

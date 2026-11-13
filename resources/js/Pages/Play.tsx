@@ -28,12 +28,12 @@ import {
 import {
     isSoundEnabled,
     playCaptureSound,
+    playChooseTokenSound,
     playDefeatSound,
     playDiceRollSound,
     playFinishSound,
     playHopSound,
     playNoMoveSound,
-    playChooseTokenSound,
     playStartSound,
     playTurnSound,
     playUiSound,
@@ -91,6 +91,15 @@ type GameState = {
 };
 
 type Action =
+    | {
+          type: 'RESTORE';
+          match: {
+              tokens: number[][];
+              turn: number;
+              dice: number | null;
+              winner: number | null;
+          };
+      }
     | {
           type: 'START';
           human: PlayerId;
@@ -262,6 +271,35 @@ function chooseAiMove(state: GameState): LegalMove | null {
 }
 
 function reducer(state: GameState, action: Action): GameState {
+    if (action.type === 'RESTORE') {
+        const turn: PlayerId = action.match.turn === 0 ? 'blue' : 'green';
+        const tokens = {
+            blue: action.match.tokens[0],
+            green: action.match.tokens[1],
+        };
+        const winner =
+            action.match.winner === null
+                ? null
+                : action.match.winner === 0
+                  ? 'blue'
+                  : 'green';
+        return {
+            ...state,
+            tokens,
+            turn,
+            dice: action.match.dice,
+            winner,
+            phase: winner
+                ? 'gameover'
+                : action.match.dice === null
+                  ? 'idle'
+                  : 'choosing',
+            legalMoves:
+                action.match.dice === null
+                    ? []
+                    : computeLegalMoves(tokens, turn, action.match.dice),
+        };
+    }
     if (action.type === 'START') {
         return createInitialState(
             action.human,
@@ -521,6 +559,12 @@ export default function Play() {
             max_players: number;
             status: string;
             starting_player_id?: number | null;
+            match_state?: {
+                tokens: number[][];
+                turn: number;
+                dice: number | null;
+                winner: number | null;
+            } | null;
             players: {
                 id: number;
                 name: string;
@@ -586,6 +630,9 @@ export default function Play() {
             },
             now: Date.now(),
         });
+        if (room.match_state) {
+            dispatch({ type: 'RESTORE', match: room.match_state });
+        }
         setScreen('game');
     }, [room?.code]);
 
@@ -641,10 +688,21 @@ export default function Play() {
     }, [state.turn, state.human, state.winner]);
 
     useEffect(() => {
-        if (state.phase === 'choosing' && state.turn === state.human && state.legalMoves.length > 1 && !state.winner) {
+        if (
+            state.phase === 'choosing' &&
+            state.turn === state.human &&
+            state.legalMoves.length > 1 &&
+            !state.winner
+        ) {
             playChooseTokenSound();
         }
-    }, [state.phase, state.turn, state.human, state.legalMoves.length, state.winner]);
+    }, [
+        state.phase,
+        state.turn,
+        state.human,
+        state.legalMoves.length,
+        state.winner,
+    ]);
 
     useEffect(() => {
         if (!state.winner) {
@@ -819,7 +877,14 @@ export default function Play() {
             setReturningTokens([]);
             movingRef.current = false;
         },
-        [room, state.phase, state.legalMoves, state.tokens, state.turn, state.human],
+        [
+            room,
+            state.phase,
+            state.legalMoves,
+            state.tokens,
+            state.turn,
+            state.human,
+        ],
     );
 
     const animateMoveRef = useRef(animateMove);
@@ -875,7 +940,10 @@ export default function Play() {
                     return;
                 }
 
-                if (action.type === 'roll' && typeof action.value === 'number') {
+                if (
+                    action.type === 'roll' &&
+                    typeof action.value === 'number'
+                ) {
                     void unlockAudio();
                     dispatch({ type: 'ROLL_START', value: action.value });
                     return;
@@ -1165,7 +1233,10 @@ export default function Play() {
                     action?: { action_id?: string; value?: number };
                 };
                 const action = data?.action;
-                if (action?.action_id && !seenActionsRef.current.has(action.action_id)) {
+                if (
+                    action?.action_id &&
+                    !seenActionsRef.current.has(action.action_id)
+                ) {
                     seenActionsRef.current.add(action.action_id);
                     if (typeof action.value === 'number') {
                         dispatch({ type: 'ROLL_START', value: action.value });

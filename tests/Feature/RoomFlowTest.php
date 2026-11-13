@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Events\MatchAction;
 use App\Events\RoomUpdated;
 use App\Models\Room;
+use App\Services\MatchRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -12,6 +13,34 @@ use Tests\TestCase;
 
 class RoomFlowTest extends TestCase
 {
+    public function test_host_advantage_defaults_off_and_only_host_can_change_it_before_start(): void
+    {
+        Event::fake([RoomUpdated::class]);
+        $this->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $hostToken = session('ludo_player_token');
+        $this->assertFalse($room->host_advantage);
+        $this->patch("/rooms/{$room->code}/settings", ['host_advantage' => true])->assertRedirect();
+        $this->assertTrue($room->fresh()->host_advantage);
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+        $this->patch("/rooms/{$room->code}/settings", ['host_advantage' => false])->assertForbidden();
+        $this->withSession(['ludo_player_token' => $hostToken]);
+        $this->patch("/rooms/{$room->code}/settings", ['host_advantage' => false])->assertRedirect();
+        $this->assertFalse($room->fresh()->host_advantage);
+        $room->update(['status' => 'started']);
+        $this->patch("/rooms/{$room->code}/settings", ['host_advantage' => true])->assertSessionHasErrors('room');
+    }
+
+    public function test_capture_rolls_exclude_safe_squares_and_include_legal_targets(): void
+    {
+        $state = MatchRules::initial(0);
+        $state['tokens'][0][0] = 10;
+        $state['tokens'][1][0] = 39; // Blue 10 is absolute 49; green 39 is absolute 0 (safe).
+        $state['tokens'][1][1] = 40; // Absolute 1, four squares ahead.
+        $this->assertSame([4], MatchRules::captureRolls($state, 0));
+    }
+
     use RefreshDatabase;
 
     public function test_host_room_capacity_and_joined_players_sync_across_sessions(): void
@@ -124,12 +153,21 @@ class RoomFlowTest extends TestCase
         // Roll & move broadcast MatchAction to all players in the room
         Event::fake([MatchAction::class, RoomUpdated::class]);
 
+        $state = $freshRoom->match_state;
+        $state['turn'] = 0;
+        $freshRoom->update(['match_state' => $state]);
+
         $this->postJson("/rooms/{$room->code}/match/roll")
             ->assertOk()
             ->assertJsonPath('ok', true)
             ->assertJsonPath('action.type', 'roll');
 
         Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'roll');
+
+        $state = $room->fresh()->match_state;
+        $state['turn'] = 0;
+        $state['dice'] = 6;
+        $room->update(['match_state' => $state]);
 
         $this->postJson("/rooms/{$room->code}/match/move", ['token_index' => 0])
             ->assertOk()
