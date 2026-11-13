@@ -6,9 +6,9 @@ class MatchRules
 {
     private const SAFE = [0, 8, 13, 21, 26, 34, 39, 47];
 
-    public static function initial(int $startingPlayer): array
+    public static function initial(int $startingPlayer, array $colors = ['blue', 'green']): array
     {
-        return ['tokens' => [[-1, -1, -1, -1], [-1, -1, -1, -1]], 'turn' => $startingPlayer, 'dice' => null, 'winner' => null];
+        return ['tokens' => array_fill(0, count($colors), [-1, -1, -1, -1]), 'colors' => $colors, 'turn' => $startingPlayer, 'dice' => null, 'winner' => null];
     }
 
     public static function moves(array $state, int $player, int $roll): array
@@ -30,13 +30,18 @@ class MatchRules
         $rolls = [];
         foreach (range(1, 6) as $roll) {
             foreach (self::moves($state, $player, $roll) as $target) {
-                $absolute = self::absolute($player, $target);
+                $absolute = self::absolute($player, $target, $state['colors'] ?? ['blue', 'green']);
                 if ($absolute !== null && ! in_array($absolute, self::SAFE, true)) {
-                    foreach ($state['tokens'][1 - $player] as $opponent) {
-                        if (self::absolute(1 - $player, $opponent) === $absolute) {
-                            $rolls[] = $roll;
+                    foreach ($state['tokens'] as $opponentIndex => $tokens) {
+                        if ($opponentIndex === $player) {
+                            continue;
+                        }
+                        foreach ($tokens as $opponent) {
+                            if (self::absolute($opponentIndex, $opponent, $state['colors'] ?? ['blue', 'green']) === $absolute) {
+                                $rolls[] = $roll;
 
-                            continue 3;
+                                continue 4;
+                            }
                         }
                     }
                 }
@@ -46,8 +51,10 @@ class MatchRules
         return $rolls;
     }
 
-    public static function absolute(int $player, int $position): ?int
+    public static function absolute(int $player, int $position, array $colors = ['blue', 'green']): ?int
     {
-        return $position < 0 || $position > 50 ? null : (($player === 0 ? 39 : 13) + $position) % 52;
+        $starts = ['red' => 0, 'green' => 13, 'yellow' => 26, 'blue' => 39];
+
+        return $position < 0 || $position > 50 ? null : ($starts[$colors[$player]] + $position) % 52;
     }
 }

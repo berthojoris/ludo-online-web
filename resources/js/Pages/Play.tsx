@@ -54,7 +54,7 @@ import {
     useState,
 } from 'react';
 
-type PlayerId = Extract<PlayerColor, 'blue' | 'green'>;
+type PlayerId = PlayerColor;
 type Phase = 'idle' | 'rolling' | 'choosing' | 'gameover';
 type Screen = 'setup' | 'game';
 
@@ -72,6 +72,7 @@ type LogEntry = {
 type SetupNames = Record<PlayerId, string>;
 
 type GameState = {
+    order: PlayerId[];
     tokens: Record<PlayerId, number[]>;
     turn: PlayerId;
     human: PlayerId;
@@ -95,6 +96,7 @@ type Action =
           type: 'RESTORE';
           match: {
               tokens: number[][];
+              colors?: PlayerId[];
               turn: number;
               dice: number | null;
               winner: number | null;
@@ -104,6 +106,7 @@ type Action =
           type: 'START';
           human: PlayerId;
           names: SetupNames;
+          order?: PlayerId[];
           now: number;
           turn?: PlayerId;
       }
@@ -115,13 +118,16 @@ type Action =
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
 
 const initialState: GameState = {
+    order: PLAYER_IDS,
     tokens: {
+        red: [-1, -1, -1, -1],
+        yellow: [-1, -1, -1, -1],
         blue: [-1, -1, -1, -1],
         green: [-1, -1, -1, -1],
     },
     turn: 'blue',
     human: 'blue',
-    names: { blue: 'Kamu', green: 'Lawan' },
+    names: { blue: 'Kamu', green: 'Lawan', red: 'Merah', yellow: 'Kuning' },
     phase: 'idle',
     dice: null,
     legalMoves: [],
@@ -134,8 +140,8 @@ const initialState: GameState = {
         },
     ],
     logId: 1,
-    rolls: { blue: 0, green: 0 },
-    captures: { blue: 0, green: 0 },
+    rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
+    captures: { blue: 0, green: 0, red: 0, yellow: 0 },
     totalMoves: 0,
     startedAt: null,
     finishedAt: null,
@@ -154,11 +160,10 @@ function randomPlayer(): PlayerId {
 }
 
 function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
-    const opponent = otherPlayer(human);
-
     return {
-        [human]: names[human].trim().slice(0, 16) || 'Pemain',
-        [opponent]: names[opponent].trim().slice(0, 16) || 'Lawan',
+        ...initialState.names,
+        ...names,
+        [human]: names[human]?.trim().slice(0, 16) || 'Pemain',
     } as SetupNames;
 }
 
@@ -167,12 +172,14 @@ function createInitialState(
     rawNames: SetupNames,
     now: number,
     startingTurn?: PlayerId,
+    order: PlayerId[] = PLAYER_IDS,
 ): GameState {
     const names = cleanNames(human, rawNames);
     const turn = startingTurn ?? human;
 
     return {
         ...initialState,
+        order,
         human,
         names,
         turn,
@@ -188,8 +195,8 @@ function createInitialState(
             },
         ],
         logId: 1,
-        rolls: { blue: 0, green: 0 },
-        captures: { blue: 0, green: 0 },
+        rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
+        captures: { blue: 0, green: 0, red: 0, yellow: 0 },
         totalMoves: 0,
         startedAt: now,
         finishedAt: null,
@@ -272,19 +279,17 @@ function chooseAiMove(state: GameState): LegalMove | null {
 
 function reducer(state: GameState, action: Action): GameState {
     if (action.type === 'RESTORE') {
-        const turn: PlayerId = action.match.turn === 0 ? 'blue' : 'green';
-        const tokens = {
-            blue: action.match.tokens[0],
-            green: action.match.tokens[1],
-        };
+        const order = action.match.colors ?? PLAYER_IDS;
+        const turn = order[action.match.turn];
+        const tokens = { ...initialState.tokens };
+        order.forEach((color, index) => {
+            tokens[color] = action.match.tokens[index];
+        });
         const winner =
-            action.match.winner === null
-                ? null
-                : action.match.winner === 0
-                  ? 'blue'
-                  : 'green';
+            action.match.winner === null ? null : order[action.match.winner];
         return {
             ...state,
+            order,
             tokens,
             turn,
             dice: action.match.dice,
@@ -306,6 +311,7 @@ function reducer(state: GameState, action: Action): GameState {
             action.names,
             action.now,
             action.turn,
+            action.order,
         );
     }
 
@@ -357,7 +363,10 @@ function reducer(state: GameState, action: Action): GameState {
         );
 
         if (legalMoves.length === 0) {
-            const nextPlayer = otherPlayer(state.turn);
+            const nextPlayer =
+                state.order[
+                    (state.order.indexOf(state.turn) + 1) % state.order.length
+                ];
 
             return {
                 ...state,
@@ -368,8 +377,8 @@ function reducer(state: GameState, action: Action): GameState {
                 turn: nextPlayer,
                 message:
                     state.turn === state.human
-                        ? 'Tidak ada langkah yang bisa diambil. Giliran lawan.'
-                        : `${actor} tidak punya langkah. Giliranmu.`,
+                        ? `Tidak ada langkah. Giliran ${state.names[nextPlayer]}.`
+                        : `${actor} tidak punya langkah. Giliran ${state.names[nextPlayer]}.`,
             };
         }
 
@@ -400,12 +409,13 @@ function reducer(state: GameState, action: Action): GameState {
         }
 
         const actor = state.turn;
-        const opponent = otherPlayer(actor);
+        const opponent =
+            state.order[(state.order.indexOf(actor) + 1) % state.order.length];
         const actorName = state.names[actor];
         const from = state.tokens[actor][move.tokenIndex];
         const nextTokens: Record<PlayerId, number[]> = {
-            blue: [...state.tokens.blue],
-            green: [...state.tokens.green],
+            ...state.tokens,
+            [actor]: [...state.tokens[actor]],
         };
 
         nextTokens[actor][move.tokenIndex] = move.target;
@@ -416,15 +426,24 @@ function reducer(state: GameState, action: Action): GameState {
             const absolute = absoluteTrackIndex(actor, move.target);
 
             if (!isSafeAbsoluteIndex(absolute)) {
-                nextTokens[opponent] = nextTokens[opponent].map((position) => {
-                    if (absoluteTrackIndex(opponent, position) === absolute) {
-                        capturedCount += 1;
+                state.order
+                    .filter((color) => color !== actor)
+                    .forEach((color) => {
+                        nextTokens[color] = nextTokens[color].map(
+                            (position) => {
+                                if (
+                                    absoluteTrackIndex(color, position) ===
+                                    absolute
+                                ) {
+                                    capturedCount += 1;
 
-                        return BASE_POSITION;
-                    }
+                                    return BASE_POSITION;
+                                }
 
-                    return position;
-                });
+                                return position;
+                            },
+                        );
+                    });
             }
         }
 
@@ -561,6 +580,7 @@ export default function Play() {
             starting_player_id?: number | null;
             match_state?: {
                 tokens: number[][];
+                colors?: PlayerId[];
                 turn: number;
                 dice: number | null;
                 winner: number | null;
@@ -580,12 +600,12 @@ export default function Play() {
         } | null;
     };
     const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
-    const roomBluePlayer = room?.players[0] ?? null;
-    const roomGreenPlayer = room?.players[1] ?? null;
-    const myRoomColor: PlayerId =
-        room && me && roomBluePlayer && me.id !== roomBluePlayer.id
-            ? 'green'
-            : 'blue';
+    const roomOrder =
+        room?.match_state?.colors ??
+        (room ? (['blue', 'green'] as PlayerId[]) : PLAYER_IDS);
+    const myRoomIndex =
+        room?.players.findIndex((player) => player.id === me?.id) ?? -1;
+    const myRoomColor: PlayerId = roomOrder[myRoomIndex] ?? 'blue';
     const roomOtherPlayer = room?.players.find((p) => p.id !== me?.id);
 
     const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
@@ -613,21 +633,23 @@ export default function Play() {
         }
 
         const initialTurn: PlayerId =
-            room.starting_player_id &&
-            roomGreenPlayer &&
-            room.starting_player_id === roomGreenPlayer.id
-                ? 'green'
-                : 'blue';
+            roomOrder[
+                room.players.findIndex(
+                    (player) => player.id === room.starting_player_id,
+                )
+            ] ?? roomOrder[0];
+        const names = { ...initialState.names };
+        room.players.forEach((player, index) => {
+            if (roomOrder[index]) names[roomOrder[index]] = player.name;
+        });
 
         previousTurnRef.current = initialTurn;
         dispatch({
             type: 'START',
             human: myRoomColor,
             turn: initialTurn,
-            names: {
-                blue: roomBluePlayer?.name ?? 'Pemain 1',
-                green: roomGreenPlayer?.name ?? 'Pemain 2',
-            },
+            names,
+            order: roomOrder,
             now: Date.now(),
         });
         if (room.match_state) {
@@ -638,7 +660,10 @@ export default function Play() {
 
     const opponentColor = otherPlayer(state.human);
     const canRoll =
-        state.turn === state.human && state.phase === 'idle' && !state.winner;
+        (!room || myRoomIndex >= 0) &&
+        state.turn === state.human &&
+        state.phase === 'idle' &&
+        !state.winner;
     const displayDice = state.dice ?? 6;
     const setupOpponent = otherPlayer(humanColor);
 
@@ -775,7 +800,7 @@ export default function Play() {
             }
 
             const color = state.turn;
-            const opponent = otherPlayer(color);
+            const opponents = state.order.filter((item) => item !== color);
             const from = state.tokens[color][tokenIndex];
             const steps =
                 from === BASE_POSITION
@@ -790,6 +815,7 @@ export default function Play() {
             }
 
             const capturedTargets: {
+                color: PlayerId;
                 tokenIndex: number;
                 fromPosition: number;
             }[] = [];
@@ -798,20 +824,23 @@ export default function Play() {
                 const absolute = absoluteTrackIndex(color, move.target);
 
                 if (!isSafeAbsoluteIndex(absolute)) {
-                    state.tokens[opponent].forEach(
-                        (position, opponentTokenIndex) => {
-                            if (
-                                position >= 0 &&
-                                position <= 50 &&
-                                absoluteTrackIndex(opponent, position) ===
-                                    absolute
-                            ) {
-                                capturedTargets.push({
-                                    tokenIndex: opponentTokenIndex,
-                                    fromPosition: position,
-                                });
-                            }
-                        },
+                    opponents.forEach((opponent) =>
+                        state.tokens[opponent].forEach(
+                            (position, opponentTokenIndex) => {
+                                if (
+                                    position >= 0 &&
+                                    position <= 50 &&
+                                    absoluteTrackIndex(opponent, position) ===
+                                        absolute
+                                ) {
+                                    capturedTargets.push({
+                                        color: opponent,
+                                        tokenIndex: opponentTokenIndex,
+                                        fromPosition: position,
+                                    });
+                                }
+                            },
+                        ),
                     );
                 }
             }
@@ -847,7 +876,7 @@ export default function Play() {
                     for (let pos = maxPos; pos >= 0; pos--) {
                         setReturningTokens(
                             capturedTargets.map((item) => ({
-                                color: opponent,
+                                color: item.color,
                                 tokenIndex: item.tokenIndex,
                                 position: Math.min(item.fromPosition, pos),
                             })),
@@ -859,7 +888,7 @@ export default function Play() {
 
                     setReturningTokens(
                         capturedTargets.map((item) => ({
-                            color: opponent,
+                            color: item.color,
                             tokenIndex: item.tokenIndex,
                             position: BASE_POSITION,
                         })),
@@ -929,9 +958,7 @@ export default function Play() {
                 }
 
                 const expectedPlayerId =
-                    stateTurnRef.current === 'blue'
-                        ? roomBluePlayer?.id
-                        : roomGreenPlayer?.id;
+                    room.players[roomOrder.indexOf(stateTurnRef.current)]?.id;
 
                 if (
                     expectedPlayerId !== undefined &&
@@ -962,7 +989,7 @@ export default function Play() {
         return () => {
             echo().leave(channelName);
         };
-    }, [room?.code, roomBluePlayer?.id, roomGreenPlayer?.id, me?.id]);
+    }, [room?.code, me?.id]);
 
     useEffect(() => {
         if (!endGameModalOpen) {
@@ -1017,7 +1044,7 @@ export default function Play() {
     }, [state, animateMove]);
 
     const boardTokens = useMemo<BoardToken[]>(() => {
-        return PLAYER_IDS.flatMap((color) =>
+        return state.order.flatMap((color) =>
             state.tokens[color].map((position, tokenIndex) => {
                 const returning = returningTokens.find(
                     (item) =>
@@ -1064,6 +1091,7 @@ export default function Play() {
         );
     }, [
         state.tokens,
+        state.order,
         state.turn,
         state.phase,
         state.legalMoves,
@@ -1093,7 +1121,7 @@ export default function Play() {
                 (position) => position === FINISH_POSITION,
             ).length;
 
-        return [...PLAYER_IDS]
+        return [...state.order]
             .sort((a, b) => {
                 if (a === state.winner) {
                     return -1;
@@ -1114,6 +1142,7 @@ export default function Play() {
             }));
     }, [
         state.winner,
+        state.order,
         state.tokens,
         state.names,
         state.human,
@@ -1623,37 +1652,27 @@ export default function Play() {
                     <main className="mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
                         <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_280px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4">
                             <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                                <div className="border-line/80 shadow-card flex shrink-0 items-stretch overflow-hidden rounded-[18px] border bg-white md:hidden [@media(max-height:560px)]:hidden">
-                                    <PlayerCard
-                                        size="sm"
-                                        color={opponentColor}
-                                        name={state.names[opponentColor]}
-                                        role="Lawan"
-                                        subtitle={activeSubtitle(opponentColor)}
-                                        active={
-                                            state.turn === opponentColor &&
-                                            !state.winner
-                                        }
-                                        finished={finished(opponentColor)}
-                                        className="flex-1"
-                                    />
-                                    <div
-                                        className="bg-line/60 w-px shrink-0 self-stretch"
-                                        aria-hidden="true"
-                                    />
-                                    <PlayerCard
-                                        size="sm"
-                                        color={state.human}
-                                        name={state.names[state.human]}
-                                        role="Kamu"
-                                        subtitle={activeSubtitle(state.human)}
-                                        active={
-                                            state.turn === state.human &&
-                                            !state.winner
-                                        }
-                                        finished={finished(state.human)}
-                                        className="flex-1"
-                                    />
+                                <div className="border-line/80 shadow-card grid shrink-0 grid-cols-2 items-stretch rounded-[18px] border bg-white md:hidden">
+                                    {state.order.map((color) => (
+                                        <PlayerCard
+                                            key={color}
+                                            size="sm"
+                                            color={color}
+                                            name={state.names[color]}
+                                            role={
+                                                color === state.human
+                                                    ? 'Kamu'
+                                                    : 'Lawan'
+                                            }
+                                            subtitle={activeSubtitle(color)}
+                                            active={
+                                                state.turn === color &&
+                                                !state.winner
+                                            }
+                                            finished={finished(color)}
+                                            className="min-w-0 flex-1"
+                                        />
+                                    ))}
                                 </div>
 
                                 <div
@@ -1670,10 +1689,12 @@ export default function Play() {
                                         >
                                             <LudoBoard
                                                 tokens={boardTokens}
-                                                playerNames={{
-                                                    blue: state.names.blue,
-                                                    green: state.names.green,
-                                                }}
+                                                playerNames={Object.fromEntries(
+                                                    state.order.map((color) => [
+                                                        color,
+                                                        state.names[color],
+                                                    ]),
+                                                )}
                                                 activeColor={
                                                     state.winner
                                                         ? undefined
@@ -1766,39 +1787,25 @@ export default function Play() {
                                             PEMAIN
                                         </h2>
                                     </div>
-                                    <PlayerCard
-                                        color={opponentColor}
-                                        name={state.names[opponentColor]}
-                                        role="Lawan"
-                                        subtitle={activeSubtitle(opponentColor)}
-                                        active={
-                                            state.turn === opponentColor &&
-                                            !state.winner
-                                        }
-                                        finished={finished(opponentColor)}
-                                        className="min-h-0 flex-1"
-                                    />
-                                    <div
-                                        className="relative mx-4 shrink-0"
-                                        aria-hidden="true"
-                                    >
-                                        <div className="border-line/60 border-t" />
-                                        <span className="border-line/80 text-ink absolute top-1/2 left-1/2 grid h-[26px] w-[26px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border bg-white text-[9px] font-bold tracking-[0.08em]">
-                                            VS
-                                        </span>
-                                    </div>
-                                    <PlayerCard
-                                        color={state.human}
-                                        name={state.names[state.human]}
-                                        role="Kamu"
-                                        subtitle={activeSubtitle(state.human)}
-                                        active={
-                                            state.turn === state.human &&
-                                            !state.winner
-                                        }
-                                        finished={finished(state.human)}
-                                        className="min-h-0 flex-1"
-                                    />
+                                    {state.order.map((color) => (
+                                        <PlayerCard
+                                            key={color}
+                                            color={color}
+                                            name={state.names[color]}
+                                            role={
+                                                color === state.human
+                                                    ? 'Kamu'
+                                                    : 'Lawan'
+                                            }
+                                            subtitle={activeSubtitle(color)}
+                                            active={
+                                                state.turn === color &&
+                                                !state.winner
+                                            }
+                                            finished={finished(color)}
+                                            className="min-h-0 flex-1"
+                                        />
+                                    ))}
                                     <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3 [@media(max-height:640px)]:hidden">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">

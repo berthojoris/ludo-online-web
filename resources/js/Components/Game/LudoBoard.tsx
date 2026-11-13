@@ -8,6 +8,7 @@ import {
 } from '@/lib/ludo';
 import { CSSProperties } from 'react';
 import { StarIcon } from './Icons';
+import LudoPin from './LudoPin';
 
 export type BoardToken = {
     id: string;
@@ -377,7 +378,7 @@ export default function LudoBoard({
                                             ? `${label} siap digerakkan`
                                             : label
                                     }
-                                    className={`ludo-token relative block h-full w-full rounded-full border-2 border-white transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] hover:scale-110 active:scale-95 ${
+                                    className={`relative block h-full w-full transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] hover:scale-110 active:scale-95 ${
                                         token.legal
                                             ? 'animate-legal-pulse cursor-pointer'
                                             : 'cursor-default'
@@ -391,10 +392,12 @@ export default function LudoBoard({
                                             : ''
                                     }`}
                                     style={tokenStyle}
-                                />
+                                >
+                                    <LudoPin className="h-full w-full" />
+                                </button>
                             ) : (
                                 <div
-                                    className={`ludo-token h-full w-full rounded-full border-2 border-white ${
+                                    className={`h-full w-full ${
                                         token.legal ? 'animate-legal-pulse' : ''
                                     } ${
                                         token.moving ? 'animate-token-hop' : ''
@@ -404,7 +407,9 @@ export default function LudoBoard({
                                             : ''
                                     }`}
                                     style={tokenStyle}
-                                />
+                                >
+                                    <LudoPin className="h-full w-full" />
+                                </div>
                             )}
                         </div>
                     );

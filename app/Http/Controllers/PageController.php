@@ -137,6 +137,7 @@ class PageController extends Controller
             : null;
 
         if (! $room) {
+            $request->session()->forget('ludo_player_name');
             $room = DB::transaction(function () use ($request, $token) {
                 $created = Room::create([
                     'code' => RoomController::generateCode(),

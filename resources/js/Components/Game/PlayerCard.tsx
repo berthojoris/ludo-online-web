@@ -3,7 +3,7 @@ import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
 type PlayerCardProps = {
     color: PlayerColor;
     name: string;
-    role: 'Kamu' | 'Lawan' | 'Tuan rumah' | 'Tamu';
+    role: 'Kamu' | 'Lawan' | 'Host' | 'Tamu';
     subtitle: string;
     active: boolean;
     finished: number;

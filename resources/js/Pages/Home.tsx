@@ -5,7 +5,7 @@ import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
 import { User } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PREVIEW_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
@@ -66,6 +66,7 @@ export default function Home() {
         howItWorksOpen?: boolean;
     };
     const user = auth?.user ?? null;
+    const createRoom = useForm({ max_players: 4 });
     const tokens = previewTokens();
     const triggerRef = useRef<HTMLAnchorElement>(null);
     const [boardAreaRef, boardSize] = usePreviewBoardSize();
@@ -200,12 +201,27 @@ export default function Home() {
                         </p>
 
                         <div className="mt-[clamp(8px,1.8dvh,32px)] flex w-full max-w-md gap-2 sm:max-w-lg sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
-                            <Link
-                                href={route('room')}
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    createRoom.post(route('rooms.store'))
+                                }
+                                disabled={createRoom.processing}
+                                aria-busy={createRoom.processing}
                                 className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
                             >
-                                Buat ruang
-                            </Link>
+                                {createRoom.processing ? (
+                                    <>
+                                        <span
+                                            aria-hidden="true"
+                                            className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+                                        />
+                                        Membuat ruang…
+                                    </>
+                                ) : (
+                                    'Buat ruang'
+                                )}
+                            </button>
                             <Link
                                 href={`${route('room')}?join=1`}
                                 className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-2xl border bg-white px-5 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"

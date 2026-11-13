@@ -36,12 +36,7 @@ class RoomController extends Controller
             return Str::limit(explode(' ', trim($user->name))[0], 24, '');
         }
 
-        $sessionName = $request->session()->get('ludo_player_name');
-        if (is_string($sessionName) && trim($sessionName) !== '') {
-            return Str::limit(trim($sessionName), 24, '');
-        }
-
-        return $isHost ? 'Tuan Rumah' : 'Tamu';
+        return $isHost ? 'Host' : 'Tamu';
     }
 
     public static function generateCode(): string
@@ -60,6 +55,7 @@ class RoomController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $request->session()->forget('ludo_player_name');
         $token = self::playerToken($request);
         $maxPlayers = (int) $request->input('max_players', 4);
         if (! in_array($maxPlayers, [2, 3, 4], true)) {
@@ -103,7 +99,7 @@ class RoomController extends Controller
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
         if ($room->host_token !== $token) {
-            abort(403, 'Hanya tuan rumah yang dapat mengubah kapasitas pemain.');
+            abort(403, 'Hanya host yang dapat mengubah kapasitas pemain.');
         }
 
         if ($room->status !== 'waiting') {
@@ -214,8 +210,6 @@ class RoomController extends Controller
         $player->name = $cleanName;
         $player->save();
 
-        $request->session()->put('ludo_player_name', $cleanName);
-
         $room->refresh()->load('players');
         broadcast(new RoomUpdated($room));
 
@@ -261,7 +255,7 @@ class RoomController extends Controller
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
         if ($room->host_token !== $token) {
-            abort(403, 'Hanya tuan rumah yang dapat memulai permainan.');
+            abort(403, 'Hanya host yang dapat memulai permainan.');
         }
 
         if ($room->status === 'started') {
@@ -273,12 +267,6 @@ class RoomController extends Controller
         if ($players->count() < 2) {
             throw ValidationException::withMessages([
                 'start' => 'Minimal 2 pemain harus bergabung untuk memulai.',
-            ]);
-        }
-
-        if ($players->count() > 2) {
-            throw ValidationException::withMessages([
-                'start' => 'Pertandingan saat ini mendukung dua pemain.',
             ]);
         }
 
@@ -298,7 +286,7 @@ class RoomController extends Controller
 
         $room->status = 'started';
         $room->starting_player_id = $startingPlayer->id;
-        $room->match_state = MatchRules::initial($players->search(fn ($player) => $player->id === $startingPlayer->id));
+        $room->match_state = MatchRules::initial($players->search(fn ($player) => $player->id === $startingPlayer->id), $players->pluck('seat_color')->all());
         $room->started_at = now();
         $room->save();
 
@@ -327,7 +315,7 @@ class RoomController extends Controller
             $players = $room->players()->get();
             $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
-            abort_unless($room->status === 'started' && $state && $index !== false && $index < 2 && $state['turn'] === $index && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
+            abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
             $value = random_int(1, 6);
             if ($room->host_advantage && $player->is_host) {
                 $preferred = MatchRules::captureRolls($state, $index);
@@ -344,7 +332,7 @@ class RoomController extends Controller
             if (MatchRules::moves($state, $index, $value)) {
                 $state['dice'] = $value;
             } else {
-                $state['turn'] = 1 - $index;
+                $state['turn'] = ($index + 1) % count($state['tokens']);
             }
             $room->match_state = $state;
             $room->save();
@@ -380,26 +368,32 @@ class RoomController extends Controller
             $players = $room->players()->get();
             $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
-            abort_unless($room->status === 'started' && $state && $index !== false && $index < 2 && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
+            abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
             $tokenIndex = (int) $validated['token_index'];
             $moves = MatchRules::moves($state, $index, $state['dice']);
             abort_unless(array_key_exists($tokenIndex, $moves), 422, 'Langkah tidak sah.');
             $target = $moves[$tokenIndex];
             $state['tokens'][$index][$tokenIndex] = $target;
-            $absolute = MatchRules::absolute($index, $target);
+            $colors = $state['colors'] ?? ['blue', 'green'];
+            $absolute = MatchRules::absolute($index, $target, $colors);
             $captured = false;
             if ($absolute !== null && ! in_array($absolute, [0, 8, 13, 21, 26, 34, 39, 47], true)) {
-                foreach ($state['tokens'][1 - $index] as $i => $position) {
-                    if (MatchRules::absolute(1 - $index, $position) === $absolute) {
-                        $state['tokens'][1 - $index][$i] = -1;
-                        $captured = true;
+                foreach ($state['tokens'] as $opponentIndex => $tokens) {
+                    if ($opponentIndex === $index) {
+                        continue;
+                    }
+                    foreach ($tokens as $i => $position) {
+                        if (MatchRules::absolute($opponentIndex, $position, $colors) === $absolute) {
+                            $state['tokens'][$opponentIndex][$i] = -1;
+                            $captured = true;
+                        }
                     }
                 }
             }
             if (count(array_filter($state['tokens'][$index], fn ($position) => $position === 56)) === 4) {
                 $state['winner'] = $index;
             } elseif ($state['dice'] !== 6 && ! $captured && $target !== 56) {
-                $state['turn'] = 1 - $index;
+                $state['turn'] = ($index + 1) % count($state['tokens']);
             }
             $state['dice'] = null;
             $room->match_state = $state;

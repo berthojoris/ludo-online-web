@@ -11,6 +11,7 @@ import {
     UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
+import LudoPin from '@/Components/Game/LudoPin';
 import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { User } from '@/types';
@@ -89,7 +90,7 @@ function RoomSettingsSummary({
                     </span>
                     {!isHost && (
                         <span className="text-ink-muted text-[10px] font-medium">
-                            Diatur tuan rumah
+                            Diatur host
                         </span>
                     )}
                 </div>
@@ -116,7 +117,7 @@ function RoomSettingsSummary({
             <div className="border-line mt-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
                 <div className="min-w-0">
                     <p className="text-ink text-xs font-semibold">
-                        Keuntungan tuan rumah
+                        Keuntungan host
                     </p>
                     <p className="text-ink-muted mt-1 text-xs">
                         Peluang 50% untuk keluar markas atau menangkap saat
@@ -126,7 +127,7 @@ function RoomSettingsSummary({
                 <button
                     type="button"
                     role="switch"
-                    aria-label="Keuntungan tuan rumah"
+                    aria-label="Keuntungan host"
                     aria-checked={hostAdvantage}
                     aria-busy={pending}
                     disabled={!isHost || pending}
@@ -184,6 +185,12 @@ async function copyText(value: string): Promise<boolean> {
 }
 
 export default function Room() {
+    const { room } = usePage().props as unknown as RoomPageProps;
+
+    return <RoomContent key={room?.code ?? 'join'} />;
+}
+
+function RoomContent() {
     const page = usePage();
     const {
         mode: initialMode,
@@ -262,7 +269,7 @@ export default function Room() {
         const channel = echo().channel(channelName);
 
         channel.listen('.room.updated', (payload: { room?: RoomData }) => {
-            if (payload?.room) {
+            if (payload?.room?.code === roomCode) {
                 setLiveRoom(payload.room);
             }
         });
@@ -313,18 +320,16 @@ export default function Room() {
     const allSeated =
         players.length > 0 && players.every((p) => p.seat_color !== null);
     const allReady =
-        players.length === 2 && allSeated && players.every((p) => p.is_ready);
+        players.length >= 2 && allSeated && players.every((p) => p.is_ready);
 
     const startBlockedReason =
         players.length < 2
             ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
-            : players.length > 2
-              ? 'Pertandingan saat ini mendukung dua pemain.'
-              : !allSeated
-                ? 'Semua pemain harus memilih kursi terlebih dahulu.'
-                : !allReady
-                  ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
-                  : null;
+            : !allSeated
+              ? 'Semua pemain harus memilih kursi terlebih dahulu.'
+              : !allReady
+                ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
+                : null;
 
     const shareLink =
         typeof window !== 'undefined' && liveRoom
@@ -680,9 +685,21 @@ export default function Room() {
                                 <button
                                     type="button"
                                     onClick={handleCreateNewRoom}
+                                    disabled={pendingAction}
+                                    aria-busy={pendingAction}
                                     className="text-brand-ink font-semibold hover:underline"
                                 >
-                                    Buat ruang baru
+                                    {pendingAction ? (
+                                        <>
+                                            <span
+                                                aria-hidden="true"
+                                                className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                            />
+                                            Membuat ruang…
+                                        </>
+                                    ) : (
+                                        'Buat ruang baru'
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -690,18 +707,18 @@ export default function Room() {
                 ) : (
                     <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 pt-2.5 pb-[max(10px,env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 sm:pb-4">
                         <div className="grid min-h-0 flex-1 gap-2.5 sm:gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px]">
-                            <section className="flex min-h-0 flex-col gap-2 sm:gap-3">
-                                <div className="border-line shadow-card flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-2xl border bg-white px-3.5 py-2.5 sm:px-4 sm:py-3">
-                                    <div className="flex min-w-0 items-center gap-3">
+                            <section className="flex min-h-0 flex-col gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
+                                <div className="border-line shadow-card flex shrink-0 items-center justify-between gap-1 rounded-2xl border bg-white px-2.5 py-2 sm:gap-2 sm:px-4 sm:py-3">
+                                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
                                         <div>
                                             <p className="text-ink-muted text-[11px] leading-none font-medium">
                                                 Kode ruang
                                             </p>
-                                            <p className="text-ink mt-1 font-mono text-lg font-semibold tracking-[0.22em] sm:text-2xl">
+                                            <p className="text-ink mt-1 font-mono text-base font-semibold tracking-[0.14em] sm:text-2xl sm:tracking-[0.22em]">
                                                 {liveRoom.code}
                                             </p>
                                         </div>
-                                        <span className="border-line bg-canvas text-ink-muted inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums">
+                                        <span className="border-line bg-canvas text-ink-muted inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold tabular-nums">
                                             <UsersIcon className="h-3.5 w-3.5" />
                                             {occupiedCount}/{playerCount}
                                         </span>
@@ -713,7 +730,7 @@ export default function Room() {
                                             onClick={() =>
                                                 copy(liveRoom.code, 'code')
                                             }
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-9 items-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition"
+                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-11 items-center gap-1 rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
                                         >
                                             {copyState === 'code' ? (
                                                 <>
@@ -732,7 +749,7 @@ export default function Room() {
                                             onClick={() =>
                                                 copy(shareLink, 'link')
                                             }
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-9 items-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition"
+                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
                                         >
                                             {copyState === 'link' ? (
                                                 <>
@@ -752,8 +769,8 @@ export default function Room() {
                                 </div>
 
                                 {/* Joined players & display name bar */}
-                                <div className="border-line flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-2xl border bg-white/85 px-3 py-2 sm:px-4">
-                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                <div className="border-line flex shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white/85 px-3 py-2 sm:px-4">
+                                    <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
                                         <span className="text-ink-muted mr-1 text-[11px] font-medium">
                                             Di ruang:
                                         </span>
@@ -767,7 +784,7 @@ export default function Room() {
                                             return (
                                                 <span
                                                     key={player.id}
-                                                    className="border-line bg-canvas inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
+                                                    className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
                                                 >
                                                     <span
                                                         className="h-2 w-2 rounded-full"
@@ -860,7 +877,7 @@ export default function Room() {
                                                     );
                                                     setEditingName(true);
                                                 }}
-                                                className="text-brand-ink text-[11px] font-semibold hover:underline"
+                                                className="text-brand-ink shrink-0 text-[11px] font-semibold hover:underline"
                                             >
                                                 Ubah nama
                                             </button>
@@ -877,7 +894,7 @@ export default function Room() {
                                 )}
 
                                 <div
-                                    className={`relative grid min-h-0 flex-1 gap-2.5 sm:gap-3.5 ${SEAT_GRID_CLASS[playerCount]}`}
+                                    className={`relative grid min-h-0 flex-1 gap-2.5 sm:gap-3.5 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
                                     role="group"
                                     aria-label="Kursi meja Ludo"
                                 >
@@ -939,7 +956,7 @@ export default function Room() {
                                         return (
                                             <div
                                                 key={color}
-                                                className={`relative flex min-h-0 flex-col justify-between overflow-hidden rounded-[20px] border p-3 transition sm:rounded-[22px] sm:p-4 ${
+                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-4 ${
                                                     occupied
                                                         ? 'border-line shadow-card bg-white'
                                                         : 'border-line/90 bg-white/70 hover:bg-white'
@@ -953,12 +970,11 @@ export default function Room() {
                                                         : undefined
                                                 }
                                             >
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <div className="flex min-w-0 items-center gap-2">
-                                                        <span
-                                                            className="ludo-token h-6 w-6 shrink-0 rounded-full border-2 border-white sm:h-7 sm:w-7"
+                                                <div className="flex items-center justify-between gap-1">
+                                                    <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+                                                        <LudoPin
+                                                            className="h-5 w-5 shrink-0 min-[400px]:h-6 min-[400px]:w-6 sm:h-7 sm:w-7"
                                                             style={tokenStyle}
-                                                            aria-hidden="true"
                                                         />
                                                         <span
                                                             className="truncate text-xs font-semibold sm:text-sm"
@@ -972,7 +988,7 @@ export default function Room() {
 
                                                     {occupant ? (
                                                         <span
-                                                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold sm:px-2 sm:text-[10px] ${
                                                                 occupant.is_ready
                                                                     ? 'bg-success/10 text-success-ink'
                                                                     : 'bg-warning/10 text-warning-ink'
@@ -999,7 +1015,7 @@ export default function Room() {
                                                     <div
                                                         className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}
                                                     >
-                                                        <span className="ludo-token room-seat-token" />
+                                                        <LudoPin className="room-seat-token" />
                                                         <span className="room-seat-piece-base" />
                                                     </div>
                                                     <div className="room-seat-marker room-seat-marker-one" />
@@ -1010,7 +1026,7 @@ export default function Room() {
                                                     <div className="mt-auto flex items-center justify-between gap-2 pt-2">
                                                         <div className="flex min-w-0 items-center gap-2.5">
                                                             <span
-                                                                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold sm:h-10 sm:w-10 sm:text-sm"
+                                                                className="hidden h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold min-[400px]:grid sm:h-10 sm:w-10 sm:text-sm"
                                                                 style={{
                                                                     background:
                                                                         palette.soft,
@@ -1027,13 +1043,13 @@ export default function Room() {
                                                                         occupant.name
                                                                     }
                                                                 </p>
-                                                                <p className="text-ink-muted text-[11px] leading-tight">
+                                                                <p className="text-ink-muted truncate text-[11px] leading-tight">
                                                                     {isYou
                                                                         ? occupant.is_host
-                                                                            ? 'Kamu · Tuan rumah'
+                                                                            ? 'Kamu · Host'
                                                                             : 'Kamu · Tamu'
                                                                         : occupant.is_host
-                                                                          ? 'Tuan rumah'
+                                                                          ? 'Host'
                                                                           : 'Pemain'}
                                                                 </p>
                                                             </div>
@@ -1050,7 +1066,7 @@ export default function Room() {
                                                                         null,
                                                                     )
                                                                 }
-                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink shrink-0 rounded-xl border bg-white px-2.5 py-1 text-[11px] font-semibold transition"
+                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex min-h-11 shrink-0 items-center rounded-xl border bg-white px-2.5 text-[11px] font-semibold transition"
                                                             >
                                                                 Berdiri
                                                             </button>
@@ -1068,7 +1084,7 @@ export default function Room() {
                                                                     color,
                                                                 )
                                                             }
-                                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-8 items-center rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-9 sm:px-3"
+                                                            className="border-line text-ink hover:bg-surface-muted inline-flex min-h-11 items-center rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
                                                         >
                                                             Duduk di sini
                                                         </button>
@@ -1081,7 +1097,7 @@ export default function Room() {
                                                                 )
                                                             }
                                                             aria-label={`Undang ke kursi ${config.label}`}
-                                                            className="text-brand-ink hover:bg-brand/10 inline-flex h-8 items-center gap-1 rounded-xl px-2 text-xs font-semibold transition sm:h-9 sm:px-2.5"
+                                                            className="text-brand-ink hover:bg-brand/10 inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold transition sm:px-2.5"
                                                         >
                                                             <LinkIcon className="h-3.5 w-3.5" />
                                                             <span className="hidden sm:inline">
@@ -1097,7 +1113,7 @@ export default function Room() {
                             </section>
 
                             <aside className="hidden min-h-0 flex-col md:flex">
-                                <section className="border-line shadow-card flex min-h-0 flex-1 flex-col rounded-[22px] border bg-white p-4">
+                                <section className="border-line shadow-card flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[22px] border bg-white p-4">
                                     <div className="mb-4 flex items-center justify-between gap-2">
                                         <h1 className="text-ink text-base font-semibold tracking-tight">
                                             Pengaturan meja
@@ -1169,22 +1185,27 @@ export default function Room() {
                                                     !allReady || pendingAction
                                                 }
                                                 onClick={handleStartMatch}
+                                                aria-busy={pendingAction}
                                                 className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white shadow-[0_10px_24px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
                                             >
-                                                <DiceIcon className="h-4 w-4" />
-                                                Mulai main
+                                                <DiceIcon
+                                                    className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
+                                                />
+                                                {pendingAction
+                                                    ? 'Memulai…'
+                                                    : 'Mulai main'}
                                             </button>
                                         ) : (
                                             <div className="bg-surface-muted text-ink-muted inline-flex h-11 items-center justify-center rounded-xl px-3 text-center text-xs font-semibold">
                                                 {allReady
-                                                    ? 'Semua siap · Menunggu tuan rumah'
-                                                    : 'Menunggu tuan rumah memulai'}
+                                                    ? 'Semua siap · Menunggu host'
+                                                    : 'Menunggu host memulai'}
                                             </div>
                                         )}
 
                                         <p className="text-ink-muted pt-1 text-center text-[11px] leading-4">
                                             {startBlockedReason ??
-                                                'Semua pemain sudah siap. Tuan rumah bisa memulai permainan.'}
+                                                'Semua pemain sudah siap. Host bisa memulai permainan.'}
                                         </p>
                                     </div>
                                 </section>
@@ -1223,15 +1244,20 @@ export default function Room() {
                                         type="button"
                                         disabled={!allReady || pendingAction}
                                         onClick={handleStartMatch}
+                                        aria-busy={pendingAction}
                                         className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed"
                                     >
-                                        <DiceIcon className="h-4 w-4" />
-                                        Mulai main
+                                        <DiceIcon
+                                            className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
+                                        />
+                                        {pendingAction
+                                            ? 'Memulai…'
+                                            : 'Mulai main'}
                                     </button>
                                 ) : (
                                     <div className="bg-surface-muted text-ink-muted inline-flex h-11 flex-1 items-center justify-center rounded-xl px-2 text-center text-[11px] font-semibold">
                                         {allReady
-                                            ? 'Tunggu tuan rumah'
+                                            ? 'Tunggu host'
                                             : 'Menunggu siap'}
                                     </div>
                                 )}
