@@ -1217,13 +1217,15 @@ export default function Play() {
                                     <SoundOffIcon className="h-4 w-4" />
                                 )}
                             </button>
-                            <span className="border-line text-ink-muted hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[10px] font-semibold min-[380px]:inline-flex sm:text-[11px]">
-                                <span className="relative flex h-1.5 w-1.5">
-                                    <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
-                                    <span className="bg-ludo-green relative inline-flex h-1.5 w-1.5 rounded-full" />
+                            {!room && (
+                                <span className="border-line text-ink-muted hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[10px] font-semibold min-[380px]:inline-flex sm:text-[11px]">
+                                    <span className="relative flex h-1.5 w-1.5">
+                                        <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
+                                        <span className="bg-ludo-green relative inline-flex h-1.5 w-1.5 rounded-full" />
+                                    </span>
+                                    Demo lokal
                                 </span>
-                                Demo lokal
-                            </span>
+                            )}
                             {screen === 'game' && (
                                 <button
                                     type="button"
