@@ -1,6 +1,7 @@
 import Dice from '@/Components/Game/Dice';
 import {
     ChevronLeftIcon,
+    CloseIcon,
     DiceIcon,
     RefreshIcon,
     SoundOffIcon,
@@ -40,7 +41,8 @@ import {
     unlockAudio,
 } from '@/lib/sound';
 import { User } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { echo, echoIsConfigured } from '@laravel/echo-react';
 import {
     FormEvent,
     useCallback,
@@ -507,6 +509,12 @@ export default function Play() {
         } | null;
     };
     const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
+    const roomBluePlayer = room?.players[0] ?? null;
+    const roomGreenPlayer = room?.players[1] ?? null;
+    const myRoomColor: PlayerId =
+        room && me && roomBluePlayer && me.id !== roomBluePlayer.id
+            ? 'green'
+            : 'blue';
     const roomOtherPlayer = room?.players.find((p) => p.id !== me?.id);
 
     const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
@@ -519,22 +527,25 @@ export default function Play() {
     const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [resultModalOpen, setResultModalOpen] = useState(false);
+    const [endGameModalOpen, setEndGameModalOpen] = useState(false);
+    const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
+    const rollPendingRef = useRef(false);
+    const seenActionsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
         if (!room) {
             return;
         }
 
-        const other = room.players.find((p) => p.id !== me?.id);
         dispatch({
             type: 'START',
-            human: 'blue',
+            human: myRoomColor,
             names: {
-                blue: accountName,
-                green: other?.name ?? 'Lawan',
+                blue: roomBluePlayer?.name ?? 'Pemain 1',
+                green: roomGreenPlayer?.name ?? 'Pemain 2',
             },
             now: Date.now(),
         });
@@ -609,6 +620,10 @@ export default function Play() {
     }, [state.winner, state.human]);
 
     useEffect(() => {
+        if (room) {
+            return;
+        }
+
         if (
             state.turn === state.human ||
             state.phase !== 'idle' ||
@@ -622,11 +637,15 @@ export default function Play() {
         }, 900);
 
         return () => window.clearTimeout(timeout);
-    }, [state.turn, state.phase, state.winner, state.human]);
+    }, [room, state.turn, state.phase, state.winner, state.human]);
 
     const animateMove = useCallback(
-        async (tokenIndex: number) => {
+        async (tokenIndex: number, fromRemote = false) => {
             if (movingRef.current || state.phase !== 'choosing') {
+                return;
+            }
+
+            if (room && !fromRemote && state.turn !== state.human) {
                 return;
             }
 
@@ -636,6 +655,22 @@ export default function Play() {
 
             if (!move) {
                 return;
+            }
+
+            if (room && !fromRemote) {
+                const csrf =
+                    document
+                        .querySelector('meta[name="csrf-token"]')
+                        ?.getAttribute('content') ?? '';
+                void fetch(route('rooms.match.move', { code: room.code }), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                        Accept: 'application/json',
+                    },
+                    body: JSON.stringify({ token_index: tokenIndex }),
+                });
             }
 
             const color = state.turn;
@@ -685,8 +720,98 @@ export default function Play() {
             setMovingToken(null);
             movingRef.current = false;
         },
-        [state.phase, state.legalMoves, state.tokens, state.turn],
+        [room, state.phase, state.legalMoves, state.tokens, state.turn, state.human],
     );
+
+    const animateMoveRef = useRef(animateMove);
+    animateMoveRef.current = animateMove;
+    const stateTurnRef = useRef(state.turn);
+    stateTurnRef.current = state.turn;
+
+    useEffect(() => {
+        if (!room?.code || !echoIsConfigured()) {
+            return;
+        }
+
+        const channelName = `room.${room.code}`;
+        const channel = echo().channel(channelName);
+
+        channel.listen(
+            '.match.action',
+            (payload: {
+                action?: {
+                    action_id?: string;
+                    type?: 'roll' | 'move' | 'end';
+                    player_id?: number;
+                    value?: number;
+                    token_index?: number;
+                };
+            }) => {
+                const action = payload?.action;
+                if (!action) {
+                    return;
+                }
+
+                if (action.action_id) {
+                    if (seenActionsRef.current.has(action.action_id)) {
+                        return;
+                    }
+                    seenActionsRef.current.add(action.action_id);
+                }
+
+                if (action.type === 'end') {
+                    router.visit(route('home'));
+                    return;
+                }
+
+                const expectedPlayerId =
+                    stateTurnRef.current === 'blue'
+                        ? roomBluePlayer?.id
+                        : roomGreenPlayer?.id;
+
+                if (
+                    expectedPlayerId !== undefined &&
+                    action.player_id !== expectedPlayerId
+                ) {
+                    return;
+                }
+
+                if (action.type === 'roll' && typeof action.value === 'number') {
+                    void unlockAudio();
+                    dispatch({ type: 'ROLL_START', value: action.value });
+                    return;
+                }
+
+                if (
+                    action.type === 'move' &&
+                    typeof action.token_index === 'number' &&
+                    action.player_id !== me?.id
+                ) {
+                    void animateMoveRef.current(action.token_index, true);
+                }
+            },
+        );
+
+        return () => {
+            echo().leave(channelName);
+        };
+    }, [room?.code, roomBluePlayer?.id, roomGreenPlayer?.id, me?.id]);
+
+    useEffect(() => {
+        if (!endGameModalOpen) {
+            return;
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !endingGame) {
+                setEndGameModalOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [endGameModalOpen, endingGame]);
 
     useEffect(() => {
         if (
@@ -694,6 +819,10 @@ export default function Play() {
             state.legalMoves.length === 0 ||
             state.winner
         ) {
+            return;
+        }
+
+        if (room && state.turn !== state.human) {
             return;
         }
 
@@ -737,13 +866,18 @@ export default function Play() {
                           )
                         : undefined;
 
+                const canClickMove =
+                    Boolean(move) &&
+                    !isMoving &&
+                    (!room || state.turn === state.human);
+
                 return {
                     id: `${color}-${tokenIndex}`,
                     color,
                     point: tokenPoint(color, displayPosition, tokenIndex),
-                    legal: Boolean(move) && !isMoving,
+                    legal: canClickMove,
                     moving: isMoving,
-                    onClick: move
+                    onClick: canClickMove
                         ? () => {
                               void animateMove(tokenIndex);
                           }
@@ -879,9 +1013,73 @@ export default function Play() {
             : `inset 0 0 0 1px ${rollPalette.base}2e`,
     };
 
-    const handleRoll = () => {
+    const handleRoll = async () => {
+        if (!canRoll) {
+            return;
+        }
+
         void unlockAudio();
-        dispatch({ type: 'ROLL_START', value: randomDie() });
+
+        if (!room) {
+            dispatch({ type: 'ROLL_START', value: randomDie() });
+            return;
+        }
+
+        if (rollPendingRef.current) {
+            return;
+        }
+
+        rollPendingRef.current = true;
+        try {
+            const csrf =
+                document
+                    .querySelector('meta[name="csrf-token"]')
+                    ?.getAttribute('content') ?? '';
+            const response = await fetch(
+                route('rooms.match.roll', { code: room.code }),
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                        Accept: 'application/json',
+                    },
+                },
+            );
+
+            if (response.ok) {
+                const data = (await response.json()) as {
+                    action?: { action_id?: string; value?: number };
+                };
+                const action = data?.action;
+                if (action?.action_id && !seenActionsRef.current.has(action.action_id)) {
+                    seenActionsRef.current.add(action.action_id);
+                    if (typeof action.value === 'number') {
+                        dispatch({ type: 'ROLL_START', value: action.value });
+                    }
+                }
+            }
+        } finally {
+            rollPendingRef.current = false;
+        }
+    };
+
+    const handleConfirmEndGame = () => {
+        if (!room || endingGame) {
+            return;
+        }
+        cue(playUiSound);
+        setEndingGame(true);
+        router.post(
+            route('rooms.end', { code: room.code }),
+            {},
+            {
+                onFinish: () => {
+                    setEndingGame(false);
+                    setEndGameModalOpen(false);
+                },
+            },
+        );
     };
 
     const cue = (sound: () => void) => {
@@ -984,6 +1182,18 @@ export default function Play() {
                                     />
                                     {state.names[state.human]}
                                 </span>
+                            )}
+                            {room && screen === 'game' && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        cue(playUiSound);
+                                        setEndGameModalOpen(true);
+                                    }}
+                                    className="border-danger/30 bg-danger/10 text-danger hover:bg-danger/15 inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-semibold tracking-wide uppercase transition"
+                                >
+                                    End Game
+                                </button>
                             )}
                             <button
                                 type="button"
@@ -1490,6 +1700,69 @@ export default function Play() {
                     onOpenSetup={openSetup}
                     onClose={() => setResultModalOpen(false)}
                 />
+            )}
+
+            {endGameModalOpen && room && (
+                <div
+                    className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="end-game-title"
+                    onClick={(event) => {
+                        if (
+                            event.target === event.currentTarget &&
+                            !endingGame
+                        ) {
+                            setEndGameModalOpen(false);
+                        }
+                    }}
+                >
+                    <div className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h2
+                                    id="end-game-title"
+                                    className="text-ink text-base font-semibold"
+                                >
+                                    Akhiri permainan?
+                                </h2>
+                                <p className="text-ink-muted mt-1 text-xs leading-relaxed">
+                                    Pertandingan di ruang {room.code} akan
+                                    dihentikan untuk semua pemain dan kamu akan
+                                    kembali ke beranda.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={endingGame}
+                                onClick={() => setEndGameModalOpen(false)}
+                                aria-label="Tutup konfirmasi"
+                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition"
+                            >
+                                <CloseIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="mt-5 flex items-center gap-2">
+                            <button
+                                type="button"
+                                disabled={endingGame}
+                                onClick={() => setEndGameModalOpen(false)}
+                                className="border-line text-ink hover:bg-surface-muted inline-flex h-10 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                            >
+                                Lanjut main
+                            </button>
+                            <button
+                                type="button"
+                                disabled={endingGame}
+                                onClick={handleConfirmEndGame}
+                                className="bg-danger hover:bg-danger/90 inline-flex h-10 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition disabled:opacity-60"
+                            >
+                                {endingGame ? 'Mengakhiri…' : 'Ya, akhiri'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     );

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\MatchAction;
 use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -290,5 +292,88 @@ class RoomController extends Controller
         broadcast(new RoomUpdated($room));
 
         return redirect()->route('play', ['room' => $room->code]);
+    }
+
+    public function roll(Request $request, string $code): JsonResponse
+    {
+        $token = self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        $player = $room->players()->where('player_token', $token)->first();
+        if (! $player) {
+            abort(403, 'Kamu bukan peserta ruang ini.');
+        }
+
+        if ($room->status !== 'started') {
+            return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
+        }
+
+        $action = [
+            'action_id' => (string) Str::uuid(),
+            'type' => 'roll',
+            'player_id' => $player->id,
+            'value' => random_int(1, 6),
+        ];
+
+        broadcast(new MatchAction($room->code, $action));
+
+        return response()->json(['ok' => true, 'action' => $action]);
+    }
+
+    public function move(Request $request, string $code): JsonResponse
+    {
+        $validated = $request->validate([
+            'token_index' => ['required', 'integer', 'min:0', 'max:3'],
+        ]);
+
+        $token = self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        $player = $room->players()->where('player_token', $token)->first();
+        if (! $player) {
+            abort(403, 'Kamu bukan peserta ruang ini.');
+        }
+
+        if ($room->status !== 'started') {
+            return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
+        }
+
+        $action = [
+            'action_id' => (string) Str::uuid(),
+            'type' => 'move',
+            'player_id' => $player->id,
+            'token_index' => (int) $validated['token_index'],
+        ];
+
+        broadcast(new MatchAction($room->code, $action));
+
+        return response()->json(['ok' => true, 'action' => $action]);
+    }
+
+    public function end(Request $request, string $code): RedirectResponse
+    {
+        $token = self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        $player = $room->players()->where('player_token', $token)->first();
+        if (! $player) {
+            abort(403, 'Kamu bukan peserta ruang ini.');
+        }
+
+        if ($room->status !== 'ended') {
+            $room->status = 'ended';
+            $room->save();
+
+            $room->refresh()->load('players');
+            broadcast(new RoomUpdated($room));
+            broadcast(new MatchAction($room->code, [
+                'action_id' => (string) Str::uuid(),
+                'type' => 'end',
+                'player_id' => $player->id,
+                'ended_by' => $player->name,
+            ]));
+        }
+
+        return redirect()->route('home');
     }
 }

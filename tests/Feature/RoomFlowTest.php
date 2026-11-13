@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Events\MatchAction;
 use App\Events\RoomUpdated;
 use App\Models\Room;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -115,5 +116,29 @@ class RoomFlowTest extends TestCase
                 ->component('Play')
                 ->where('room.code', $room->code)
                 ->has('room.players', 2));
+
+        // Roll & move broadcast MatchAction to all players in the room
+        Event::fake([MatchAction::class, RoomUpdated::class]);
+
+        $this->postJson("/rooms/{$room->code}/match/roll")
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('action.type', 'roll');
+
+        Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'roll');
+
+        $this->postJson("/rooms/{$room->code}/match/move", ['token_index' => 0])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('action.type', 'move');
+
+        Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'move');
+
+        // Ending the game updates status and broadcasts end action
+        $this->post("/rooms/{$room->code}/end")
+            ->assertRedirect(route('home'));
+
+        $this->assertSame('ended', $room->fresh()->status);
+        Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'end');
     }
 }

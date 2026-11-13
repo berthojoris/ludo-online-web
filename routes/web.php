@@ -18,6 +18,9 @@ Route::post('/rooms/{code}/seat', [RoomController::class, 'selectSeat'])->name('
 Route::post('/rooms/{code}/name', [RoomController::class, 'updateName'])->name('rooms.name');
 Route::post('/rooms/{code}/ready', [RoomController::class, 'toggleReady'])->name('rooms.ready');
 Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('rooms.start');
+Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
+Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
+Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
