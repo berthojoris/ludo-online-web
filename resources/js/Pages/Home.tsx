@@ -1,6 +1,6 @@
 import Dice from '@/Components/Game/Dice';
 import HowItWorksModal from '@/Components/Game/HowItWorksModal';
-import { ArrowRightIcon, DiceIcon, InfoIcon } from '@/Components/Game/Icons';
+import { InfoIcon } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
@@ -199,29 +199,19 @@ export default function Home() {
                             menghalangi permainanmu.
                         </p>
 
-                        <div className="mt-[clamp(8px,1.8dvh,32px)] flex w-full max-w-md flex-col gap-2 sm:max-w-lg sm:flex-row sm:items-center sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:flex-col [@media(max-height:520px)_and_(orientation:landscape)]:items-stretch [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
+                        <div className="mt-[clamp(8px,1.8dvh,32px)] flex w-full max-w-md gap-2 sm:max-w-lg sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
                             <Link
-                                href={route('play')}
-                                className="group bg-brand hover:bg-brand-dark inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:h-14 sm:gap-2.5 sm:px-5 sm:text-base [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:text-sm"
+                                href={route('room')}
+                                className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
                             >
-                                <DiceIcon className="h-4.5 w-4.5 sm:h-5 sm:w-5 [@media(max-height:520px)_and_(orientation:landscape)]:h-4.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-4.5" />
-                                Main sekarang
-                                <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5 sm:h-4.5 sm:w-4.5 [@media(max-height:520px)_and_(orientation:landscape)]:h-4 [@media(max-height:520px)_and_(orientation:landscape)]:w-4" />
+                                Buat ruang
                             </Link>
-                            <div className="flex gap-2 sm:gap-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
-                                <Link
-                                    href={route('room')}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-2xl border bg-white px-5 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-3"
-                                >
-                                    Buat ruang
-                                </Link>
-                                <Link
-                                    href={`${route('room')}?join=1`}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-2xl border bg-white px-5 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-3"
-                                >
-                                    Gabung ruang
-                                </Link>
-                            </div>
+                            <Link
+                                href={`${route('room')}?join=1`}
+                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-2xl border bg-white px-5 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
+                            >
+                                Gabung ruang
+                            </Link>
                         </div>
 
                         <div className="text-ink-muted mt-[clamp(6px,1.6dvh,28px)] flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pb-[clamp(6px,1.6dvh,40px)] text-[10px] font-medium sm:text-xs lg:justify-start lg:pb-0 [@media(max-height:520px)_and_(orientation:landscape)]:mt-2 [@media(max-height:520px)_and_(orientation:landscape)]:justify-start [@media(max-height:520px)_and_(orientation:landscape)]:pb-0 [@media(max-height:520px)_and_(orientation:landscape)]:text-[9px]">

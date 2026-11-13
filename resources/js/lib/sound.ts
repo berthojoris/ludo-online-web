@@ -597,6 +597,24 @@ export function playTurnSound(localPlayer: boolean): void {
     });
 }
 
+/** A short prompt when the local player needs to choose a token. */
+export function playChooseTokenSound(): void {
+    const context = canPlay();
+    if (!context) return;
+
+    const now = context.currentTime;
+    [784, 1046.5].forEach((frequency, index) => {
+        tone(context, {
+            start: now + index * 0.11,
+            duration: 0.18,
+            frequency,
+            type: 'sine',
+            gain: 0.035,
+            wet: 0.15,
+        });
+    });
+}
+
 /** Gentle descending cue when a roll has no legal move. */
 export function playNoMoveSound(): void {
     const context = canPlay();

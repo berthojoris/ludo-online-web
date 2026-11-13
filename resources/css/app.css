@@ -204,6 +204,21 @@
     }
 }
 
+.legal-move-beacon {
+    position: absolute;
+    inset: -28%;
+    pointer-events: none;
+    border: 2px solid var(--legal-color);
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--legal-color) 20%, transparent);
+    animation: legal-beacon 1.3s ease-out infinite;
+}
+
+@keyframes legal-beacon {
+    0% { transform: scale(.7); opacity: .95; }
+    75%, 100% { transform: scale(1.35); opacity: 0; }
+}
+
 @keyframes turn-flash {
     0% {
         opacity: 0;
@@ -358,6 +373,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .legal-move-beacon {
+        animation: none !important;
+        opacity: 1;
+        transform: none;
+    }
     *,
     *::before,
     *::after {

@@ -365,6 +365,9 @@ export default function LudoBoard({
                             }`}
                             style={positionStyle}
                         >
+                            {token.legal && (
+                                <span className="legal-move-beacon" style={tokenStyle} aria-hidden="true" />
+                            )}
                             {token.onClick ? (
                                 <button
                                     type="button"

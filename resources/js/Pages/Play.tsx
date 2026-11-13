@@ -33,6 +33,7 @@ import {
     playFinishSound,
     playHopSound,
     playNoMoveSound,
+    playChooseTokenSound,
     playStartSound,
     playTurnSound,
     playUiSound,
@@ -640,6 +641,12 @@ export default function Play() {
     }, [state.turn, state.human, state.winner]);
 
     useEffect(() => {
+        if (state.phase === 'choosing' && state.turn === state.human && state.legalMoves.length > 1 && !state.winner) {
+            playChooseTokenSound();
+        }
+    }, [state.phase, state.turn, state.human, state.legalMoves.length, state.winner]);
+
+    useEffect(() => {
         if (!state.winner) {
             setResultModalOpen(false);
 
@@ -967,9 +974,9 @@ export default function Play() {
 
                 const canClickMove =
                     Boolean(move) &&
-                    !isMoving &&
-                    !isReturning &&
-                    (!room || state.turn === state.human);
+                    !movingToken &&
+                    returningTokens.length === 0 &&
+                    state.turn === state.human;
 
                 return {
                     id: `${color}-${tokenIndex}`,

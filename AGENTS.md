@@ -1,4 +1,4 @@
-<laravel-boost-guidelines>
+<laravel-guidelines>
 # Laravel Application
 
 This repository contains a Laravel application. Complete the following setup before working on the user's request.
@@ -34,17 +34,10 @@ Linux:
 
 After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
 
-## Agent Setup
+## Laravel Boost
 
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+Do not install, use, or configure the `laravel/boost` package or its MCP server in this project. Do not run `boost:install` or generate Boost skills or guidelines here.
+</laravel-guidelines>
 
 <viewport-fitting-guidelines>
 # Mandatory: every screen must fit the device viewport 100%
