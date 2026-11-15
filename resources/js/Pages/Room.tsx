@@ -1,3 +1,4 @@
+import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import {
     ArrowRightIcon,
     CheckIcon,
@@ -14,6 +15,7 @@ import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
 import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
+import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
@@ -312,6 +314,17 @@ function RoomContent() {
         serverMe ??
         null;
     const isHost = Boolean(currentMe?.is_host);
+
+    const seatedInLobby =
+        viewMode === 'lobby' &&
+        Boolean(liveRoom) &&
+        Boolean(currentMe) &&
+        liveRoom?.status === 'waiting';
+    const exitGuard = useGameExitGuard(
+        seatedInLobby,
+        route('home'),
+        `room:${liveRoom?.code ?? 'none'}`,
+    );
     const playerCount: PlayerCount = liveRoom?.max_players ?? 4;
     const activeSeats = SEATS_BY_COUNT[playerCount];
     const players = liveRoom?.players ?? [];
@@ -517,26 +530,37 @@ function RoomContent() {
 
             <div className="bg-canvas flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
                 <header className="border-line shrink-0 border-b bg-white/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
-                    <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-6">
+                    <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:h-14 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
                                 href={route('home')}
+                                onClick={exitGuard.blockLink}
                                 aria-label="Kembali ke beranda"
                                 className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition"
                             >
                                 <ChevronLeftIcon className="h-4 w-4" />
                             </Link>
-                            <Link href={route('home')} className="rounded-lg">
-                                <Logo
-                                    className="h-7 w-7"
-                                    withWordmark
-                                    compact
-                                />
+                            <Link
+                                href={route('home')}
+                                onClick={exitGuard.blockLink}
+                                aria-label="Beranda Ludo Arena"
+                                className="shrink-0 rounded-lg"
+                            >
+                                <span className="inline-flex min-[430px]:hidden">
+                                    <Logo className="h-7 w-7" />
+                                </span>
+                                <span className="hidden min-[430px]:inline-flex">
+                                    <Logo
+                                        className="h-7 w-7"
+                                        withWordmark
+                                        compact
+                                    />
+                                </span>
                             </Link>
                         </div>
 
                         <div
-                            className="border-line bg-canvas inline-flex items-center rounded-full border p-0.5"
+                            className="border-line bg-canvas inline-flex shrink-0 items-center rounded-full border p-0.5"
                             role="tablist"
                             aria-label="Mode ruang"
                         >
@@ -568,7 +592,7 @@ function RoomContent() {
                             </button>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5">
                             {viewMode === 'lobby' && liveRoom && (
                                 <button
                                     type="button"
@@ -705,16 +729,16 @@ function RoomContent() {
                         </div>
                     </main>
                 ) : (
-                    <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 pt-2.5 pb-[max(10px,env(safe-area-inset-bottom))] sm:px-6 sm:pt-4 sm:pb-4">
-                        <div className="grid min-h-0 flex-1 gap-2.5 sm:gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px]">
-                            <section className="flex min-h-0 flex-col gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
-                                <div className="border-line shadow-card flex shrink-0 items-center justify-between gap-1 rounded-2xl border bg-white px-2.5 py-2 sm:gap-2 sm:px-4 sm:py-3">
+                    <main className="mx-auto flex min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col pt-2.5 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-4 sm:pb-4">
+                        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2.5 sm:gap-4 md:my-auto md:max-h-[580px] md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px]">
+                            <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
+                                <div className="border-line shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white px-2.5 py-2 sm:px-4 sm:py-3">
                                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
-                                        <div>
+                                        <div className="min-w-0">
                                             <p className="text-ink-muted text-[11px] leading-none font-medium">
                                                 Kode ruang
                                             </p>
-                                            <p className="text-ink mt-1 font-mono text-base font-semibold tracking-[0.14em] sm:text-2xl sm:tracking-[0.22em]">
+                                            <p className="text-ink mt-1 font-mono text-sm font-semibold tracking-[0.12em] min-[360px]:text-base min-[360px]:tracking-[0.14em] sm:text-2xl sm:tracking-[0.22em]">
                                                 {liveRoom.code}
                                             </p>
                                         </div>
@@ -724,13 +748,13 @@ function RoomContent() {
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex shrink-0 items-center gap-1.5">
                                         <button
                                             type="button"
                                             onClick={() =>
                                                 copy(liveRoom.code, 'code')
                                             }
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-11 items-center gap-1 rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
+                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 items-center gap-1 rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:px-3"
                                         >
                                             {copyState === 'code' ? (
                                                 <>
@@ -749,12 +773,18 @@ function RoomContent() {
                                             onClick={() =>
                                                 copy(shareLink, 'link')
                                             }
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
+                                            aria-label="Salin tautan ruang"
+                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:min-w-11 sm:px-3"
                                         >
                                             {copyState === 'link' ? (
                                                 <>
                                                     <CheckIcon className="text-success-ink h-3.5 w-3.5" />
-                                                    <span>Tautan tersalin</span>
+                                                    <span className="hidden sm:inline">
+                                                        Tautan tersalin
+                                                    </span>
+                                                    <span className="sm:hidden">
+                                                        Tersalin
+                                                    </span>
                                                 </>
                                             ) : (
                                                 <>
@@ -769,104 +799,120 @@ function RoomContent() {
                                 </div>
 
                                 {/* Joined players & display name bar */}
-                                <div className="border-line flex shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white/85 px-3 py-2 sm:px-4">
-                                    <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
-                                        <span className="text-ink-muted mr-1 text-[11px] font-medium">
-                                            Di ruang:
-                                        </span>
-                                        {players.map((player) => {
-                                            const seatCfg = player.seat_color
-                                                ? PLAYER_CONFIG[
-                                                      player.seat_color
-                                                  ]
-                                                : null;
+                                <div className="border-line shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white px-2.5 py-2 sm:gap-3 sm:px-4 sm:py-3">
+                                    <div
+                                        className={`min-w-0 flex-1 ${editingName ? 'hidden sm:block' : ''}`}
+                                    >
+                                        <p className="text-ink-muted text-[11px] leading-none font-medium">
+                                            Pemain di ruang
+                                        </p>
+                                        <div className="mt-1.5 flex min-w-0 items-center gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible">
+                                            {players.map((player) => {
+                                                const seatCfg = player.seat_color
+                                                    ? PLAYER_CONFIG[
+                                                          player.seat_color
+                                                      ]
+                                                    : null;
 
-                                            return (
-                                                <span
-                                                    key={player.id}
-                                                    className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold"
-                                                >
+                                                return (
                                                     <span
-                                                        className="h-2 w-2 rounded-full"
-                                                        style={{
-                                                            backgroundColor:
-                                                                seatCfg
-                                                                    ? seatCfg
-                                                                          .palette
-                                                                          .base
-                                                                    : '#94A3B8',
-                                                        }}
-                                                    />
-                                                    <span className="text-ink max-w-[96px] truncate">
-                                                        {player.name}
-                                                    </span>
-                                                    {player.id ===
-                                                        currentMe?.id && (
-                                                        <span className="text-ink-muted">
-                                                            (Kamu)
-                                                        </span>
-                                                    )}
-                                                    <span
-                                                        className={
-                                                            player.is_ready
-                                                                ? 'text-success-ink'
-                                                                : 'text-ink-muted'
-                                                        }
+                                                        key={player.id}
+                                                        className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:text-xs"
                                                     >
-                                                        {player.is_ready
-                                                            ? '· Siap'
-                                                            : player.seat_color
-                                                              ? ''
-                                                              : '· Pilih kursi'}
+                                                        <span
+                                                            className="h-2 w-2 shrink-0 rounded-full"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    seatCfg
+                                                                        ? seatCfg
+                                                                              .palette
+                                                                              .base
+                                                                        : '#94A3B8',
+                                                            }}
+                                                        />
+                                                        <span className="text-ink max-w-[92px] truncate sm:max-w-[128px]">
+                                                            {player.name}
+                                                        </span>
+                                                        {player.id ===
+                                                            currentMe?.id && (
+                                                            <span className="text-ink-muted">
+                                                                (Kamu)
+                                                            </span>
+                                                        )}
+                                                        <span
+                                                            className={
+                                                                player.is_ready
+                                                                    ? 'text-success-ink'
+                                                                    : 'text-ink-muted'
+                                                            }
+                                                        >
+                                                            {player.is_ready
+                                                                ? '· Siap'
+                                                                : player.seat_color
+                                                                  ? ''
+                                                                  : '· Pilih kursi'}
+                                                        </span>
                                                     </span>
-                                                </span>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {currentMe &&
                                         (editingName ? (
                                             <form
                                                 onSubmit={handleSaveName}
-                                                className="flex items-center gap-1"
+                                                className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:shrink-0 sm:flex-row sm:items-center"
                                             >
-                                                <input
-                                                    type="text"
-                                                    value={nameDraft}
-                                                    onChange={(e) =>
-                                                        setNameDraft(
-                                                            e.target.value.slice(
-                                                                0,
-                                                                24,
-                                                            ),
-                                                        )
-                                                    }
-                                                    maxLength={24}
-                                                    aria-label="Nama tampilan"
-                                                    className="border-line bg-canvas text-ink h-7 w-28 rounded-lg border px-2 text-xs font-medium focus:outline-none"
-                                                />
-                                                <button
-                                                    type="submit"
-                                                    disabled={
-                                                        !nameDraft.trim() ||
-                                                        pendingAction
-                                                    }
-                                                    className="bg-brand h-7 rounded-lg px-2 text-[11px] font-semibold text-white"
+                                                <label
+                                                    htmlFor="player-display-name"
+                                                    className="text-ink-muted text-[11px] leading-none font-medium sm:hidden"
                                                 >
-                                                    Simpan
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setEditingName(false);
-                                                        setNameDraft(
-                                                            currentMe.name,
-                                                        );
-                                                    }}
-                                                    className="text-ink-muted h-7 px-1.5 text-[11px] font-medium"
-                                                >
-                                                    Batal
-                                                </button>
+                                                    Ubah nama tampilan
+                                                </label>
+                                                <div className="flex min-w-0 items-center gap-1.5">
+                                                    <input
+                                                        id="player-display-name"
+                                                        type="text"
+                                                        autoFocus
+                                                        value={nameDraft}
+                                                        onChange={(e) =>
+                                                            setNameDraft(
+                                                                e.target.value.slice(
+                                                                    0,
+                                                                    24,
+                                                                ),
+                                                            )
+                                                        }
+                                                        maxLength={24}
+                                                        aria-label="Nama tampilan"
+                                                        className="border-line bg-canvas text-ink focus:border-brand h-10 min-w-0 flex-1 rounded-xl border px-2.5 text-base font-medium focus:bg-white focus:outline-none sm:h-11 sm:w-36 sm:flex-none sm:text-xs"
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        disabled={
+                                                            !nameDraft.trim() ||
+                                                            pendingAction
+                                                        }
+                                                        className="bg-brand hover:bg-brand-dark inline-flex h-10 shrink-0 items-center justify-center rounded-xl px-3 text-xs font-semibold text-white transition disabled:opacity-50 sm:h-11"
+                                                    >
+                                                        Simpan
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingName(
+                                                                false,
+                                                            );
+                                                            setNameDraft(
+                                                                currentMe.name,
+                                                            );
+                                                        }}
+                                                        className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center justify-center rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11"
+                                                    >
+                                                        Batal
+                                                    </button>
+                                                </div>
                                             </form>
                                         ) : (
                                             <button
@@ -877,7 +923,7 @@ function RoomContent() {
                                                     );
                                                     setEditingName(true);
                                                 }}
-                                                className="text-brand-ink shrink-0 text-[11px] font-semibold hover:underline"
+                                                className="border-line text-ink hover:bg-surface-muted inline-flex h-10 shrink-0 items-center justify-center rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:px-3.5"
                                             >
                                                 Ubah nama
                                             </button>
@@ -894,7 +940,7 @@ function RoomContent() {
                                 )}
 
                                 <div
-                                    className={`relative grid min-h-0 flex-1 gap-2.5 sm:gap-3.5 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
+                                    className={`relative grid min-h-0 min-w-0 flex-1 gap-2.5 sm:gap-3.5 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
                                     role="group"
                                     aria-label="Kursi meja Ludo"
                                 >
@@ -956,7 +1002,7 @@ function RoomContent() {
                                         return (
                                             <div
                                                 key={color}
-                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-4 ${
+                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-3.5 ${
                                                     occupied
                                                         ? 'border-line shadow-card bg-white'
                                                         : 'border-line/90 bg-white/70 hover:bg-white'
@@ -970,7 +1016,7 @@ function RoomContent() {
                                                         : undefined
                                                 }
                                             >
-                                                <div className="flex items-center justify-between gap-1">
+                                                <div className="flex min-w-0 items-center justify-between gap-1">
                                                     <div className="flex min-w-0 items-center gap-1 sm:gap-2">
                                                         <LudoPin
                                                             className="h-5 w-5 shrink-0 min-[400px]:h-6 min-[400px]:w-6 sm:h-7 sm:w-7"
@@ -1023,8 +1069,8 @@ function RoomContent() {
                                                 </div>
 
                                                 {occupant ? (
-                                                    <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-                                                        <div className="flex min-w-0 items-center gap-2.5">
+                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1.5 pt-1 sm:gap-2 sm:pt-1.5">
+                                                        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
                                                             <span
                                                                 className="hidden h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold min-[400px]:grid sm:h-10 sm:w-10 sm:text-sm"
                                                                 style={{
@@ -1037,13 +1083,13 @@ function RoomContent() {
                                                                     .charAt(0)
                                                                     .toUpperCase()}
                                                             </span>
-                                                            <div className="min-w-0">
-                                                                <p className="text-ink truncate text-sm font-semibold sm:text-base">
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-ink truncate text-xs font-semibold min-[360px]:text-sm sm:text-base">
                                                                     {
                                                                         occupant.name
                                                                     }
                                                                 </p>
-                                                                <p className="text-ink-muted truncate text-[11px] leading-tight">
+                                                                <p className="text-ink-muted truncate text-[10px] leading-tight min-[360px]:text-[11px]">
                                                                     {isYou
                                                                         ? occupant.is_host
                                                                             ? 'Kamu · Host'
@@ -1066,14 +1112,14 @@ function RoomContent() {
                                                                         null,
                                                                     )
                                                                 }
-                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex min-h-11 shrink-0 items-center rounded-xl border bg-white px-2.5 text-[11px] font-semibold transition"
+                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
                                                             >
                                                                 Berdiri
                                                             </button>
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <div className="mt-auto flex items-center justify-between gap-1.5 pt-2">
+                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1 pt-1 sm:gap-1.5 sm:pt-1.5">
                                                         <button
                                                             type="button"
                                                             disabled={
@@ -1084,9 +1130,14 @@ function RoomContent() {
                                                                     color,
                                                                 )
                                                             }
-                                                            className="border-line text-ink hover:bg-surface-muted inline-flex min-h-11 items-center rounded-xl border bg-white px-2 text-xs font-semibold transition sm:px-3"
+                                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition min-[360px]:text-xs sm:h-11 sm:flex-none sm:px-3"
                                                         >
-                                                            Duduk di sini
+                                                            <span className="truncate min-[360px]:hidden">
+                                                                Duduk
+                                                            </span>
+                                                            <span className="hidden truncate min-[360px]:inline">
+                                                                Duduk di sini
+                                                            </span>
                                                         </button>
                                                         <button
                                                             type="button"
@@ -1097,7 +1148,7 @@ function RoomContent() {
                                                                 )
                                                             }
                                                             aria-label={`Undang ke kursi ${config.label}`}
-                                                            className="text-brand-ink hover:bg-brand/10 inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold transition sm:px-2.5"
+                                                            className="text-brand-ink hover:bg-brand/10 inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-semibold transition sm:h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
                                                         >
                                                             <LinkIcon className="h-3.5 w-3.5" />
                                                             <span className="hidden sm:inline">
@@ -1212,8 +1263,8 @@ function RoomContent() {
                             </aside>
                         </div>
 
-                        <div className="border-line shadow-card mt-2.5 shrink-0 rounded-2xl border bg-white p-2 md:hidden">
-                            <div className="flex items-center gap-2">
+                        <div className="border-line shadow-card mt-2.5 min-w-0 shrink-0 rounded-2xl border bg-white p-2 md:hidden">
+                            <div className="flex min-w-0 items-center gap-2">
                                 <button
                                     type="button"
                                     disabled={
@@ -1322,6 +1373,23 @@ function RoomContent() {
                     </div>
                 </div>
             )}
+
+            <ConfirmLeaveModal
+                open={exitGuard.open}
+                title="Keluar dari ruang?"
+                description={
+                    <>
+                        Kamu masih duduk di ruang {liveRoom?.code ?? 'ini'}.
+                        Ruang tetap aktif, jadi kamu bisa kembali dengan membuka
+                        tautan atau memasukkan kode ruang yang sama. Yakin ingin
+                        keluar?
+                    </>
+                }
+                cancelLabel="Tetap di ruang"
+                confirmLabel="Ya, keluar"
+                onCancel={exitGuard.cancel}
+                onConfirm={exitGuard.leave}
+            />
         </>
     );
 }

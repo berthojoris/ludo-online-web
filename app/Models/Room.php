@@ -61,6 +61,7 @@ class Room extends Model
             'host_advantage' => $this->host_advantage,
             'status' => $this->status,
             'starting_player_id' => $this->starting_player_id,
+            'started_at' => $this->started_at?->toIso8601String(),
             'match_state' => $this->match_state,
             'players' => $this->players->map(fn (RoomPlayer $player) => [
                 'id' => $player->id,

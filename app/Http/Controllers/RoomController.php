@@ -7,6 +7,7 @@ use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\MatchRules;
+use App\Services\PlayerResume;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,8 @@ class RoomController extends Controller
 
             return $room;
         });
+
+        PlayerResume::remember($request, $room->players()->where('player_token', $token)->firstOrFail(), $room->code);
 
         $request->session()->put('ludo_host_room_code', $room->code);
 
@@ -298,10 +301,10 @@ class RoomController extends Controller
 
     public function roll(Request $request, string $code): JsonResponse
     {
-        $token = self::playerToken($request);
+        self::playerToken($request);
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
-        $player = $room->players()->where('player_token', $token)->first();
+        $player = PlayerResume::find($request, $room);
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
@@ -329,6 +332,7 @@ class RoomController extends Controller
                     $value = $other ? $other[array_rand($other)] : $value;
                 }
             }
+            $state['stats'][$index]['rolls'] = ($state['stats'][$index]['rolls'] ?? 0) + 1;
             if (MatchRules::moves($state, $index, $value)) {
                 $state['dice'] = $value;
             } else {
@@ -351,10 +355,10 @@ class RoomController extends Controller
             'token_index' => ['required', 'integer', 'min:0', 'max:3'],
         ]);
 
-        $token = self::playerToken($request);
+        self::playerToken($request);
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
-        $player = $room->players()->where('player_token', $token)->first();
+        $player = PlayerResume::find($request, $room);
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
@@ -376,7 +380,7 @@ class RoomController extends Controller
             $state['tokens'][$index][$tokenIndex] = $target;
             $colors = $state['colors'] ?? ['blue', 'green'];
             $absolute = MatchRules::absolute($index, $target, $colors);
-            $captured = false;
+            $capturedCount = 0;
             if ($absolute !== null && ! in_array($absolute, [0, 8, 13, 21, 26, 34, 39, 47], true)) {
                 foreach ($state['tokens'] as $opponentIndex => $tokens) {
                     if ($opponentIndex === $index) {
@@ -385,11 +389,14 @@ class RoomController extends Controller
                     foreach ($tokens as $i => $position) {
                         if (MatchRules::absolute($opponentIndex, $position, $colors) === $absolute) {
                             $state['tokens'][$opponentIndex][$i] = -1;
-                            $captured = true;
+                            $capturedCount++;
                         }
                     }
                 }
             }
+            $captured = $capturedCount > 0;
+            $state['stats'][$index]['captures'] = ($state['stats'][$index]['captures'] ?? 0) + $capturedCount;
+            $state['total_moves'] = ($state['total_moves'] ?? 0) + 1;
             if (count(array_filter($state['tokens'][$index], fn ($position) => $position === 56)) === 4) {
                 $state['winner'] = $index;
             } elseif ($state['dice'] !== 6 && ! $captured && $target !== 56) {
@@ -409,10 +416,10 @@ class RoomController extends Controller
 
     public function end(Request $request, string $code): RedirectResponse
     {
-        $token = self::playerToken($request);
+        self::playerToken($request);
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
-        $player = $room->players()->where('player_token', $token)->first();
+        $player = PlayerResume::find($request, $room);
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }

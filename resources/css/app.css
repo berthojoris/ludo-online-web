@@ -97,12 +97,12 @@
     }
 
     .room-seat-orbit-outer {
-        width: min(78cqw, 94cqh, 280px);
+        width: min(74cqw, 92cqh, 210px);
         background: radial-gradient(circle, color-mix(in srgb, var(--token-base) 9%, white), transparent 72%);
     }
 
     .room-seat-orbit-inner {
-        width: min(55cqw, 66cqh, 195px);
+        width: min(52cqw, 64cqh, 148px);
         border-style: dashed;
     }
 
@@ -110,7 +110,7 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        width: min(32cqw, 82cqh, 112px);
+        width: min(30cqw, 80cqh, 92px);
         aspect-ratio: 1;
         transform: translate(-50%, -50%);
     }

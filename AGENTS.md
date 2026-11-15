@@ -1,3 +1,29 @@
+<execution-guidelines>
+# Execution rules — no browser tests, deliver correct and responsive code
+
+## 1. No browser testing, ever
+- Do **not** run any test on a browser in this project: no browse MCP session, no Playwright/headless Chrome, no DevTools device emulation, no screenshots, no live-browser measurement, no automated UI checks.
+- Do not launch `php artisan serve` / `npm run dev` for the purpose of checking the UI, and do not claim viewport measurements or PASS/FAIL tables from a browser.
+- Verification happens in source and in the build only: read the CSS/JSX, then run `npm run build` (and `php artisan test` when routes, controllers, or Blade/Inertia props change).
+
+## 2. PASTIKAN KODE YANG DIHASILKAN SESUAI PERMINTAAN USER
+
+**PASTIKAN KODE YG DIHASILKAN SESUAI PERMINTAAN USER DAN RESPONSIVE DI DEVICE KECIL, SEDANG DAN BESAR**
+
+- Before writing code, restate the user's request as concrete requirements (screen, behavior, data, copy, interaction) and check every one of them against the delivered result.
+- Implement exactly what was asked: do not rename, remove, redesign, or "improve" parts of the request, and do not leave a requested item unimplemented or partially implemented.
+- If a requirement is ambiguous or conflicts with an existing rule, ask before building instead of guessing silently.
+- Before finishing, walk through the request item by item and confirm in your summary that each one is present in the code.
+
+## 3. Responsive on small, medium and large devices
+- Every screen must work on small (≤ 360px wide phones), medium (tablets, 768–1024px), and large (desktop, ≥ 1280px, including 1920×1080) viewports — portrait and landscape.
+- Use fluid sizing (`clamp()`, `%`, `fr`, `minmax(0, 1fr)`, `dvh`/`vmin`) instead of fixed `px` widths or frame heights, so layouts reflow instead of overflowing or clipping.
+- Small devices: stack columns, keep touch targets ≥ 44px, let only the intended content region scroll, and never hide required controls to force a fit.
+- Medium devices: use the extra width for side rails, multi-column grids, or larger board/hero areas rather than leaving dead space.
+- Large devices: center the content with a sensible max-width, scale type/spacing with the `clamp()` token scale, and keep the screen filled in both axes with no letterboxing.
+- Verify responsiveness by reviewing the breakpoints in the source (no browser run) and state which breakpoints were handled.
+</execution-guidelines>
+
 <laravel-guidelines>
 # Laravel Application
 
@@ -44,6 +70,8 @@ Do not install, use, or configure the `laravel/boost` package or its MCP server 
 
 Every screen/page in this app **must fill 100% of the device width and 100% of the visible viewport height**. The shell must never scroll vertically or horizontally, or leave dead gaps/letterboxing. Layout and every element size must adapt to the real device size (`dvh`/`svh`/`vmin`/`clamp()`/`grid`), not fixed pixel frames. This rule applies to every new screen and to any screen being edited. See `DESIGN.md` sections 3–6 for tokens and per-screen composition.
 
+> **Browser testing policy (overrides section 5 rules below):** do **not** run any browser testing, emulation, screenshots, or live-browser measurement for this project. No browse MCP session, no Playwright/headless Chrome script, no DevTools device emulation. Verify layout work by reading the CSS/JSX and running the build only. Section 4's browser items are informational requirements on the code, not actions to perform. See `<execution-guidelines>` at the top of this file: **PASTIKAN KODE YG DIHASILKAN SESUAI PERMINTAAN USER DAN RESPONSIVE DI DEVICE KECIL, SEDANG DAN BESAR**.
+
 ## 1. App shell
 - Root sizing: `html, body, #app { height: 100%; margin: 0; }` and `body { overflow: hidden; }`. Apply `overflow: hidden` only to the shell; lists that can grow (leaderboard, history) get their own scroll container.
 - Screen frame: `width: 100%`, `height: 100dvh` (`100vh` as fallback), `min-height: 0`, `display: grid` or `display: flex`, `overflow: hidden`.
@@ -65,34 +93,31 @@ Every screen/page in this app **must fill 100% of the device width and 100% of t
 - `height: 100vh` shells (mobile chrome crops them), fixed `px` page-frame heights, `overflow-x: auto` on the page, `position: fixed` bars without reserved space, negative margins that hide content off-screen, and `overflow: hidden` on containers that hold focusable controls.
 - Shrinking below interactive minimums (or hiding elements) just to force a fit.
 
-## 4. Acceptance checklist (run for every new screen)
-- [ ] No horizontal scrollbar at 320px CSS width.
+## 4. Acceptance checklist (review the code against this for every new screen)
+- [ ] No horizontal overflow risk at 320px CSS width (no fixed-width content wider than the viewport).
 - [ ] No vertical scroll of the app shell on any supported size; only explicitly scrollable regions scroll.
 - [ ] The screen touches all four viewport edges (no letterboxing/dead space).
-- [ ] On 360×640, header + board + player cards + action dock are all visible without scrolling.
-- [ ] Safe-area insets respected in portrait and landscape (notch, home indicator).
-- [ ] Works with mobile browser UI shown and hidden, and after orientation change.
+- [ ] On 360×640, header + board + player cards + action dock are all laid out without needing scroll.
+- [ ] Safe-area insets applied in portrait and landscape (notch, home indicator).
+- [ ] Layout survives mobile browser UI shown/hidden and orientation change (no `100vh` shell, no fixed `px` frames).
 - [ ] 200% text zoom keeps all controls reachable (reflow allowed, clipping not).
-- [ ] Verified in a real browser via the **browse MCP** (section 5) at iPhone SE (320×568), iPhone 15 Pro, Pixel 8, iPad, and desktop 1920×1080 — DevTools emulation alone is not accepted.
 - [ ] Landscape uses the board + side-rail layout and still fills the viewport in both axes.
-- [ ] Measured `scrollHeight`/`scrollWidth` and PASS/FAIL evidence reported per viewport (no estimates).
+- [ ] Small device review: works at ≤ 360px wide (stacked layout, touch targets ≥ 44px, no clipped controls).
+- [ ] Medium device review: tablet widths 768–1024px use the extra space (side rail, multi-column, larger board) with no dead gaps.
+- [ ] Large device review: ≥ 1280px (including 1920×1080) fills both axes, content centered with a sensible max-width, type/spacing scaled by `clamp()`.
+- [ ] Output matches every item the user requested (screen, behavior, data, copy, interaction) — nothing missing, renamed, or silently redesigned.
+- [ ] Sizing uses relative units so `scrollHeight`/`scrollWidth` stay within the viewport by construction.
 
-## 5. Mandatory browser verification with the browse MCP
+## 5. Verification without a browser
 
-UI work is not complete until it has been validated in a real browser. Never claim a screen "fits" based only on source review, `curl`, or a successful `vite build`.
+Do **not** run browser testing for this project. There is no browse MCP step, no Playwright/headless Chrome fallback, no DevTools device emulation, and no screenshot capture. Do not claim measured `scrollHeight`/`scrollWidth` numbers, because no live browser was opened.
 
-1. **Start the app**: `php artisan serve --host=127.0.0.1 --port=8000` and `npm run dev` (or `npm run build`), then note the URL.
-2. **Open it with the browse MCP** (`browse` MCP server; in OpenCode Code Mode use `tools.browse.*` via `execute`). Use the real Chrome session: `page.goto`, `snapshot`, `page.evaluate`, and screenshots. Do not substitute static HTML fetches for a browser check.
-3. **Measure in the live page, not from estimates**:
-   - `document.documentElement.scrollHeight <= window.innerHeight`
-   - `document.documentElement.scrollWidth <= window.innerWidth`
-   - shell `scrollHeight === clientHeight` and `scrollWidth === clientWidth` (catches clipped/overlapping content)
-   - main content bottom < footer top; the board/hero rect width === height (no distortion)
-   - every CTA/modal trigger is in the DOM, visible, and has the correct accessible name and `href`
-   - no console errors; the modal opens, closes with Escape, and returns focus to its trigger
-4. **Resize/emulate at minimum**: 320×568, 360×640, 375×667, 390×844, 414×896, 768×1024, 1024×768, 1280×800, 1366×768, 1920×1080, plus phone landscape. Check portrait and landscape.
-5. **Capture screenshots** at 320×568, a mid-size phone, and desktop, and report their paths together with a PASS/FAIL table of the measured numbers.
-6. **If the browse MCP is unavailable**, say so explicitly. A headless Chrome/Playwright script may be used only as a documented fallback, and the report must name the tool that produced the evidence. Never fabricate browser results.
+Instead, verify layout changes by:
+
+1. **Reading the code**: confirm the shell uses `100dvh`, `min-height: 0`, `min-width: 0` on flex/grid children, `clamp()` sizing, no fixed `px` frame heights, and no `overflow-x` on the page.
+2. **Running the build**: `npm run build` (and `php artisan test` when Blade/Inertia props or routes change). A successful build is the stopping point for UI work.
+3. **Stating evidence honestly**: report what you checked in the source and in the build output. Never fabricate browser results or viewport measurements.
+4. **Confirming the request and breakpoints**: in the final summary, list each requested item and where it is implemented, then name the small / medium / large breakpoints handled in the source. This is the project's substitute for a browser pass.
 </viewport-fitting-guidelines>
 
 <routing-guidelines>

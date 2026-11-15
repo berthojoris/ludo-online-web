@@ -56,3 +56,10 @@ Store authoritative `turn_deadline_at` in UTC; client renders countdown from ser
 
 ## 8. No voice
 Do not deploy LiveKit, WebRTC audio services, microphone permissions, voice tokens, or voice channels.
+
+## 9. Session continuity and accidental exit
+- `rooms.match_state` is the authoritative snapshot (tokens, turn, dice, winner, per-player rolls/captures, total moves, `started_at`). `Play.tsx` restores it with a `RESTORE` action on every mount/refresh, so a running match never restarts at zero.
+- `room_players.resume_token` plus the encrypted `ludo_resume_<CODE>` cookie (30 days, HttpOnly, SameSite=Lax) re-attach a browser to the seat it already owns after the Laravel session expires or the tab/browser closes. `ludo_last_room` remembers the last room code; authenticated users also fall back to `user_id`. Strangers never claim an occupied seat.
+- `GET /room` without a code resumes the browser's last room (redirecting to `/play?room=CODE` when it is already running). `GET /play?room=CODE` sends waiting rooms back to the lobby and ended rooms home.
+- `useGameExitGuard` blocks back/refresh/close while a match is live: `beforeunload` for refresh and tab close, a sentinel history entry plus `popstate` for the browser back button, and `ConfirmLeaveModal` for in-app links. Nothing leaves the page until the player confirms.
+- A `419` from a roll/move (session expired mid-match) reloads the page, which re-attaches the saved seat and restores the board instead of losing the match.

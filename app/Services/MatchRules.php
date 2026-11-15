@@ -8,7 +8,17 @@ class MatchRules
 
     public static function initial(int $startingPlayer, array $colors = ['blue', 'green']): array
     {
-        return ['tokens' => array_fill(0, count($colors), [-1, -1, -1, -1]), 'colors' => $colors, 'turn' => $startingPlayer, 'dice' => null, 'winner' => null];
+        $count = count($colors);
+
+        return [
+            'tokens' => array_fill(0, $count, [-1, -1, -1, -1]),
+            'colors' => $colors,
+            'turn' => $startingPlayer,
+            'dice' => null,
+            'winner' => null,
+            'stats' => array_fill(0, $count, ['rolls' => 0, 'captures' => 0]),
+            'total_moves' => 0,
+        ];
     }
 
     public static function moves(array $state, int $player, int $roll): array

@@ -1,8 +1,10 @@
+import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import Dice from '@/Components/Game/Dice';
 import {
     ChevronLeftIcon,
     CloseIcon,
     DiceIcon,
+    HashIcon,
     RefreshIcon,
     SoundOffIcon,
     SoundOnIcon,
@@ -41,6 +43,7 @@ import {
     setSoundEnabled,
     unlockAudio,
 } from '@/lib/sound';
+import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
@@ -100,6 +103,9 @@ type Action =
               turn: number;
               dice: number | null;
               winner: number | null;
+              stats?: { rolls: number; captures: number }[];
+              total_moves?: number;
+              started_at?: string | null;
           };
       }
     | {
@@ -282,27 +288,49 @@ function reducer(state: GameState, action: Action): GameState {
         const order = action.match.colors ?? PLAYER_IDS;
         const turn = order[action.match.turn];
         const tokens = { ...initialState.tokens };
+        const rolls = { ...initialState.rolls };
+        const captures = { ...initialState.captures };
         order.forEach((color, index) => {
             tokens[color] = action.match.tokens[index];
+            rolls[color] = action.match.stats?.[index]?.rolls ?? 0;
+            captures[color] = action.match.stats?.[index]?.captures ?? 0;
         });
         const winner =
             action.match.winner === null ? null : order[action.match.winner];
+        const dice = action.match.dice;
+        const moves =
+            dice === null ? [] : computeLegalMoves(tokens, turn, dice);
+        const mine = turn === state.human;
+        const restoredAt = action.match.started_at
+            ? Date.parse(action.match.started_at)
+            : state.startedAt;
+
         return {
             ...state,
             order,
             tokens,
             turn,
-            dice: action.match.dice,
+            dice,
             winner,
-            phase: winner
-                ? 'gameover'
-                : action.match.dice === null
-                  ? 'idle'
-                  : 'choosing',
-            legalMoves:
-                action.match.dice === null
-                    ? []
-                    : computeLegalMoves(tokens, turn, action.match.dice),
+            phase: winner ? 'gameover' : dice === null ? 'idle' : 'choosing',
+            legalMoves: moves,
+            rolls,
+            captures,
+            totalMoves: action.match.total_moves ?? state.totalMoves,
+            startedAt: Number.isNaN(restoredAt) ? state.startedAt : restoredAt,
+            ...appendLog(
+                state,
+                'Pertandingan dilanjutkan dari status terakhir.',
+            ),
+            message: winner
+                ? `${state.names[winner]} memenangkan pertandingan.`
+                : dice !== null
+                  ? mine
+                      ? 'Lanjutkan: pilih bidak yang menyala untuk digerakkan.'
+                      : `Menunggu ${state.names[turn]} memilih langkah.`
+                  : mine
+                    ? 'Giliranmu. Lempar dadu.'
+                    : `Giliran ${state.names[turn]}.`,
         };
     }
     if (action.type === 'START') {
@@ -571,19 +599,22 @@ function useBoardSize(active: boolean) {
 }
 
 export default function Play() {
-    const { auth, room, me } = usePage().props as unknown as {
+    const { auth, room, me, roomNotice } = usePage().props as unknown as {
         auth?: { user: User | null };
         room?: {
             code: string;
             max_players: number;
             status: string;
             starting_player_id?: number | null;
+            started_at?: string | null;
             match_state?: {
                 tokens: number[][];
                 colors?: PlayerId[];
                 turn: number;
                 dice: number | null;
                 winner: number | null;
+                stats?: { rolls: number; captures: number }[];
+                total_moves?: number;
             } | null;
             players: {
                 id: number;
@@ -598,6 +629,7 @@ export default function Play() {
             name: string;
             seat_color: PlayerColor | null;
         } | null;
+        roomNotice?: string | null;
     };
     const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
     const roomOrder =
@@ -628,7 +660,7 @@ export default function Play() {
     const seenActionsRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
-        if (!room) {
+        if (!room || !me) {
             return;
         }
 
@@ -653,12 +685,31 @@ export default function Play() {
             now: Date.now(),
         });
         if (room.match_state) {
-            dispatch({ type: 'RESTORE', match: room.match_state });
+            dispatch({
+                type: 'RESTORE',
+                match: {
+                    ...room.match_state,
+                    started_at: room.started_at ?? null,
+                },
+            });
         }
         setScreen('game');
     }, [room?.code]);
 
     const opponentColor = otherPlayer(state.human);
+    const blockedByRoom = Boolean(room) && !me;
+    const serverWinner = room?.match_state?.winner ?? null;
+    const matchRunning =
+        Boolean(room) &&
+        Boolean(me) &&
+        screen === 'game' &&
+        serverWinner === null &&
+        !state.winner;
+    const exitGuard = useGameExitGuard(
+        matchRunning,
+        route('home'),
+        `play:${room?.code ?? 'solo'}`,
+    );
     const canRoll =
         (!room || myRoomIndex >= 0) &&
         state.turn === state.human &&
@@ -796,7 +847,19 @@ export default function Play() {
                         Accept: 'application/json',
                     },
                     body: JSON.stringify({ token_index: tokenIndex }),
-                });
+                })
+                    .then((response) => {
+                        if (
+                            response.status === 419 ||
+                            response.status === 401
+                        ) {
+                            // The session expired mid-match. Reloading rebinds
+                            // this browser to its saved seat and restores the
+                            // latest board from the server.
+                            window.location.reload();
+                        }
+                    })
+                    .catch(() => undefined);
             }
 
             const color = state.turn;
@@ -1257,6 +1320,14 @@ export default function Play() {
                 },
             );
 
+            if (response.status === 419 || response.status === 401) {
+                // Session expired while the tab sat idle; reload to resume the
+                // saved seat instead of losing the match.
+                window.location.reload();
+
+                return;
+            }
+
             if (response.ok) {
                 const data = (await response.json()) as {
                     action?: { action_id?: string; value?: number };
@@ -1371,12 +1442,17 @@ export default function Play() {
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
                                 href={route('home')}
+                                onClick={exitGuard.blockLink}
                                 aria-label="Kembali ke beranda"
                                 className="border-line text-ink-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white shadow-sm transition"
                             >
                                 <ChevronLeftIcon className="h-4 w-4" />
                             </Link>
-                            <Link href={route('home')} className="rounded-lg">
+                            <Link
+                                href={route('home')}
+                                onClick={exitGuard.blockLink}
+                                className="rounded-lg"
+                            >
                                 <Logo
                                     className="h-7 w-7"
                                     withWordmark
@@ -1389,7 +1465,7 @@ export default function Play() {
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                            {screen === 'game' && (
+                            {screen === 'game' && !blockedByRoom && (
                                 <span
                                     className="border-line hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-semibold sm:inline-flex"
                                     style={{
@@ -1408,7 +1484,7 @@ export default function Play() {
                                     {state.names[state.human]}
                                 </span>
                             )}
-                            {room && screen === 'game' && (
+                            {room && me && screen === 'game' && (
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -1451,7 +1527,7 @@ export default function Play() {
                                     Demo lokal
                                 </span>
                             )}
-                            {screen === 'game' && (
+                            {screen === 'game' && !blockedByRoom && (
                                 <button
                                     type="button"
                                     onClick={openSetup}
@@ -1468,7 +1544,54 @@ export default function Play() {
                     </div>
                 </header>
 
-                {screen === 'setup' ? (
+                {blockedByRoom || (roomNotice && !room) ? (
+                    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+                        <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
+                            <div className="flex items-center gap-3">
+                                <span className="bg-brand/10 text-brand-ink grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
+                                    <HashIcon className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h1 className="text-ink text-lg font-semibold tracking-tight">
+                                        {room
+                                            ? 'Kamu belum duduk di ruang ini'
+                                            : 'Ruang tidak ditemukan'}
+                                    </h1>
+                                    <p className="text-ink-muted text-xs">
+                                        {room
+                                            ? `Ruang ${room.code}`
+                                            : 'Periksa kembali tautan ruangmu.'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p
+                                role="alert"
+                                className="bg-surface-muted text-ink-muted mt-4 rounded-xl px-3.5 py-2.5 text-xs leading-relaxed"
+                            >
+                                {roomNotice ??
+                                    'Kursi di ruang ini terikat ke browser yang ikut bergabung. Buka tautan ruang dari browser yang sama, atau minta host membagikan kode undangan lagi.'}
+                            </p>
+
+                            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                                <Link
+                                    href={route('home')}
+                                    className="border-line text-ink hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                                >
+                                    Kembali ke beranda
+                                </Link>
+                                {room ? (
+                                    <Link
+                                        href={`${route('room')}?code=${room.code}`}
+                                        className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
+                                    >
+                                        Masuk ke ruang
+                                    </Link>
+                                ) : null}
+                            </div>
+                        </div>
+                    </main>
+                ) : screen === 'setup' ? (
                     <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
                         <form
                             onSubmit={startGame}
@@ -1971,6 +2094,24 @@ export default function Play() {
                     </div>
                 </div>
             )}
+
+            <ConfirmLeaveModal
+                open={exitGuard.open}
+                title="Keluar dari permainan?"
+                description={
+                    <>
+                        Pertandingan
+                        {room ? ` di ruang ${room.code}` : ''} masih berjalan.
+                        Papan, giliran, dan posisi bidak sudah tersimpan di
+                        server, jadi kamu bisa melanjutkan lewat tautan ruang
+                        ini kapan saja. Yakin ingin keluar sekarang?
+                    </>
+                }
+                cancelLabel="Lanjut main"
+                confirmLabel="Ya, keluar"
+                onCancel={exitGuard.cancel}
+                onConfirm={exitGuard.leave}
+            />
         </>
     );
 }

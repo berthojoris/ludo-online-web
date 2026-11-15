@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
+use App\Services\PlayerResume;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -24,18 +26,32 @@ class PageController extends Controller
         ]);
     }
 
-    public function play(Request $request): Response
+    public function play(Request $request): Response|RedirectResponse
     {
         $roomPayload = null;
         $mePayload = null;
+        $roomNotice = null;
 
         if ($request->filled('room')) {
             $code = strtoupper(trim((string) $request->query('room')));
             $room = Room::with('players')->where('code', $code)->first();
 
-            if ($room) {
-                $token = RoomController::playerToken($request);
-                $me = $room->players->firstWhere('player_token', $token);
+            if (! $room) {
+                $roomNotice = 'Ruang tidak ditemukan. Periksa kembali kode undanganmu.';
+            } elseif ($room->status === 'waiting') {
+                return redirect()->route('room', ['code' => $room->code]);
+            } elseif ($room->status === 'ended') {
+                return redirect()->route('home');
+            } else {
+                RoomController::playerToken($request);
+                $me = PlayerResume::find($request, $room);
+
+                if ($me) {
+                    PlayerResume::remember($request, $me, $room->code);
+                } else {
+                    $roomNotice = 'Kamu belum duduk di ruang ini. Minta kode undangan ke host untuk ikut bermain.';
+                }
+
                 $roomPayload = $room->toLobbyPayload();
                 $mePayload = $me ? $this->playerPayload($me) : null;
             }
@@ -44,10 +60,11 @@ class PageController extends Controller
         return Inertia::render('Play', [
             'room' => $roomPayload,
             'me' => $mePayload,
+            'roomNotice' => $roomNotice,
         ]);
     }
 
-    public function room(Request $request): Response
+    public function room(Request $request): Response|RedirectResponse
     {
         if ($request->boolean('join') && ! $request->filled('code')) {
             return Inertia::render('Room', [
@@ -73,9 +90,16 @@ class PageController extends Controller
                 ]);
             }
 
-            $result = DB::transaction(function () use ($request, $room, $token) {
+            // A browser that already sat in this room (even after its session
+            // expired) reclaims its old seat instead of joining as a new player.
+            $resumed = PlayerResume::find($request, $room);
+            $token = RoomController::playerToken($request);
+
+            $result = DB::transaction(function () use ($request, $room, $token, $resumed) {
                 $lockedRoom = Room::where('id', $room->id)->lockForUpdate()->firstOrFail();
-                $me = $lockedRoom->players()->where('player_token', $token)->first();
+                $me = $resumed
+                    ? $lockedRoom->players()->whereKey($resumed->id)->first()
+                    : $lockedRoom->players()->where('player_token', $token)->first();
                 $joinedNow = false;
 
                 if (! $me) {
@@ -119,6 +143,7 @@ class PageController extends Controller
 
             /** @var RoomPlayer $me */
             $me = $result['me'];
+            PlayerResume::remember($request, $me, $room->code);
 
             return Inertia::render('Room', [
                 'mode' => $me->is_host ? 'create' : 'lobby',
@@ -129,12 +154,28 @@ class PageController extends Controller
         }
 
         $existingCode = $request->session()->get('ludo_host_room_code');
-        $room = is_string($existingCode)
-            ? Room::where('code', $existingCode)
-                ->where('host_token', $token)
-                ->where('status', 'waiting')
-                ->first()
-            : null;
+
+        if (! is_string($existingCode) || $existingCode === '') {
+            $existingCode = PlayerResume::lastRoom($request);
+        }
+
+        $room = null;
+
+        if (is_string($existingCode) && $existingCode !== '') {
+            $candidate = Room::where('code', $existingCode)->first();
+
+            if ($candidate && PlayerResume::find($request, $candidate)) {
+                if ($candidate->status === 'started') {
+                    return redirect()->route('play', ['room' => $candidate->code]);
+                }
+
+                if ($candidate->status === 'waiting') {
+                    $room = $candidate;
+                }
+            }
+        }
+
+        $token = RoomController::playerToken($request);
 
         if (! $room) {
             $request->session()->forget('ludo_player_name');
@@ -163,7 +204,11 @@ class PageController extends Controller
         }
 
         $freshRoom = $room->fresh('players');
-        $me = $freshRoom?->players->firstWhere('player_token', $token);
+        $me = $freshRoom ? PlayerResume::find($request, $freshRoom) : null;
+
+        if ($me && $freshRoom) {
+            PlayerResume::remember($request, $me, $freshRoom->code);
+        }
 
         return Inertia::render('Room', [
             'mode' => 'create',
