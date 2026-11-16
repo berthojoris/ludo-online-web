@@ -11,6 +11,7 @@ import {
     TRACK,
 } from '@/lib/ludo';
 import { CSSProperties } from 'react';
+import CharacterSkillBurst, { SkillBurst } from './CharacterSkillBurst';
 import { StarIcon } from './Icons';
 import PionFigure, { PionMotion } from './PionFigure';
 
@@ -38,6 +39,8 @@ type LudoBoardProps = {
     activeLabel?: string;
     order?: PlayerColor[];
     arms?: number;
+    skillBursts?: SkillBurst[];
+    onSkillBurstEnd?: (id: string) => void;
     className?: string;
 };
 
@@ -142,6 +145,8 @@ export default function LudoBoard({
     activeLabel,
     order,
     arms,
+    skillBursts = [],
+    onSkillBurstEnd,
     className = '',
 }: LudoBoardProps) {
     const inferredOrder =
@@ -788,6 +793,31 @@ export default function LudoBoard({
                     );
                 })}
             </div>
+
+            {skillBursts.length > 0 && (
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-[6]"
+                >
+                    {skillBursts.map((burst) => (
+                        <CharacterSkillBurst
+                            key={burst.id}
+                            burst={burst}
+                            leftPercent={
+                                spec.isRadial
+                                    ? burst.point.col
+                                    : (burst.point.col / BOARD_SIZE) * 100
+                            }
+                            topPercent={
+                                spec.isRadial
+                                    ? burst.point.row
+                                    : (burst.point.row / BOARD_SIZE) * 100
+                            }
+                            onEnd={onSkillBurstEnd}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

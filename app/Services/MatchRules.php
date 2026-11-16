@@ -140,6 +140,30 @@ class MatchRules
     }
 
     /**
+     * End the match once only one player has not finished, ranking that player last.
+     */
+    public static function finalizeWhenOnePlayerRemains(array $state): array
+    {
+        $count = count($state['tokens']);
+        $winners = $state['winners'] ?? [];
+
+        if ($count < 2 || count($winners) < $count - 1) {
+            return $state;
+        }
+
+        for ($player = 0; $player < $count; $player++) {
+            if (! in_array($player, $winners, true)) {
+                $winners[] = $player;
+            }
+        }
+
+        $state['winners'] = $winners;
+        $state['winner'] = $winners[0];
+
+        return $state;
+    }
+
+    /**
      * Force a 6 on the player's 4th opening roll if their first 3 rolls produced no 6.
      */
     public static function shouldForceOpeningSix(array $state, int $player): bool

@@ -8,7 +8,7 @@ Different Ludo variants exist. Implement `ruleset_id` and immutable `ruleset_ver
 - Landing on non-safe occupied enemy cell captures enemy token(s) according to chosen stack rule.
 - Safe cells prevent capture.
 - Exact roll required to finish.
-- First player to finish all 4 tokens wins; optional full placements mode requires explicit policy.
+- First player to finish all 4 tokens wins. Play continues for placements until only one player has not finished; the match then ends automatically and that player is ranked last.
 - No legal move: turn advances (subject to extra-turn rules).
 - Three consecutive sixes: forfeiture of current turn (hangus). The 3rd six cannot be moved and turn immediately advances to the next player.
 - Single legal move auto-execution: When exactly one legal move exists (e.g. rolling 6 with only one token eligible to exit base and no tokens on track, or only one movable token on board), the engine auto-executes the move without waiting for manual player selection.

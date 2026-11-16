@@ -761,6 +761,214 @@
     opacity: 0.35;
 }
 
+/* Character capture skill (see CharacterSkillBurst.tsx). Lives inside the board's inline-size container. */
+.skill-burst {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.skill-burst-flash,
+.skill-burst-ring {
+    position: absolute;
+    left: var(--burst-x);
+    top: var(--burst-y);
+    width: 16%;
+    aspect-ratio: 1 / 1;
+    border-radius: 9999px;
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+}
+
+.skill-burst-flash {
+    background: radial-gradient(
+        circle,
+        rgb(255 255 255 / 95%) 0%,
+        var(--burst-glow-light) 32%,
+        transparent 70%
+    );
+    animation: skill-flash 520ms ease-out both;
+}
+
+.skill-burst-ring {
+    border: 3px solid var(--burst-glow);
+    box-shadow:
+        0 0 14px 2px var(--burst-glow),
+        inset 0 0 10px var(--burst-glow-light);
+    animation: skill-ring 700ms cubic-bezier(0.2, 0.7, 0.3, 1) 60ms both;
+}
+
+.skill-burst-giant {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 68%;
+    aspect-ratio: 1 / 1;
+    transform: translate(-50%, -50%) translate(var(--burst-dx), var(--burst-dy))
+        scale(0.12);
+    opacity: 0;
+    animation: skill-giant var(--burst-duration) cubic-bezier(0.22, 0.8, 0.3, 1)
+        both;
+    will-change: transform, opacity;
+}
+
+.skill-burst-aura {
+    position: absolute;
+    inset: 4%;
+    border-radius: 9999px;
+    background: radial-gradient(
+        circle,
+        var(--burst-glow-light) 0%,
+        var(--burst-glow) 38%,
+        transparent 70%
+    );
+    opacity: 0.55;
+}
+
+.skill-burst-art {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 18px rgb(20 32 52 / 35%));
+    user-select: none;
+}
+
+.skill-burst-name {
+    position: absolute;
+    left: 50%;
+    top: 9%;
+    display: flex;
+    max-width: 86%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15em;
+    border-radius: 9999px;
+    padding: 0.35em 1.1em;
+    background: var(--burst-glow-dark);
+    color: #fff;
+    font-size: clamp(9px, 3.2cqw, 18px);
+    line-height: 1.15;
+    text-align: center;
+    box-shadow:
+        0 6px 18px rgb(20 32 52 / 30%),
+        inset 0 0 0 1.5px rgb(255 255 255 / 35%);
+    transform: translate(-50%, 0);
+    opacity: 0;
+    animation: skill-name var(--burst-duration) ease-out both;
+}
+
+.skill-burst-name-char {
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+.skill-burst-name-skill {
+    max-width: 100%;
+    overflow: hidden;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Reduced motion: hold a static giant and name instead of zooming. */
+.skill-burst[data-reduced] .skill-burst-flash,
+.skill-burst[data-reduced] .skill-burst-ring {
+    display: none;
+}
+
+.skill-burst[data-reduced] .skill-burst-giant {
+    animation: none;
+    opacity: 0.92;
+    transform: translate(-50%, -52%) scale(0.9);
+}
+
+.skill-burst[data-reduced] .skill-burst-name {
+    animation: none;
+    opacity: 1;
+}
+
+@keyframes skill-flash {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+    }
+    30% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(2.6);
+    }
+}
+
+@keyframes skill-ring {
+    0% {
+        opacity: 0.95;
+        transform: translate(-50%, -50%) scale(0.2);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(3.2);
+    }
+}
+
+@keyframes skill-giant {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%)
+            translate(var(--burst-dx), var(--burst-dy)) scale(0.12);
+    }
+    10% {
+        opacity: 1;
+    }
+    28% {
+        transform: translate(-50%, -62%)
+            translate(
+                calc(var(--burst-dx) * 0.6),
+                calc(var(--burst-dy) * 0.6)
+            )
+            scale(0.42);
+    }
+    60% {
+        opacity: 1;
+        transform: translate(-50%, -54%) translate(0, 0) scale(1);
+    }
+    74% {
+        opacity: 1;
+        transform: translate(-50%, -54%) translate(0, 0) scale(1.05);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -56%) translate(0, 0) scale(1.34);
+    }
+}
+
+@keyframes skill-name {
+    0%,
+    18% {
+        opacity: 0;
+        transform: translate(-50%, 10px) scale(0.9);
+    }
+    32% {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1.04);
+    }
+    40%,
+    78% {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -6px) scale(1);
+    }
+}
 @keyframes pion-aura {
     0% {
         transform: translateX(-50%) scale(0.55);

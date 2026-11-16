@@ -537,7 +537,7 @@ class RoomFlowTest extends TestCase
         }
     }
 
-    public function test_match_continues_after_first_player_finishes_until_all_players_win_in_order(): void
+    public function test_match_continues_after_first_player_finishes_and_ends_when_one_player_remains(): void
     {
         Event::fake([RoomUpdated::class, MatchAction::class]);
 
@@ -592,26 +592,22 @@ class RoomFlowTest extends TestCase
             $this->assertSame(1, $room->fresh()->match_state['turn']);
         }
 
-        // Player 2 finishes 2nd: game still continues, turn advances to player 1.
+        // Player 2 finishes 2nd: only player 1 remains, so the match ends with player 1 in last place.
         $midState = $room->fresh()->match_state;
         $midState['tokens'][2] = [56, 56, 56, 50];
         $midState['turn'] = 2;
         $midState['dice'] = 6;
         $room->update(['match_state' => $midState]);
         $this->postJson("/rooms/{$room->code}/match/move", ['token_index' => 3])->assertOk();
-        $afterSecond = $room->fresh()->match_state;
-        $this->assertSame([0, 2], $afterSecond['winners']);
-        $this->assertNull($afterSecond['winner']);
-        $this->assertSame(1, $afterSecond['turn']);
-
-        // Player 1 finishes 3rd (last): all players done -> winner is 1st place (0), order is [0, 2, 1].
-        $afterSecond['dice'] = 1;
-        $room->update(['match_state' => $afterSecond]);
-        $this->withSession(['ludo_player_token' => $tokens[1]]);
-        $this->postJson("/rooms/{$room->code}/match/move", ['token_index' => 3])->assertOk();
         $finalState = $room->fresh()->match_state;
         $this->assertSame([0, 2, 1], $finalState['winners']);
         $this->assertSame(0, $finalState['winner']);
+
+        // The remaining player can no longer roll once the match is over.
+        $finalState['turn'] = 1;
+        $room->update(['match_state' => $finalState]);
+        $this->withSession(['ludo_player_token' => $tokens[1]]);
+        $this->postJson("/rooms/{$room->code}/match/roll")->assertStatus(422);
     }
 
     public function test_invitation_link_joins_the_waiting_room_without_typing_the_code(): void

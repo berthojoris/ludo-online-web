@@ -513,10 +513,11 @@ class RoomController extends Controller
                 $winners[] = $index;
             }
             $state['winners'] = $winners;
+            $state = MatchRules::finalizeWhenOnePlayerRemains($state);
 
-            if (count($winners) >= count($state['tokens'])) {
-                $state['winner'] = $winners[0];
-            } elseif ($playerFinished || ($state['dice'] !== 6 && ! $captured && $target !== $finishPosition)) {
+            $matchOver = ($state['winner'] ?? null) !== null;
+
+            if (! $matchOver && ($playerFinished || ($state['dice'] !== 6 && ! $captured && $target !== $finishPosition))) {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
             $state['dice'] = null;

@@ -1,4 +1,5 @@
 import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
+import { SkillBurst } from '@/Components/Game/CharacterSkillBurst';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
@@ -751,11 +752,19 @@ function reducer(state: GameState, action: Action): GameState {
         const playerFinished = nextTokens[actor].every(
             (position) => position === spec.finishPosition,
         );
-        const nextWinners =
+        const finishedWinners =
             playerFinished && !state.winners.includes(actor)
                 ? [...state.winners, actor]
                 : state.winners;
-        const allWon = nextWinners.length >= state.order.length;
+        const unfinishedPlayers = state.order.filter(
+            (color) => !finishedWinners.includes(color),
+        );
+        const matchOver =
+            state.order.length > 1 && unfinishedPlayers.length <= 1;
+        const lastPlace = matchOver ? (unfinishedPlayers[0] ?? null) : null;
+        const nextWinners = matchOver
+            ? [...finishedWinners, ...unfinishedPlayers]
+            : finishedWinners;
         const nextPlayer = nextActivePlayer(state.order, actor, nextWinners);
         const extraTurn =
             !playerFinished && (state.dice === 6 || captured || reachedHome);
@@ -775,22 +784,32 @@ function reducer(state: GameState, action: Action): GameState {
         const extraDescription = reachedHome
             ? ' dan membawanya ke garis akhir'
             : captured
-              ? ' dan menangkap bidak lawan'
+              ? ` dan menangkap bidak lawan dengan ${getCharacterConfig(state.characters[actor], actor).skill}`
               : '';
-        const finishRank = playerFinished ? nextWinners.length : null;
+        const finishRank = playerFinished
+            ? finishedWinners.indexOf(actor) + 1
+            : null;
         const logText =
             finishRank !== null
                 ? `${actorName} menyelesaikan semua bidak (Juara ${finishRank})!`
                 : `${actorName} ${moveDescription}${extraDescription}.`;
         const logged = appendLog(state, logText, actor);
 
-        if (allWon) {
+        if (matchOver) {
             const firstWinner = nextWinners[0];
             const firstWinnerName = state.names[firstWinner];
+            const lastPlaceName = lastPlace ? state.names[lastPlace] : null;
+            const finalLog = lastPlaceName
+                ? appendLog(
+                      { ...state, ...logged },
+                      `Tersisa satu pemain. ${lastPlaceName} juara terakhir (Juara ${nextWinners.length}).`,
+                      lastPlace ?? undefined,
+                  )
+                : logged;
 
             return {
                 ...state,
-                ...logged,
+                ...finalLog,
                 version: nextVersion,
                 tokens: nextTokens,
                 legalMoves: [],
@@ -800,10 +819,13 @@ function reducer(state: GameState, action: Action): GameState {
                 captures: nextCaptures,
                 totalMoves: nextTotalMoves,
                 finishedAt: action.now,
-                message:
-                    firstWinner === state.human
-                        ? `Semua pemain selesai. ${firstWinnerName} juara 1!`
-                        : `Semua pemain selesai. ${firstWinnerName} memenangkan pertandingan.`,
+                message: lastPlaceName
+                    ? lastPlace === state.human
+                        ? `Pertandingan selesai. Kamu juara terakhir, ${firstWinnerName} juara 1.`
+                        : `Pertandingan selesai. ${firstWinnerName} juara 1, ${lastPlaceName} juara terakhir.`
+                    : firstWinner === state.human
+                      ? `Semua pemain selesai. ${firstWinnerName} juara 1!`
+                      : `Semua pemain selesai. ${firstWinnerName} memenangkan pertandingan.`,
             };
         }
 
@@ -961,6 +983,8 @@ export default function Play() {
     const [state, dispatch] = useReducer(reducer, initialState);
     const [movingToken, setMovingToken] = useState<MovingToken | null>(null);
     const [returningTokens, setReturningTokens] = useState<MovingToken[]>([]);
+    const [skillBursts, setSkillBursts] = useState<SkillBurst[]>([]);
+    const skillBurstIdRef = useRef(0);
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [resultModalOpen, setResultModalOpen] = useState(false);
     const [endGameModalOpen, setEndGameModalOpen] = useState(false);
@@ -996,6 +1020,10 @@ export default function Play() {
         movingRef.current = false;
         setMovingToken(null);
         setReturningTokens([]);
+    }, []);
+
+    const removeSkillBurst = useCallback((id: string) => {
+        setSkillBursts((bursts) => bursts.filter((burst) => burst.id !== id));
     }, []);
 
     const restoreMatch = useCallback(
@@ -1576,6 +1604,21 @@ export default function Play() {
 
             if (capturedTargets.length > 0) {
                 playCaptureSound();
+                skillBurstIdRef.current += 1;
+                setSkillBursts((bursts) => [
+                    ...bursts,
+                    {
+                        id: `skill-${skillBurstIdRef.current}`,
+                        color,
+                        character: state.characters[color],
+                        point: boardTokenPoint(
+                            activeSpec,
+                            color,
+                            move.target,
+                            tokenIndex,
+                        ),
+                    },
+                ]);
 
                 const reducedMotion = window.matchMedia(
                     '(prefers-reduced-motion: reduce)',
@@ -1653,6 +1696,7 @@ export default function Play() {
             state.order,
             state.turn,
             state.human,
+            state.characters,
             restoreMatch,
             syncRoomState,
         ],
@@ -2305,6 +2349,7 @@ export default function Play() {
         });
         setMovingToken(null);
         setReturningTokens([]);
+        setSkillBursts([]);
         movingRef.current = false;
         setScreen('game');
     };
@@ -2323,6 +2368,7 @@ export default function Play() {
         );
         setYourName(state.names[state.human]);
         setOpponentName(state.names[opponentColor]);
+        setSkillBursts([]);
         setScreen('setup');
     };
 
@@ -2333,6 +2379,7 @@ export default function Play() {
         previousTurnRef.current = starter;
         setMovingToken(null);
         setReturningTokens([]);
+        setSkillBursts([]);
         movingRef.current = false;
         dispatch({ type: 'RESET', turn: starter, now: Date.now() });
     };
@@ -2893,6 +2940,10 @@ export default function Play() {
                                                 )}
                                                 playerCharacters={
                                                     state.characters
+                                                }
+                                                skillBursts={skillBursts}
+                                                onSkillBurstEnd={
+                                                    removeSkillBurst
                                                 }
                                                 activeColor={
                                                     state.winner

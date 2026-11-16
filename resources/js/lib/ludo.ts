@@ -25,6 +25,7 @@ export type CharacterConfig = {
     accentColor: PlayerColor;
     description: string;
     traits: [string, string, string];
+    skill: string;
 };
 
 export const ARENA_BACKGROUND_IMAGE = '/assets/background.webp';
@@ -60,6 +61,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Naga penguasa api dengan kekuatan penuh semangat dan tekad juang tinggi.',
         traits: ['Berani', 'Agresif', 'Tangguh'],
+        skill: 'Amukan Naga Api',
     },
     frost_claw: {
         id: 'frost_claw',
@@ -71,6 +73,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Serigala es abadi yang berburu dengan ketenangan dingin dan presisi tajam.',
         traits: ['Fokus', 'Lincah', 'Taktis'],
+        skill: 'Cakar Es Abadi',
     },
     solgarde: {
         id: 'solgarde',
@@ -82,6 +85,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Singa penjaga surya yang memimpin arena dengan wibawa emas dan keberanian.',
         traits: ['Wibawa', 'Kuat', 'Setia'],
+        skill: 'Auman Surya',
     },
     verdantor: {
         id: 'verdantor',
@@ -93,6 +97,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Penjaga hutan purba yang tangguh, sabar, dan selalu menemukan jalan keluar.',
         traits: ['Tenang', 'Seimbang', 'Kokoh'],
+        skill: 'Murka Rimba',
     },
     umrax: {
         id: 'umrax',
@@ -104,6 +109,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Penguasa bayangan malam yang bergerak senyap dan mengejutkan lawan di tikungan.',
         traits: ['Cerdik', 'Misterius', 'Cepat'],
+        skill: 'Terkaman Bayangan',
     },
     aqualon: {
         id: 'aqualon',
@@ -115,6 +121,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Leviathan arus dalam yang menerjang rintangan bagaikan gelombang pasang.',
         traits: ['Adaptif', 'Deras', 'Gigih'],
+        skill: 'Gelombang Pasang',
     },
     zephyira: {
         id: 'zephyira',
@@ -126,6 +133,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         description:
             'Griffin langit berkilau yang melesat melintasi papan secepat hembusan badai.',
         traits: ['Cepat', 'Bebas', 'Tajam'],
+        skill: 'Badai Langit',
     },
 };
 
