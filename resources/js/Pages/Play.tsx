@@ -1837,7 +1837,9 @@ export default function Play() {
                                 </Link>
                                 {room ? (
                                     <Link
-                                        href={`${route('room')}?code=${room.code}`}
+                                        href={route('room', {
+                                            code: room.code,
+                                        })}
                                         className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
                                     >
                                         Masuk ke ruang

@@ -54,6 +54,7 @@ type RoomPageProps = {
     room?: RoomData | null;
     me?: RoomPlayerData | null;
     roomError?: string | null;
+    attemptedCode?: string | null;
     canCreateRoom?: boolean;
 };
 
@@ -217,6 +218,7 @@ function RoomContent() {
         room: serverRoom,
         me: serverMe,
         roomError,
+        attemptedCode = null,
         canCreateRoom = false,
     } = page.props as unknown as RoomPageProps;
 
@@ -226,7 +228,9 @@ function RoomContent() {
     const [viewMode, setViewMode] = useState<ViewMode>(
         initialMode === 'join' || !serverRoom ? 'join' : 'lobby',
     );
-    const [joinCode, setJoinCode] = useState(serverRoom?.code ?? '');
+    const [joinCode, setJoinCode] = useState(
+        serverRoom?.code ?? attemptedCode ?? '',
+    );
     const [copyState, setCopyState] = useState<CopyState>('idle');
     const [rulesModalOpen, setRulesModalOpen] = useState(false);
     const [createPasswordOpen, setCreatePasswordOpen] = useState(false);
@@ -337,7 +341,7 @@ function RoomContent() {
         const interval = window.setInterval(() => {
             if (document.visibilityState === 'visible') {
                 router.reload({
-                    only: ['room', 'me'],
+                    only: ['room', 'me', 'roomError', 'attemptedCode'],
                 });
             }
         }, 4000);
@@ -391,12 +395,12 @@ function RoomContent() {
                 ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
                 : null;
 
-    const shareLink =
-        typeof window !== 'undefined' && liveRoom
-            ? `${window.location.origin}/room?code=${liveRoom.code}`
-            : liveRoom
-              ? `/room?code=${liveRoom.code}`
-              : '';
+    // An invitation link carries the room code, so a failed auto-join should
+    // explain why instead of asking the visitor to type that same code again.
+    const joinBlocked =
+        !liveRoom && Boolean(actionError) && Boolean(attemptedCode);
+
+    const shareLink = liveRoom ? route('room', { code: liveRoom.code }) : '';
 
     const copy = async (value: string, target: 'code' | 'link') => {
         if (!value) {
@@ -784,7 +788,54 @@ function RoomContent() {
                     </div>
                 </header>
 
-                {viewMode === 'join' || !liveRoom ? (
+                {joinBlocked ? (
+                    <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
+                        <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
+                            <div className="flex items-center gap-3">
+                                <span className="bg-danger/10 text-danger grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
+                                    <HashIcon className="h-5.5 w-5.5" />
+                                </span>
+                                <div className="min-w-0">
+                                    <h1 className="text-ink text-lg font-semibold tracking-tight sm:text-xl">
+                                        Tidak bisa bergabung
+                                    </h1>
+                                    <p className="text-ink-muted text-xs sm:text-sm">
+                                        Tautan ruang{' '}
+                                        <span className="text-ink font-mono font-semibold tracking-[0.12em]">
+                                            {attemptedCode}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p
+                                role="alert"
+                                className="bg-danger/10 text-danger mt-4 rounded-xl px-3.5 py-2.5 text-xs leading-relaxed font-semibold"
+                            >
+                                {actionError}
+                            </p>
+
+                            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                                <Link
+                                    href={route('home')}
+                                    className="border-line text-ink hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                                >
+                                    Kembali ke beranda
+                                </Link>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActionError(null);
+                                        setJoinCode('');
+                                    }}
+                                    className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
+                                >
+                                    Masukkan kode lain
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                ) : viewMode === 'join' || !liveRoom ? (
                     <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
                         <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
                             <div className="flex items-center gap-3">
@@ -1383,11 +1434,8 @@ function RoomContent() {
                                                             }
                                                             className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition min-[360px]:text-xs sm:h-11 sm:flex-none sm:px-3"
                                                         >
-                                                            <span className="truncate min-[360px]:hidden">
+                                                            <span className="truncate">
                                                                 Duduk
-                                                            </span>
-                                                            <span className="hidden truncate min-[360px]:inline">
-                                                                Duduk di sini
                                                             </span>
                                                         </button>
                                                         <button

@@ -613,4 +613,91 @@ class RoomFlowTest extends TestCase
         $this->assertSame([0, 2, 1], $finalState['winners']);
         $this->assertSame(0, $finalState['winner']);
     }
+
+    public function test_invitation_link_joins_the_waiting_room_without_typing_the_code(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Room')
+                ->where('mode', 'lobby')
+                ->where('room.code', $room->code)
+                ->where('me.is_host', false)
+                ->has('room.players', 2));
+    }
+
+    public function test_invitation_link_takes_over_an_idle_guest_slot_in_a_full_room(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $this->patch("/rooms/{$room->code}/settings", ['max_players' => 2]);
+
+        // Guest A opens the invitation but never takes a colour.
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+        $idleGuest = $room->players()->where('is_host', false)->firstOrFail();
+
+        // Guest B opens the same invitation while the room is full.
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Room')
+                ->where('mode', 'lobby')
+                ->where('room.code', $room->code)
+                ->where('me.id', $idleGuest->id)
+                ->has('room.players', 2));
+
+        $this->assertSame(2, $room->players()->count());
+        $this->assertNotSame($idleGuest->player_token, $idleGuest->fresh()->player_token);
+    }
+
+    public function test_invitation_link_to_a_full_room_of_seated_players_explains_the_error(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $this->patch("/rooms/{$room->code}/settings", ['max_players' => 2]);
+
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow'])->assertRedirect();
+
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Room')
+                ->where('mode', 'join')
+                ->where('room', null)
+                ->where('roomError', 'Ruang sudah penuh.')
+                ->where('attemptedCode', $room->code));
+    }
+
+    public function test_invitation_link_to_a_started_room_explains_that_the_match_has_started(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $room->update(['status' => 'started', 'started_at' => now()]);
+
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Room')
+                ->where('mode', 'join')
+                ->where('roomError', 'Permainan di ruang ini sudah dimulai.')
+                ->where('attemptedCode', $room->code));
+    }
 }

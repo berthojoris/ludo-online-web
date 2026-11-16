@@ -9,6 +9,7 @@ use App\Services\PlayerResume;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -92,6 +93,7 @@ class PageController extends Controller
                     'room' => null,
                     'me' => null,
                     'roomError' => 'Kode ruang tidak ditemukan.',
+                    'attemptedCode' => $code,
                     'canCreateRoom' => $canCreateRoom,
                 ]);
             }
@@ -114,20 +116,41 @@ class PageController extends Controller
                     }
 
                     if ($lockedRoom->players()->count() >= $lockedRoom->max_players) {
-                        return ['error' => 'Ruang sudah penuh.', 'me' => null, 'joined' => false];
-                    }
+                        // A visitor who joined but never picked a colour is not
+                        // part of the match yet. Let the newest invitation take
+                        // over the oldest idle slot instead of turning it away
+                        // because the room is full of unseated guests.
+                        $idle = $lockedRoom->players()
+                            ->where('is_host', false)
+                            ->whereNull('seat_color')
+                            ->orderBy('id')
+                            ->first();
 
-                    $isHost = $lockedRoom->host_token === $token;
-                    $me = RoomPlayer::create([
-                        'room_id' => $lockedRoom->id,
-                        'player_token' => $token,
-                        'user_id' => $request->user()?->id,
-                        'name' => RoomController::defaultPlayerName($request, $isHost),
-                        'seat_color' => null,
-                        'is_ready' => false,
-                        'is_host' => $isHost,
-                    ]);
-                    $joinedNow = true;
+                        if (! $idle) {
+                            return ['error' => 'Ruang sudah penuh.', 'me' => null, 'joined' => false];
+                        }
+
+                        $idle->player_token = $token;
+                        $idle->resume_token = Str::random(40);
+                        $idle->user_id = $request->user()?->id;
+                        $idle->name = RoomController::defaultPlayerName($request);
+                        $idle->is_ready = false;
+                        $idle->save();
+                        $me = $idle;
+                        $joinedNow = true;
+                    } else {
+                        $isHost = $lockedRoom->host_token === $token;
+                        $me = RoomPlayer::create([
+                            'room_id' => $lockedRoom->id,
+                            'player_token' => $token,
+                            'user_id' => $request->user()?->id,
+                            'name' => RoomController::defaultPlayerName($request, $isHost),
+                            'seat_color' => null,
+                            'is_ready' => false,
+                            'is_host' => $isHost,
+                        ]);
+                        $joinedNow = true;
+                    }
                 }
 
                 return ['error' => null, 'me' => $me, 'joined' => $joinedNow];
@@ -139,6 +162,7 @@ class PageController extends Controller
                     'room' => null,
                     'me' => null,
                     'roomError' => $result['error'],
+                    'attemptedCode' => $code,
                     'canCreateRoom' => $canCreateRoom,
                 ]);
             }
