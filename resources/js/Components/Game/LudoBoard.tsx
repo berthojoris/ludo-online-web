@@ -701,9 +701,6 @@ export default function LudoBoard({
                                 className="home-chat-bubble"
                                 style={{ left: `${Math.max(24, Math.min(76, x))}%`, top: `${Math.max(2, Math.min(66, y))}%` }}
                             >
-                                <svg className="home-chat-bubble__cloud" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                                    <path d="M 16 84 C 6 84 3 75 4 63 C 4 51 9 43 16 42 C 15 28 22 18 32 20 C 38 7 53 5 61 17 C 72 10 84 19 84 33 C 94 34 98 44 97 57 C 99 73 93 84 83 84 C 78 93 67 95 59 89 C 50 97 38 95 32 89 C 25 94 19 91 16 84 Z" />
-                                </svg>
                                 <div className="home-chat-bubble__message" tabIndex={0}>{bubble.message}</div>
                             </div>
                         );
