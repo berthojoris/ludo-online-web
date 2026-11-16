@@ -1,5 +1,6 @@
 import {
     Cell,
+    getBoardSpec,
     PLAYER_CONFIG,
     PlayerColor,
     SAFE_TRACK_INDICES,
@@ -26,6 +27,8 @@ type LudoBoardProps = {
     playerNames?: Partial<Record<PlayerColor, string>>;
     activeColor?: PlayerColor;
     activeLabel?: string;
+    order?: PlayerColor[];
+    arms?: number;
     className?: string;
 };
 
@@ -99,8 +102,19 @@ export default function LudoBoard({
     playerNames = {},
     activeColor,
     activeLabel,
+    order,
+    arms,
     className = '',
 }: LudoBoardProps) {
+    const inferredOrder =
+        order ??
+        (Object.keys(playerNames).length > 0
+            ? (Object.keys(playerNames) as PlayerColor[])
+            : (['red', 'green', 'yellow', 'blue'] as PlayerColor[]));
+    const spec = getBoardSpec(inferredOrder, arms);
+    const cellBox = spec.cellSizePercent * 0.9;
+    const cellRx = cellBox * 0.2;
+
     const layout = new Map<string, { index: number; count: number }>();
 
     for (const group of tokenGroups(tokens).values()) {
@@ -113,11 +127,257 @@ export default function LudoBoard({
         <div
             className={`relative aspect-square w-full select-none ${className}`}
             role="group"
-            aria-label="Papan Ludo"
+            aria-label={`Papan Ludo ${spec.arms} pemain`}
             style={{ containerType: 'inline-size' }}
         >
             <div className="border-line/80 absolute inset-0 overflow-hidden rounded-[5.5%] border bg-white shadow-[0_18px_45px_-24px_rgba(32,43,58,0.45)]">
-                {QUADRANTS.map(({ color, row, col }) => {
+                {spec.isRadial ? (
+                    <>
+                        <svg
+                            viewBox="0 0 100 100"
+                            className="absolute inset-0 h-full w-full"
+                            aria-hidden="true"
+                        >
+                            <defs>
+                                {spec.wedges.map((wedge) => {
+                                    const palette =
+                                        PLAYER_CONFIG[wedge.color].palette;
+
+                                    return (
+                                        <radialGradient
+                                            key={`grad-${wedge.color}`}
+                                            id={`grad-${wedge.color}`}
+                                            cx="30%"
+                                            cy="25%"
+                                            r="75%"
+                                        >
+                                            <stop
+                                                offset="0%"
+                                                stopColor={palette.light}
+                                                stopOpacity="0.45"
+                                            />
+                                            <stop
+                                                offset="65%"
+                                                stopColor={palette.base}
+                                                stopOpacity="1"
+                                            />
+                                            <stop
+                                                offset="100%"
+                                                stopColor={palette.base}
+                                                stopOpacity="1"
+                                            />
+                                        </radialGradient>
+                                    );
+                                })}
+                            </defs>
+
+                            {spec.wedges.map((wedge) => {
+                                const palette =
+                                    PLAYER_CONFIG[wedge.color].palette;
+                                const isActive = wedge.color === activeColor;
+
+                                return (
+                                    <g key={`wedge-${wedge.color}`}>
+                                        <path
+                                            d={wedge.outerPath}
+                                            fill={palette.base}
+                                        />
+                                        <path
+                                            d={wedge.outerPath}
+                                            fill={`url(#grad-${wedge.color})`}
+                                            opacity="0.55"
+                                        />
+                                        <path
+                                            d={wedge.innerPath}
+                                            fill="rgba(255,255,255,0.95)"
+                                            stroke="rgba(255,255,255,0.75)"
+                                            strokeWidth="0.22"
+                                            strokeLinejoin="round"
+                                        />
+                                        {wedge.basePads.map((pad, idx) => (
+                                            <circle
+                                                key={`pad-${wedge.color}-${idx}`}
+                                                cx={pad.x}
+                                                cy={pad.y}
+                                                r={spec.padSizePercent / 2}
+                                                fill="rgba(255,255,255,0.6)"
+                                                stroke={`${palette.base}59`}
+                                                strokeWidth="0.4"
+                                            />
+                                        ))}
+                                        {activeColor && !isActive && (
+                                            <path
+                                                d={wedge.outerPath}
+                                                fill="rgba(255,255,255,0.30)"
+                                            />
+                                        )}
+                                        {isActive && (
+                                            <>
+                                                <path
+                                                    d={wedge.outerPath}
+                                                    fill="none"
+                                                    stroke={palette.dark}
+                                                    strokeWidth="0.7"
+                                                    strokeLinejoin="round"
+                                                />
+                                                <path
+                                                    d={wedge.outerPath}
+                                                    fill="none"
+                                                    stroke="rgba(255,255,255,0.9)"
+                                                    strokeWidth="0.28"
+                                                    strokeLinejoin="round"
+                                                />
+                                            </>
+                                        )}
+                                    </g>
+                                );
+                            })}
+
+                            {spec.trackCells.map((cell, index) => {
+                                const ownerPalette = cell.owner
+                                    ? PLAYER_CONFIG[cell.owner].palette
+                                    : null;
+                                const starSize = cellBox * 0.27;
+
+                                return (
+                                    <g
+                                        key={`rtrack-${index}`}
+                                        transform={`translate(${cell.x}, ${cell.y}) rotate(${cell.angleDeg})`}
+                                    >
+                                        <rect
+                                            x={-cellBox / 2}
+                                            y={-cellBox / 2}
+                                            width={cellBox}
+                                            height={cellBox}
+                                            rx={cellRx}
+                                            fill={
+                                                ownerPalette
+                                                    ? ownerPalette.base
+                                                    : '#ffffff'
+                                            }
+                                            stroke={
+                                                ownerPalette
+                                                    ? ownerPalette.dark
+                                                    : '#e4e8ee'
+                                            }
+                                            strokeWidth="0.24"
+                                        />
+                                        {cell.safe && (
+                                            <path
+                                                d={`M 0 ${-starSize} L ${starSize * 0.29} ${-starSize * 0.31} L ${starSize * 0.95} ${-starSize * 0.31} L ${starSize * 0.42} ${starSize * 0.14} L ${starSize * 0.62} ${starSize * 0.81} L 0 ${starSize * 0.4} L ${-starSize * 0.62} ${starSize * 0.81} L ${-starSize * 0.42} ${starSize * 0.14} L ${-starSize * 0.95} ${-starSize * 0.31} L ${-starSize * 0.29} ${-starSize * 0.31} Z`}
+                                                fill={
+                                                    ownerPalette
+                                                        ? 'rgba(255,255,255,0.92)'
+                                                        : '#c9d1dd'
+                                                }
+                                            />
+                                        )}
+                                    </g>
+                                );
+                            })}
+
+                            {spec.wedges.map((wedge) => {
+                                const palette =
+                                    PLAYER_CONFIG[wedge.color].palette;
+
+                                return wedge.laneCells.map((lane, idx) => (
+                                    <g
+                                        key={`rlane-${wedge.color}-${idx}`}
+                                        transform={`translate(${lane.x}, ${lane.y}) rotate(${lane.angleDeg})`}
+                                    >
+                                        <rect
+                                            x={-cellBox / 2}
+                                            y={-cellBox / 2}
+                                            width={cellBox}
+                                            height={cellBox}
+                                            rx={cellRx}
+                                            fill={palette.base}
+                                            stroke={palette.dark}
+                                            strokeWidth="0.24"
+                                        />
+                                        <circle
+                                            cx="0"
+                                            cy="0"
+                                            r={cellBox * 0.11}
+                                            fill="rgba(255,255,255,0.58)"
+                                        />
+                                    </g>
+                                ));
+                            })}
+
+                            {spec.wedges.map((wedge) => (
+                                <polygon
+                                    key={`rcenter-${wedge.color}`}
+                                    points={wedge.centerTriangle}
+                                    fill={PLAYER_CONFIG[wedge.color].palette.base}
+                                    stroke="rgba(255,255,255,0.75)"
+                                    strokeWidth="0.24"
+                                    strokeLinejoin="round"
+                                />
+                            ))}
+
+                            <circle
+                                cx="50"
+                                cy="50"
+                                r={spec.centerRadius}
+                                fill="rgba(255,255,255,0.95)"
+                                stroke="#e4e8ee"
+                                strokeWidth="0.25"
+                            />
+                        </svg>
+
+                        {spec.wedges.map((wedge) => {
+                            const palette = PLAYER_CONFIG[wedge.color].palette;
+                            const isActive = wedge.color === activeColor;
+                            const name = playerNames[wedge.color];
+
+                            if (!name && !(isActive && activeLabel)) {
+                                return null;
+                            }
+
+                            return (
+                                <div
+                                    key={`rbadge-${wedge.color}`}
+                                    className="pointer-events-none absolute z-[4] flex max-w-[22%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5"
+                                    style={{
+                                        left: `${wedge.badgePos.x}%`,
+                                        top: `${wedge.badgePos.y}%`,
+                                    }}
+                                >
+                                    {isActive && activeLabel && (
+                                        <span
+                                            className="max-w-full truncate rounded-full px-1.5 py-px font-extrabold tracking-[0.06em] text-white uppercase"
+                                            style={{
+                                                background: palette.dark,
+                                                fontSize:
+                                                    'clamp(6px, 1.65cqw, 10px)',
+                                                lineHeight: 1.25,
+                                                boxShadow: `0 2px 6px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.28)`,
+                                            }}
+                                        >
+                                            {activeLabel}
+                                        </span>
+                                    )}
+                                    {name && (
+                                        <span
+                                            className="max-w-full truncate rounded-full bg-white/95 px-1.5 py-px font-extrabold shadow-[0_1px_4px_rgba(32,43,58,0.18)]"
+                                            style={{
+                                                color: palette.text,
+                                                fontSize:
+                                                    'clamp(6px, 1.6cqw, 10px)',
+                                                lineHeight: 1.3,
+                                            }}
+                                        >
+                                            {name}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </>
+                ) : (
+                    <>
+                        {QUADRANTS.map(({ color, row, col }) => {
                     const config = PLAYER_CONFIG[color];
                     const palette = config.palette;
                     const isActive = color === activeColor;
@@ -328,6 +588,8 @@ export default function LudoBoard({
                     </div>
                     <div className="absolute inset-[37%] rotate-45 rounded-[22%] bg-white/95 shadow-[0_2px_6px_rgba(32,43,58,0.22)]" />
                 </div>
+                    </>
+                )}
 
                 {tokens.map((token) => {
                     const config = PLAYER_CONFIG[token.color];
@@ -338,9 +600,9 @@ export default function LudoBoard({
                     };
                     const [dx, dy] = groupOffset(index, count);
                     const positionStyle = {
-                        left: `${(token.point.col / BOARD_SIZE) * 100}%`,
-                        top: `${(token.point.row / BOARD_SIZE) * 100}%`,
-                        width: '5.9%',
+                        left: `${spec.isRadial ? token.point.col : (token.point.col / BOARD_SIZE) * 100}%`,
+                        top: `${spec.isRadial ? token.point.row : (token.point.row / BOARD_SIZE) * 100}%`,
+                        width: `${spec.tokenSizePercent}%`,
                         aspectRatio: '1 / 1',
                         transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
                     } as CSSProperties;

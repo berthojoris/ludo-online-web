@@ -1,5 +1,6 @@
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
+import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ArrowRightIcon,
     CheckIcon,
@@ -10,11 +11,17 @@ import {
     HashIcon,
     InfoIcon,
     LinkIcon,
+    PencilIcon,
     UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
-import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
+import {
+    PLAYER_CONFIG,
+    PlayerColor,
+    PlayerCount,
+    SEATS_BY_COUNT,
+} from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { User } from '@/types';
@@ -24,7 +31,6 @@ import { CSSProperties, FormEvent, useEffect, useState } from 'react';
 
 type CopyState = 'idle' | 'code' | 'link' | 'error';
 type ViewMode = 'lobby' | 'join';
-type PlayerCount = 2 | 3 | 4;
 
 type RoomPlayerData = {
     id: number;
@@ -51,24 +57,32 @@ type RoomPageProps = {
     canCreateRoom?: boolean;
 };
 
-const SEATS_BY_COUNT: Record<PlayerCount, PlayerColor[]> = {
-    2: ['red', 'yellow'],
-    3: ['red', 'green', 'yellow'],
-    4: ['red', 'green', 'blue', 'yellow'],
-};
-
 const SEAT_GRID_CLASS: Record<PlayerCount, string> = {
     2: 'grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1',
     3: 'grid-cols-1 grid-rows-3 sm:grid-cols-3 sm:grid-rows-1',
     4: 'grid-cols-2 grid-rows-2',
+    5: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
+    6: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
+    7: 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3 lg:grid-cols-4 lg:grid-rows-2',
 };
 
-const ROOM_RULES = [
-    { label: 'Timer giliran', value: '15 detik' },
-    { label: 'Keluar markas', value: 'Angka 6' },
-    { label: 'Tiga kali angka 6', value: 'Hangus' },
-    { label: 'Petak aman', value: '8 petak' },
-];
+const PLAYER_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
+
+function getRoomRules(playerCount: PlayerCount) {
+    return [
+        { label: 'Timer giliran', value: '15 detik' },
+        { label: 'Keluar markas', value: 'Angka 6' },
+        { label: 'Tiga kali angka 6', value: 'Hangus' },
+        {
+            label: 'Petak aman',
+            value: playerCount >= 5 ? `${playerCount * 2} petak` : '8 petak',
+        },
+        {
+            label: 'Bentuk papan',
+            value: playerCount >= 5 ? `${playerCount} sisi` : '4 sisi (15×15)',
+        },
+    ];
+}
 
 function RoomSettingsSummary({
     playerCount,
@@ -99,14 +113,14 @@ function RoomSettingsSummary({
                     )}
                 </div>
                 <div className="border-line bg-canvas mt-1.5 grid grid-cols-3 gap-1 rounded-xl border p-1">
-                    {([2, 3, 4] as PlayerCount[]).map((count) => (
+                    {PLAYER_COUNTS.map((count) => (
                         <button
                             key={count}
                             type="button"
                             disabled={!isHost || pending}
                             onClick={() => onSelectPlayerCount(count)}
                             aria-pressed={playerCount === count}
-                            className={`h-8 rounded-lg text-xs font-semibold transition disabled:cursor-not-allowed ${
+                            className={`h-8 rounded-lg text-[11px] font-semibold transition disabled:cursor-not-allowed ${
                                 playerCount === count
                                     ? 'text-ink bg-white shadow-sm'
                                     : 'text-ink-muted hover:text-ink disabled:opacity-50'
@@ -144,7 +158,7 @@ function RoomSettingsSummary({
                 </div>
             )}
             <dl className="divide-line border-line mt-4 divide-y rounded-2xl border px-3.5">
-                {ROOM_RULES.map((item) => (
+                {getRoomRules(playerCount).map((item) => (
                     <div
                         key={item.label}
                         className="flex items-center justify-between py-2.5 text-xs"
@@ -225,6 +239,13 @@ function RoomContent() {
     );
     const [editingName, setEditingName] = useState(false);
     const [nameDraft, setNameDraft] = useState(serverMe?.name ?? '');
+    const [hostEditingPlayer, setHostEditingPlayer] =
+        useState<RoomPlayerData | null>(null);
+    const [hostNameDraft, setHostNameDraft] = useState('');
+    const [hostNameError, setHostNameError] = useState<string | null>(null);
+    const [renamingPlayerId, setRenamingPlayerId] = useState<number | null>(
+        null,
+    );
 
     useEffect(() => {
         setLiveRoom(serverRoom ?? null);
@@ -266,6 +287,23 @@ function RoomContent() {
 
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [rulesModalOpen]);
+
+    useEffect(() => {
+        if (!hostEditingPlayer) {
+            return;
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && renamingPlayerId === null) {
+                setHostEditingPlayer(null);
+                setHostNameError(null);
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [hostEditingPlayer, renamingPlayerId]);
 
     const roomCode = liveRoom?.code ?? null;
     const roomStatus = liveRoom?.status ?? 'waiting';
@@ -495,6 +533,84 @@ function RoomContent() {
         );
     };
 
+    const openHostEditName = (player: RoomPlayerData) => {
+        if (!isHost || pendingAction || renamingPlayerId !== null) {
+            return;
+        }
+        cue();
+        setActionError(null);
+        setHostNameError(null);
+        setHostEditingPlayer(player);
+        setHostNameDraft(player.name);
+    };
+
+    const handleHostSavePlayerName = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        if (
+            !liveRoom ||
+            !isHost ||
+            !hostEditingPlayer ||
+            renamingPlayerId !== null
+        ) {
+            return;
+        }
+
+        const trimmed = hostNameDraft.trim();
+        if (!trimmed) {
+            setHostNameError('Nama pemain tidak boleh kosong.');
+            return;
+        }
+
+        const targetId = hostEditingPlayer.id;
+        cue();
+        setActionError(null);
+        setHostNameError(null);
+        setRenamingPlayerId(targetId);
+
+        router
+            .optimistic((props: RoomPageProps) => {
+                if (!props.room) {
+                    return {};
+                }
+
+                return {
+                    room: {
+                        ...props.room,
+                        players: props.room.players.map((player) =>
+                            player.id === targetId
+                                ? { ...player, name: trimmed }
+                                : player,
+                        ),
+                    },
+                    ...(props.me?.id === targetId
+                        ? { me: { ...props.me, name: trimmed } }
+                        : {}),
+                };
+            })
+            .patch(
+                route('rooms.players.name', {
+                    code: liveRoom.code,
+                    player: targetId,
+                }),
+                { name: trimmed },
+                {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        setHostEditingPlayer(null);
+                        setHostNameError(null);
+                    },
+                    onError: (errors) => {
+                        const first =
+                            errors.name ??
+                            Object.values(errors)[0] ??
+                            'Gagal mengganti nama pemain.';
+                        setHostNameError(first);
+                    },
+                    onFinish: () => setRenamingPlayerId(null),
+                },
+            );
+    };
+
     const postRoomCreation = (password?: string) => {
         setActionError(null);
         setCreatePasswordError(null);
@@ -663,6 +779,7 @@ function RoomContent() {
                                     ? 'Semua siap'
                                     : `${readyCount}/${occupiedCount} Siap`}
                             </span>
+                            <FullscreenToggle />
                         </div>
                     </div>
                 </header>
@@ -772,7 +889,13 @@ function RoomContent() {
                     </main>
                 ) : (
                     <main className="mx-auto flex min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col pt-2.5 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-4 sm:pb-4">
-                        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2.5 sm:gap-4 md:my-auto md:max-h-[580px] md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px]">
+                        <div
+                            className={`grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-4 md:my-auto md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px] ${
+                                playerCount >= 5
+                                    ? 'md:max-h-[680px]'
+                                    : 'md:max-h-[580px]'
+                            }`}
+                        >
                             <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
                                 <div className="border-line shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white px-2.5 py-2 sm:px-4 sm:py-3">
                                     <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
@@ -855,12 +978,8 @@ function RoomContent() {
                                                           player.seat_color
                                                       ]
                                                     : null;
-
-                                                return (
-                                                    <span
-                                                        key={player.id}
-                                                        className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:text-xs"
-                                                    >
+                                                const pillContent = (
+                                                    <>
                                                         <span
                                                             className="h-2 w-2 shrink-0 rounded-full"
                                                             style={{
@@ -894,6 +1013,46 @@ function RoomContent() {
                                                                   ? ''
                                                                   : '· Pilih kursi'}
                                                         </span>
+                                                        {isHost && (
+                                                            <PencilIcon className="text-ink-muted h-3 w-3 shrink-0" />
+                                                        )}
+                                                    </>
+                                                );
+
+                                                if (isHost) {
+                                                    return (
+                                                        <button
+                                                            key={player.id}
+                                                            type="button"
+                                                            disabled={
+                                                                pendingAction ||
+                                                                renamingPlayerId ===
+                                                                    player.id
+                                                            }
+                                                            aria-busy={
+                                                                renamingPlayerId ===
+                                                                player.id
+                                                            }
+                                                            aria-label={`Ganti nama ${player.name}`}
+                                                            title={`Ganti nama ${player.name}`}
+                                                            onClick={() =>
+                                                                openHostEditName(
+                                                                    player,
+                                                                )
+                                                            }
+                                                            className="border-line bg-canvas hover:border-brand/40 hover:bg-surface-muted inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 sm:text-xs"
+                                                        >
+                                                            {pillContent}
+                                                        </button>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <span
+                                                        key={player.id}
+                                                        className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:text-xs"
+                                                    >
+                                                        {pillContent}
                                                     </span>
                                                 );
                                             })}
@@ -936,9 +1095,22 @@ function RoomContent() {
                                                             !nameDraft.trim() ||
                                                             pendingAction
                                                         }
-                                                        className="bg-brand hover:bg-brand-dark inline-flex h-10 shrink-0 items-center justify-center rounded-xl px-3 text-xs font-semibold text-white transition disabled:opacity-50 sm:h-11"
+                                                        aria-busy={
+                                                            pendingAction
+                                                        }
+                                                        className="bg-brand hover:bg-brand-dark inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white transition disabled:opacity-50 sm:h-11"
                                                     >
-                                                        Simpan
+                                                        {pendingAction ? (
+                                                            <>
+                                                                <span
+                                                                    aria-hidden="true"
+                                                                    className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                                                />
+                                                                Menyimpan…
+                                                            </>
+                                                        ) : (
+                                                            'Simpan'
+                                                        )}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1094,7 +1266,11 @@ function RoomContent() {
                                                 </div>
 
                                                 <div
-                                                    className="room-seat-scene"
+                                                    className={`room-seat-scene ${
+                                                        playerCount >= 5
+                                                            ? 'hidden sm:block'
+                                                            : ''
+                                                    }`}
                                                     style={tokenStyle}
                                                     aria-hidden="true"
                                                 >
@@ -1157,6 +1333,39 @@ function RoomContent() {
                                                                 className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
                                                             >
                                                                 Berdiri
+                                                            </button>
+                                                        )}
+
+                                                        {isHost && !isYou && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={
+                                                                    pendingAction ||
+                                                                    renamingPlayerId ===
+                                                                        occupant.id
+                                                                }
+                                                                aria-busy={
+                                                                    renamingPlayerId ===
+                                                                    occupant.id
+                                                                }
+                                                                onClick={() =>
+                                                                    openHostEditName(
+                                                                        occupant,
+                                                                    )
+                                                                }
+                                                                aria-label={`Ganti nama ${occupant.name}`}
+                                                                title={`Ganti nama ${occupant.name}`}
+                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-white transition disabled:opacity-50 sm:h-11 sm:w-11"
+                                                            >
+                                                                {renamingPlayerId ===
+                                                                occupant.id ? (
+                                                                    <span
+                                                                        aria-hidden="true"
+                                                                        className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                                                    />
+                                                                ) : (
+                                                                    <PencilIcon className="h-4 w-4" />
+                                                                )}
                                                             </button>
                                                         )}
                                                     </div>
@@ -1413,6 +1622,127 @@ function RoomContent() {
                             </button>
                         )}
                     </div>
+                </div>
+            )}
+
+            {hostEditingPlayer && liveRoom && (
+                <div
+                    className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="host-rename-player-title"
+                    onClick={(event) => {
+                        if (
+                            event.target === event.currentTarget &&
+                            renamingPlayerId === null
+                        ) {
+                            setHostEditingPlayer(null);
+                            setHostNameError(null);
+                        }
+                    }}
+                >
+                    <form
+                        onSubmit={handleHostSavePlayerName}
+                        className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                    >
+                        <div className="mb-4 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <h2
+                                    id="host-rename-player-title"
+                                    className="text-ink text-base font-semibold"
+                                >
+                                    Ganti nama pemain
+                                </h2>
+                                <p className="text-ink-muted mt-0.5 truncate text-xs">
+                                    {hostEditingPlayer.name}
+                                    {hostEditingPlayer.seat_color
+                                        ? ` · Kursi ${PLAYER_CONFIG[hostEditingPlayer.seat_color].label}`
+                                        : ''}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={renamingPlayerId !== null}
+                                onClick={() => {
+                                    setHostEditingPlayer(null);
+                                    setHostNameError(null);
+                                }}
+                                aria-label="Tutup ganti nama pemain"
+                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition disabled:opacity-50"
+                            >
+                                <CloseIcon className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <label
+                            htmlFor="host-player-name-input"
+                            className="text-ink block text-xs font-semibold"
+                        >
+                            Nama baru
+                        </label>
+                        <input
+                            id="host-player-name-input"
+                            type="text"
+                            autoFocus
+                            value={hostNameDraft}
+                            onChange={(event) => {
+                                setHostNameDraft(
+                                    event.target.value.slice(0, 24),
+                                );
+                                if (hostNameError) {
+                                    setHostNameError(null);
+                                }
+                            }}
+                            maxLength={24}
+                            placeholder="Masukkan nama pemain"
+                            aria-label="Nama pemain baru"
+                            className="border-line bg-canvas text-ink focus:border-brand focus:ring-brand/10 mt-1.5 h-11 w-full rounded-xl border px-3 text-base font-medium focus:bg-white focus:ring-4 focus:outline-none sm:text-sm"
+                        />
+
+                        {hostNameError && (
+                            <p
+                                role="alert"
+                                className="bg-danger/10 text-danger mt-2.5 rounded-xl px-3 py-2 text-xs font-semibold"
+                            >
+                                {hostNameError}
+                            </p>
+                        )}
+
+                        <div className="mt-4 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                disabled={renamingPlayerId !== null}
+                                onClick={() => {
+                                    setHostEditingPlayer(null);
+                                    setHostNameError(null);
+                                }}
+                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-11 flex-1 items-center justify-center rounded-xl border bg-white px-4 text-xs font-semibold transition disabled:opacity-50"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={
+                                    !hostNameDraft.trim() ||
+                                    renamingPlayerId !== null
+                                }
+                                aria-busy={renamingPlayerId !== null}
+                                className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition disabled:opacity-50"
+                            >
+                                {renamingPlayerId !== null ? (
+                                    <>
+                                        <span
+                                            aria-hidden="true"
+                                            className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                        />
+                                        Menyimpan…
+                                    </>
+                                ) : (
+                                    'Simpan'
+                                )}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             )}
 

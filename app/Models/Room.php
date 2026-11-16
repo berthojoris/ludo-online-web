@@ -7,10 +7,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Room extends Model
 {
+    public const ALL_COLORS = [
+        'red',
+        'green',
+        'yellow',
+        'blue',
+        'purple',
+        'orange',
+        'teal',
+    ];
+
     public const SEATS_BY_COUNT = [
         2 => ['red', 'yellow'],
         3 => ['red', 'green', 'yellow'],
         4 => ['red', 'green', 'blue', 'yellow'],
+        5 => ['red', 'green', 'yellow', 'blue', 'purple'],
+        6 => ['red', 'green', 'yellow', 'blue', 'purple', 'orange'],
+        7 => ['red', 'green', 'yellow', 'blue', 'purple', 'orange', 'teal'],
     ];
 
     protected $fillable = [

@@ -254,3 +254,34 @@ export function HomeIcon(props: IconProps) {
         </svg>
     );
 }
+
+export function PencilIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M14.5 5.5 18.5 9.5" />
+            <path d="M5 19h4l9.5-9.5a1.8 1.8 0 0 0 0-2.5l-1.5-1.5a1.8 1.8 0 0 0-2.5 0L5 15v4Z" />
+        </svg>
+    );
+}
+
+export function ExpandIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M9.5 4H4v5.5" />
+            <path d="M14.5 4H20v5.5" />
+            <path d="M20 14.5V20h-5.5" />
+            <path d="M4 14.5V20h5.5" />
+        </svg>
+    );
+}
+
+export function CollapseIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M4 9.5h5.5V4" />
+            <path d="M20 9.5h-5.5V4" />
+            <path d="M20 14.5h-5.5V20" />
+            <path d="M4 14.5h5.5V20" />
+        </svg>
+    );
+}

@@ -1,5 +1,6 @@
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import Dice from '@/Components/Game/Dice';
+import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ChevronLeftIcon,
     CloseIcon,
@@ -19,13 +20,15 @@ import MatchResultModal, {
 } from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
 import {
-    absoluteTrackIndex,
     BASE_POSITION,
-    FINISH_POSITION,
-    isSafeAbsoluteIndex,
+    boardAbsoluteTrackIndex,
+    boardTokenPoint,
+    getBoardSpec,
+    isBoardSafeIndex,
     PLAYER_CONFIG,
     PlayerColor,
-    tokenPoint,
+    PlayerCount,
+    SEATS_BY_COUNT,
 } from '@/lib/ludo';
 import {
     isSoundEnabled,
@@ -76,6 +79,7 @@ type SetupNames = Record<PlayerId, string>;
 
 type GameState = {
     order: PlayerId[];
+    arms: number;
     tokens: Record<PlayerId, number[]>;
     turn: PlayerId;
     human: PlayerId;
@@ -84,6 +88,7 @@ type GameState = {
     dice: number | null;
     legalMoves: LegalMove[];
     winner: PlayerId | null;
+    winners: PlayerId[];
     message: string;
     log: LogEntry[];
     logId: number;
@@ -101,9 +106,11 @@ type Action =
           match: {
               tokens: number[][];
               colors?: PlayerId[];
+              arms?: number;
               turn: number;
               dice: number | null;
               winner: number | null;
+              winners?: number[];
               stats?: { rolls: number; captures: number }[];
               had_six?: boolean[];
               total_moves?: number;
@@ -115,6 +122,7 @@ type Action =
           human: PlayerId;
           names: SetupNames;
           order?: PlayerId[];
+          arms?: number;
           now: number;
           turn?: PlayerId;
       }
@@ -124,22 +132,66 @@ type Action =
     | { type: 'RESET'; now: number; turn?: PlayerId };
 
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
+const LOCAL_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
+
+function createTokenMap(): Record<PlayerId, number[]> {
+    return {
+        red: [-1, -1, -1, -1],
+        green: [-1, -1, -1, -1],
+        yellow: [-1, -1, -1, -1],
+        blue: [-1, -1, -1, -1],
+        purple: [-1, -1, -1, -1],
+        orange: [-1, -1, -1, -1],
+        teal: [-1, -1, -1, -1],
+    };
+}
+
+function createNumberMap(): Record<PlayerId, number> {
+    return {
+        red: 0,
+        green: 0,
+        yellow: 0,
+        blue: 0,
+        purple: 0,
+        orange: 0,
+        teal: 0,
+    };
+}
+
+function createBoolMap(): Record<PlayerId, boolean> {
+    return {
+        red: false,
+        green: false,
+        yellow: false,
+        blue: false,
+        purple: false,
+        orange: false,
+        teal: false,
+    };
+}
+
+const DEFAULT_NAMES: SetupNames = {
+    blue: 'Kamu',
+    green: 'Lawan',
+    red: 'Merah',
+    yellow: 'Kuning',
+    purple: 'Ungu',
+    orange: 'Oranye',
+    teal: 'Toska',
+};
 
 const initialState: GameState = {
     order: PLAYER_IDS,
-    tokens: {
-        red: [-1, -1, -1, -1],
-        yellow: [-1, -1, -1, -1],
-        blue: [-1, -1, -1, -1],
-        green: [-1, -1, -1, -1],
-    },
+    arms: 4,
+    tokens: createTokenMap(),
     turn: 'blue',
     human: 'blue',
-    names: { blue: 'Kamu', green: 'Lawan', red: 'Merah', yellow: 'Kuning' },
+    names: DEFAULT_NAMES,
     phase: 'idle',
     dice: null,
     legalMoves: [],
     winner: null,
+    winners: [],
     message: 'Giliranmu. Lempar dadu.',
     log: [
         {
@@ -148,16 +200,33 @@ const initialState: GameState = {
         },
     ],
     logId: 1,
-    rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
-    hadSix: { blue: false, green: false, red: false, yellow: false },
-    captures: { blue: 0, green: 0, red: 0, yellow: 0 },
+    rolls: createNumberMap(),
+    hadSix: createBoolMap(),
+    captures: createNumberMap(),
     totalMoves: 0,
     startedAt: null,
     finishedAt: null,
 };
 
-function otherPlayer(player: PlayerId): PlayerId {
-    return player === 'blue' ? 'green' : 'blue';
+function otherPlayer(player: PlayerId, order: PlayerId[] = PLAYER_IDS): PlayerId {
+    return order.find((item) => item !== player) ?? (player === 'blue' ? 'green' : 'blue');
+}
+
+function nextActivePlayer(
+    order: PlayerId[],
+    current: PlayerId,
+    winners: PlayerId[],
+): PlayerId {
+    const startIndex = order.indexOf(current);
+
+    for (let offset = 1; offset <= order.length; offset++) {
+        const candidate = order[(startIndex + offset) % order.length];
+        if (!winners.includes(candidate)) {
+            return candidate;
+        }
+    }
+
+    return order[(startIndex + 1) % order.length];
 }
 
 function randomDie(): number {
@@ -180,13 +249,13 @@ function rollDieForTurn(state: GameState): number {
     return randomDie();
 }
 
-function randomPlayer(): PlayerId {
-    return PLAYER_IDS[Math.floor(Math.random() * PLAYER_IDS.length)];
+function randomPlayer(order: PlayerId[] = PLAYER_IDS): PlayerId {
+    return order[Math.floor(Math.random() * order.length)];
 }
 
-function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
+function cleanNames(human: PlayerId, names: Partial<SetupNames>): SetupNames {
     return {
-        ...initialState.names,
+        ...DEFAULT_NAMES,
         ...names,
         [human]: names[human]?.trim().slice(0, 16) || 'Pemain',
     } as SetupNames;
@@ -194,17 +263,21 @@ function cleanNames(human: PlayerId, names: SetupNames): SetupNames {
 
 function createInitialState(
     human: PlayerId,
-    rawNames: SetupNames,
+    rawNames: Partial<SetupNames>,
     now: number,
     startingTurn?: PlayerId,
     order: PlayerId[] = PLAYER_IDS,
+    arms?: number,
 ): GameState {
     const names = cleanNames(human, rawNames);
     const turn = startingTurn ?? human;
+    const resolvedArms = arms ?? (order.length >= 5 ? order.length : 4);
 
     return {
         ...initialState,
         order,
+        arms: resolvedArms,
+        tokens: createTokenMap(),
         human,
         names,
         turn,
@@ -220,12 +293,13 @@ function createInitialState(
             },
         ],
         logId: 1,
-        rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
-        hadSix: { blue: false, green: false, red: false, yellow: false },
-        captures: { blue: 0, green: 0, red: 0, yellow: 0 },
+        rolls: createNumberMap(),
+        hadSix: createBoolMap(),
+        captures: createNumberMap(),
         totalMoves: 0,
         startedAt: now,
         finishedAt: null,
+        winners: [],
     };
 }
 
@@ -244,9 +318,10 @@ function computeLegalMoves(
     tokens: Record<PlayerId, number[]>,
     player: PlayerId,
     roll: number,
+    finishPosition: number,
 ): LegalMove[] {
     return tokens[player].flatMap((position, tokenIndex) => {
-        if (position === FINISH_POSITION) {
+        if (position === finishPosition) {
             return [];
         }
 
@@ -256,7 +331,7 @@ function computeLegalMoves(
 
         const target = position + roll;
 
-        return target <= FINISH_POSITION ? [{ tokenIndex, target }] : [];
+        return target <= finishPosition ? [{ tokenIndex, target }] : [];
     });
 }
 
@@ -265,7 +340,8 @@ function chooseAiMove(state: GameState): LegalMove | null {
         return null;
     }
 
-    const opponent = otherPlayer(state.turn);
+    const spec = getBoardSpec(state.order, state.arms);
+    const opponents = state.order.filter((color) => color !== state.turn);
 
     const score = (move: LegalMove) => {
         let value = move.target / 10;
@@ -275,22 +351,29 @@ function chooseAiMove(state: GameState): LegalMove | null {
             value += 12;
         }
 
-        if (move.target >= 51) {
+        if (move.target >= spec.firstLanePosition) {
             value += 30;
         }
 
-        if (move.target === FINISH_POSITION) {
+        if (move.target === spec.finishPosition) {
             value += 60;
         }
 
-        if (move.target <= 50) {
-            const absolute = absoluteTrackIndex(state.turn, move.target);
+        if (move.target <= spec.lastTrackPosition) {
+            const absolute = boardAbsoluteTrackIndex(
+                spec,
+                state.turn,
+                move.target,
+            );
 
             if (
-                !isSafeAbsoluteIndex(absolute) &&
-                state.tokens[opponent].some(
-                    (position) =>
-                        absoluteTrackIndex(opponent, position) === absolute,
+                !isBoardSafeIndex(spec, absolute) &&
+                opponents.some((opponent) =>
+                    state.tokens[opponent].some(
+                        (position) =>
+                            boardAbsoluteTrackIndex(spec, opponent, position) ===
+                            absolute,
+                    ),
                 )
             ) {
                 value += 80;
@@ -306,26 +389,41 @@ function chooseAiMove(state: GameState): LegalMove | null {
 function reducer(state: GameState, action: Action): GameState {
     if (action.type === 'RESTORE') {
         const order = action.match.colors ?? PLAYER_IDS;
+        const arms =
+            action.match.arms ??
+            (order.length >= 5 ? order.length : state.arms);
+        const spec = getBoardSpec(order, arms);
         const turn = order[action.match.turn];
-        const tokens = { ...initialState.tokens };
-        const rolls = { ...initialState.rolls };
-        const hadSix = { ...initialState.hadSix };
-        const captures = { ...initialState.captures };
+        const tokens = createTokenMap();
+        const rolls = createNumberMap();
+        const hadSix = createBoolMap();
+        const captures = createNumberMap();
         order.forEach((color, index) => {
-            tokens[color] = action.match.tokens[index];
+            tokens[color] = action.match.tokens[index] ?? [-1, -1, -1, -1];
             rolls[color] = action.match.stats?.[index]?.rolls ?? 0;
             captures[color] = action.match.stats?.[index]?.captures ?? 0;
             hadSix[color] =
                 action.match.had_six?.[index] ??
-                action.match.tokens[index].some(
-                    (position) => position !== BASE_POSITION,
-                );
+                tokens[color].some((position) => position !== BASE_POSITION);
         });
+        const winners: PlayerId[] = Array.isArray(action.match.winners)
+            ? action.match.winners
+                  .map((idx) => order[idx])
+                  .filter((color): color is PlayerId => Boolean(color))
+            : order.filter((color) =>
+                  tokens[color].every((pos) => pos === spec.finishPosition),
+              );
         const winner =
-            action.match.winner === null ? null : order[action.match.winner];
+            action.match.winner === null
+                ? winners.length >= order.length
+                    ? (winners[0] ?? null)
+                    : null
+                : (order[action.match.winner] ?? null);
         const dice = action.match.dice;
         const moves =
-            dice === null ? [] : computeLegalMoves(tokens, turn, dice);
+            dice === null
+                ? []
+                : computeLegalMoves(tokens, turn, dice, spec.finishPosition);
         const mine = turn === state.human;
         const restoredAt = action.match.started_at
             ? Date.parse(action.match.started_at)
@@ -334,10 +432,12 @@ function reducer(state: GameState, action: Action): GameState {
         return {
             ...state,
             order,
+            arms: spec.arms,
             tokens,
             turn,
             dice,
             winner,
+            winners,
             phase: winner ? 'gameover' : dice === null ? 'idle' : 'choosing',
             legalMoves: moves,
             rolls,
@@ -367,6 +467,7 @@ function reducer(state: GameState, action: Action): GameState {
             action.now,
             action.turn,
             action.order,
+            action.arms,
         );
     }
 
@@ -376,6 +477,8 @@ function reducer(state: GameState, action: Action): GameState {
             state.names,
             action.now,
             action.turn,
+            state.order,
+            state.arms,
         );
     }
 
@@ -409,10 +512,12 @@ function reducer(state: GameState, action: Action): GameState {
             return state;
         }
 
+        const spec = getBoardSpec(state.order, state.arms);
         const legalMoves = computeLegalMoves(
             state.tokens,
             state.turn,
             action.value,
+            spec.finishPosition,
         );
         const actor = state.names[state.turn];
         const logged = appendLog(
@@ -422,10 +527,11 @@ function reducer(state: GameState, action: Action): GameState {
         );
 
         if (legalMoves.length === 0) {
-            const nextPlayer =
-                state.order[
-                    (state.order.indexOf(state.turn) + 1) % state.order.length
-                ];
+            const nextPlayer = nextActivePlayer(
+                state.order,
+                state.turn,
+                state.winners,
+            );
 
             return {
                 ...state,
@@ -467,9 +573,8 @@ function reducer(state: GameState, action: Action): GameState {
             return state;
         }
 
+        const spec = getBoardSpec(state.order, state.arms);
         const actor = state.turn;
-        const opponent =
-            state.order[(state.order.indexOf(actor) + 1) % state.order.length];
         const actorName = state.names[actor];
         const from = state.tokens[actor][move.tokenIndex];
         const nextTokens: Record<PlayerId, number[]> = {
@@ -481,18 +586,21 @@ function reducer(state: GameState, action: Action): GameState {
 
         let capturedCount = 0;
 
-        if (move.target <= 50) {
-            const absolute = absoluteTrackIndex(actor, move.target);
+        if (move.target <= spec.lastTrackPosition) {
+            const absolute = boardAbsoluteTrackIndex(spec, actor, move.target);
 
-            if (!isSafeAbsoluteIndex(absolute)) {
+            if (!isBoardSafeIndex(spec, absolute)) {
                 state.order
                     .filter((color) => color !== actor)
                     .forEach((color) => {
                         nextTokens[color] = nextTokens[color].map(
                             (position) => {
                                 if (
-                                    absoluteTrackIndex(color, position) ===
-                                    absolute
+                                    boardAbsoluteTrackIndex(
+                                        spec,
+                                        color,
+                                        position,
+                                    ) === absolute
                                 ) {
                                     capturedCount += 1;
 
@@ -507,11 +615,18 @@ function reducer(state: GameState, action: Action): GameState {
         }
 
         const captured = capturedCount > 0;
-        const reachedHome = move.target === FINISH_POSITION;
-        const won = nextTokens[actor].every(
-            (position) => position === FINISH_POSITION,
+        const reachedHome = move.target === spec.finishPosition;
+        const playerFinished = nextTokens[actor].every(
+            (position) => position === spec.finishPosition,
         );
-        const extraTurn = state.dice === 6 || captured || reachedHome || won;
+        const nextWinners =
+            playerFinished && !state.winners.includes(actor)
+                ? [...state.winners, actor]
+                : state.winners;
+        const allWon = nextWinners.length >= state.order.length;
+        const nextPlayer = nextActivePlayer(state.order, actor, nextWinners);
+        const extraTurn =
+            !playerFinished && (state.dice === 6 || captured || reachedHome);
         const nextCaptures = captured
             ? {
                   ...state.captures,
@@ -529,27 +644,50 @@ function reducer(state: GameState, action: Action): GameState {
             : captured
               ? ' dan menangkap bidak lawan'
               : '';
-        const logged = appendLog(
-            state,
-            `${actorName} ${moveDescription}${extraDescription}.`,
-            actor,
-        );
+        const finishRank = playerFinished ? nextWinners.length : null;
+        const logText =
+            finishRank !== null
+                ? `${actorName} menyelesaikan semua bidak (Juara ${finishRank})!`
+                : `${actorName} ${moveDescription}${extraDescription}.`;
+        const logged = appendLog(state, logText, actor);
 
-        if (won) {
+        if (allWon) {
+            const firstWinner = nextWinners[0];
+            const firstWinnerName = state.names[firstWinner];
+
             return {
                 ...state,
                 ...logged,
                 tokens: nextTokens,
                 legalMoves: [],
                 phase: 'gameover',
-                winner: actor,
+                winner: firstWinner,
+                winners: nextWinners,
                 captures: nextCaptures,
                 totalMoves: nextTotalMoves,
                 finishedAt: action.now,
                 message:
-                    actor === state.human
-                        ? `${actorName} membawa semua bidak ke garis akhir. Kamu menang!`
-                        : `${actorName} membawa semua bidak ke garis akhir.`,
+                    firstWinner === state.human
+                        ? `Semua pemain selesai. ${firstWinnerName} juara 1!`
+                        : `Semua pemain selesai. ${firstWinnerName} memenangkan pertandingan.`,
+            };
+        }
+
+        if (playerFinished) {
+            return {
+                ...state,
+                ...logged,
+                tokens: nextTokens,
+                legalMoves: [],
+                phase: 'idle',
+                turn: nextPlayer,
+                winners: nextWinners,
+                captures: nextCaptures,
+                totalMoves: nextTotalMoves,
+                message:
+                    nextPlayer === state.human
+                        ? `${actorName} finis #${finishRank}! Giliranmu.`
+                        : `${actorName} finis #${finishRank}! Giliran ${state.names[nextPlayer]}.`,
             };
         }
 
@@ -561,6 +699,7 @@ function reducer(state: GameState, action: Action): GameState {
                 legalMoves: [],
                 phase: 'idle',
                 turn: actor,
+                winners: nextWinners,
                 captures: nextCaptures,
                 totalMoves: nextTotalMoves,
                 message:
@@ -576,13 +715,14 @@ function reducer(state: GameState, action: Action): GameState {
             tokens: nextTokens,
             legalMoves: [],
             phase: 'idle',
-            turn: opponent,
+            turn: nextPlayer,
+            winners: nextWinners,
             captures: nextCaptures,
             totalMoves: nextTotalMoves,
             message:
-                opponent === state.human
+                nextPlayer === state.human
                     ? 'Giliranmu. Lempar dadu.'
-                    : `Giliran ${state.names[opponent]}.`,
+                    : `Giliran ${state.names[nextPlayer]}.`,
         };
     }
 
@@ -641,9 +781,11 @@ export default function Play() {
             match_state?: {
                 tokens: number[][];
                 colors?: PlayerId[];
+                arms?: number;
                 turn: number;
                 dice: number | null;
                 winner: number | null;
+                winners?: number[];
                 stats?: { rolls: number; captures: number }[];
                 had_six?: boolean[];
                 total_moves?: number;
@@ -668,12 +810,16 @@ export default function Play() {
     const roomOrder =
         room?.match_state?.colors ??
         (room ? (['blue', 'green'] as PlayerId[]) : PLAYER_IDS);
+    const roomArms =
+        room?.match_state?.arms ??
+        (room && room.max_players >= 5 ? room.max_players : 4);
     const myRoomIndex =
         room?.players.findIndex((player) => player.id === me?.id) ?? -1;
     const myRoomColor: PlayerId = roomOrder[myRoomIndex] ?? 'blue';
     const roomOtherPlayer = room?.players.find((p) => p.id !== me?.id);
 
     const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
+    const [setupCount, setSetupCount] = useState<PlayerCount>(2);
     const [humanColor, setHumanColor] = useState<PlayerId>('blue');
     const [yourName, setYourName] = useState(accountName);
     const [opponentName, setOpponentName] = useState(
@@ -715,6 +861,7 @@ export default function Play() {
             turn: initialTurn,
             names,
             order: roomOrder,
+            arms: roomArms,
             now: Date.now(),
         });
         if (room.match_state) {
@@ -729,7 +876,13 @@ export default function Play() {
         setScreen('game');
     }, [room?.code]);
 
-    const opponentColor = otherPlayer(state.human);
+    const activeSpec = useMemo(
+        () => getBoardSpec(state.order, state.arms),
+        [state.order, state.arms],
+    );
+    const setupColors: PlayerId[] =
+        setupCount === 2 ? PLAYER_IDS : SEATS_BY_COUNT[setupCount];
+    const opponentColor = otherPlayer(state.human, state.order);
     const blockedByRoom = Boolean(room) && !me;
     const serverWinner = room?.match_state?.winner ?? null;
     const matchRunning =
@@ -747,9 +900,10 @@ export default function Play() {
         (!room || myRoomIndex >= 0) &&
         state.turn === state.human &&
         state.phase === 'idle' &&
-        !state.winner;
+        !state.winner &&
+        !state.winners.includes(state.human);
     const displayDice = state.dice ?? 6;
-    const setupOpponent = otherPlayer(humanColor);
+    const setupOpponent = otherPlayer(humanColor, setupColors);
 
     useEffect(() => {
         const previous = document.body.style.overflow;
@@ -772,7 +926,12 @@ export default function Play() {
 
         const timeout = window.setTimeout(() => {
             const hasMoves =
-                computeLegalMoves(state.tokens, state.turn, value).length > 0;
+                computeLegalMoves(
+                    state.tokens,
+                    state.turn,
+                    value,
+                    activeSpec.finishPosition,
+                ).length > 0;
 
             dispatch({ type: 'ROLL_RESULT', value });
 
@@ -782,7 +941,13 @@ export default function Play() {
         }, 1080);
 
         return () => window.clearTimeout(timeout);
-    }, [state.phase, state.dice, state.tokens, state.turn]);
+    }, [
+        state.phase,
+        state.dice,
+        state.tokens,
+        state.turn,
+        activeSpec.finishPosition,
+    ]);
 
     useEffect(() => {
         const previous = previousTurnRef.current;
@@ -916,18 +1081,25 @@ export default function Play() {
                 fromPosition: number;
             }[] = [];
 
-            if (move.target <= 50) {
-                const absolute = absoluteTrackIndex(color, move.target);
+            if (move.target <= activeSpec.lastTrackPosition) {
+                const absolute = boardAbsoluteTrackIndex(
+                    activeSpec,
+                    color,
+                    move.target,
+                );
 
-                if (!isSafeAbsoluteIndex(absolute)) {
+                if (!isBoardSafeIndex(activeSpec, absolute)) {
                     opponents.forEach((opponent) =>
                         state.tokens[opponent].forEach(
                             (position, opponentTokenIndex) => {
                                 if (
                                     position >= 0 &&
-                                    position <= 50 &&
-                                    absoluteTrackIndex(opponent, position) ===
-                                        absolute
+                                    position <= activeSpec.lastTrackPosition &&
+                                    boardAbsoluteTrackIndex(
+                                        activeSpec,
+                                        opponent,
+                                        position,
+                                    ) === absolute
                                 ) {
                                     capturedTargets.push({
                                         color: opponent,
@@ -993,7 +1165,7 @@ export default function Play() {
                         window.setTimeout(resolve, 140),
                     );
                 }
-            } else if (move.target === FINISH_POSITION) {
+            } else if (move.target === activeSpec.finishPosition) {
                 playFinishSound();
             }
 
@@ -1004,9 +1176,11 @@ export default function Play() {
         },
         [
             room,
+            activeSpec,
             state.phase,
             state.legalMoves,
             state.tokens,
+            state.order,
             state.turn,
             state.human,
         ],
@@ -1172,7 +1346,12 @@ export default function Play() {
                 return {
                     id: `${color}-${tokenIndex}`,
                     color,
-                    point: tokenPoint(color, displayPosition, tokenIndex),
+                    point: boardTokenPoint(
+                        activeSpec,
+                        color,
+                        displayPosition,
+                        tokenIndex,
+                    ),
                     legal: canClickMove,
                     moving: isMoving,
                     returning: isReturning,
@@ -1186,6 +1365,7 @@ export default function Play() {
             }),
         );
     }, [
+        activeSpec,
         state.tokens,
         state.order,
         state.turn,
@@ -1200,8 +1380,9 @@ export default function Play() {
     ]);
 
     const finished = (color: PlayerId) =>
-        state.tokens[color].filter((position) => position === FINISH_POSITION)
-            .length;
+        state.tokens[color].filter(
+            (position) => position === activeSpec.finishPosition,
+        ).length;
 
     const outOfBase = (color: PlayerId) =>
         state.tokens[color].filter((position) => position !== BASE_POSITION)
@@ -1214,15 +1395,21 @@ export default function Play() {
 
         const finishedCount = (color: PlayerId) =>
             state.tokens[color].filter(
-                (position) => position === FINISH_POSITION,
+                (position) => position === activeSpec.finishPosition,
             ).length;
 
         return [...state.order]
             .sort((a, b) => {
-                if (a === state.winner) {
+                const rankA = state.winners.indexOf(a);
+                const rankB = state.winners.indexOf(b);
+
+                if (rankA !== -1 && rankB !== -1) {
+                    return rankA - rankB;
+                }
+                if (rankA !== -1) {
                     return -1;
                 }
-                if (b === state.winner) {
+                if (rankB !== -1) {
                     return 1;
                 }
 
@@ -1237,7 +1424,9 @@ export default function Play() {
                 rolls: state.rolls[color],
             }));
     }, [
+        activeSpec.finishPosition,
         state.winner,
+        state.winners,
         state.order,
         state.tokens,
         state.names,
@@ -1255,10 +1444,18 @@ export default function Play() {
             : 0;
 
     const activeSubtitle = (color: PlayerId) => {
+        const winRank = state.winners.indexOf(color);
+
         if (state.winner) {
-            return state.winner === color
-                ? 'Pemenang pertandingan'
-                : 'Pertandingan selesai';
+            return winRank !== -1
+                ? `Juara ${winRank + 1}`
+                : state.winner === color
+                  ? 'Pemenang pertandingan'
+                  : 'Pertandingan selesai';
+        }
+
+        if (winRank !== -1) {
+            return `Selesai · Juara ${winRank + 1}`;
         }
 
         if (state.turn !== color) {
@@ -1414,6 +1611,15 @@ export default function Play() {
         }
     };
 
+    const selectSetupCount = (count: PlayerCount) => {
+        setSetupCount(count);
+        const nextColors = count === 2 ? PLAYER_IDS : SEATS_BY_COUNT[count];
+        if (!nextColors.includes(humanColor)) {
+            setHumanColor(nextColors[0]);
+        }
+        cue(playUiSound);
+    };
+
     const selectColor = (color: PlayerId) => {
         setHumanColor(color);
         cue(playUiSound);
@@ -1422,12 +1628,20 @@ export default function Play() {
     const startGame = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        const names = {
-            [humanColor]: yourName,
-            [setupOpponent]: opponentName,
-        } as SetupNames;
+        const order = setupColors;
+        const arms = setupCount >= 5 ? setupCount : 4;
+        const names = { ...DEFAULT_NAMES } as SetupNames;
+        order.forEach((color) => {
+            if (color === humanColor) {
+                names[color] = yourName;
+            } else if (setupCount === 2) {
+                names[color] = opponentName;
+            } else {
+                names[color] = `Bot ${PLAYER_CONFIG[color].label}`;
+            }
+        });
 
-        const starter = randomPlayer();
+        const starter = randomPlayer(order);
 
         cue(playStartSound);
         previousTurnRef.current = starter;
@@ -1436,6 +1650,8 @@ export default function Play() {
             human: humanColor,
             turn: starter,
             names,
+            order,
+            arms,
             now: Date.now(),
         });
         setMovingToken(null);
@@ -1446,6 +1662,11 @@ export default function Play() {
 
     const openSetup = () => {
         cue(playUiSound);
+        const count = Math.min(
+            7,
+            Math.max(2, state.order.length),
+        ) as PlayerCount;
+        setSetupCount(count);
         setHumanColor(state.human);
         setYourName(state.names[state.human]);
         setOpponentName(state.names[opponentColor]);
@@ -1453,7 +1674,7 @@ export default function Play() {
     };
 
     const playAgain = () => {
-        const starter = randomPlayer();
+        const starter = randomPlayer(state.order);
 
         cue(playStartSound);
         previousTurnRef.current = starter;
@@ -1551,6 +1772,7 @@ export default function Play() {
                                     <SoundOffIcon className="h-4 w-4" />
                                 )}
                             </button>
+                            <FullscreenToggle />
                             {!room && (
                                 <span className="border-line text-ink-muted hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1.5 text-[10px] font-semibold min-[380px]:inline-flex sm:text-[11px]">
                                     <span className="relative flex h-1.5 w-1.5">
@@ -1628,7 +1850,7 @@ export default function Play() {
                     <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
                         <form
                             onSubmit={startGame}
-                            className="border-line/80 shadow-card animate-fade-up w-full max-w-lg rounded-[26px] border bg-white p-4 sm:p-6 [@media(max-height:620px)]:p-3"
+                            className="border-line/80 shadow-card animate-fade-up max-h-[calc(100dvh-72px)] w-full max-w-lg overflow-y-auto rounded-[26px] border bg-white p-4 sm:p-6 [@media(max-height:620px)]:p-3"
                         >
                             <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
                                 SEBELUM BERMAIN
@@ -1637,16 +1859,53 @@ export default function Play() {
                                 Siapkan nama & warna
                             </h1>
                             <p className="text-ink-muted mt-1 text-[11px] leading-5 sm:text-xs [@media(max-height:620px)]:hidden">
-                                Pilih warnamu, tulis nama pemain, lalu mulai.
-                                Nama akan tampil di kartu dan area warna papan.
+                                Pilih jumlah pemain, warna, dan namamu. Papan
+                                menyesuaikan otomatis untuk 2–7 pemain.
                             </p>
 
-                            <fieldset className="mt-4 [@media(max-height:620px)]:mt-2">
+                            <fieldset className="mt-3 [@media(max-height:620px)]:mt-2">
+                                <legend className="text-ink text-xs font-semibold">
+                                    Jumlah pemain
+                                </legend>
+                                <div className="border-line bg-canvas mt-1.5 grid grid-cols-6 gap-1 rounded-xl border p-1">
+                                    {LOCAL_COUNTS.map((count) => {
+                                        const selected = setupCount === count;
+
+                                        return (
+                                            <button
+                                                key={count}
+                                                type="button"
+                                                onClick={() =>
+                                                    selectSetupCount(count)
+                                                }
+                                                aria-pressed={selected}
+                                                className={`h-9 rounded-lg text-xs font-semibold transition ${
+                                                    selected
+                                                        ? 'text-ink bg-white shadow-sm'
+                                                        : 'text-ink-muted hover:text-ink'
+                                                }`}
+                                            >
+                                                {count}P
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </fieldset>
+
+                            <fieldset className="mt-3 [@media(max-height:620px)]:mt-2">
                                 <legend className="text-ink text-xs font-semibold">
                                     Pilih warnamu
                                 </legend>
-                                <div className="mt-2 grid grid-cols-2 gap-2">
-                                    {PLAYER_IDS.map((color) => {
+                                <div
+                                    className={`mt-2 grid gap-1.5 sm:gap-2 ${
+                                        setupColors.length >= 5
+                                            ? 'grid-cols-3 sm:grid-cols-4'
+                                            : setupColors.length >= 3
+                                              ? 'grid-cols-2 sm:grid-cols-4'
+                                              : 'grid-cols-2'
+                                    }`}
+                                >
+                                    {setupColors.map((color) => {
                                         const palette =
                                             PLAYER_CONFIG[color].palette;
                                         const selected = humanColor === color;
@@ -1659,7 +1918,7 @@ export default function Play() {
                                                     selectColor(color)
                                                 }
                                                 aria-pressed={selected}
-                                                className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition [@media(max-height:620px)]:py-1.5 ${
+                                                className={`flex items-center gap-2 rounded-2xl border px-2.5 py-2 text-left transition [@media(max-height:620px)]:py-1.5 ${
                                                     selected
                                                         ? 'border-transparent'
                                                         : 'border-line hover:border-ink/15 bg-white'
@@ -1675,7 +1934,7 @@ export default function Play() {
                                                 }
                                             >
                                                 <span
-                                                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white [@media(max-height:620px)]:h-7 [@media(max-height:620px)]:w-7"
+                                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
                                                     style={{
                                                         background:
                                                             palette.base,
@@ -1685,7 +1944,7 @@ export default function Play() {
                                                 </span>
                                                 <span className="min-w-0">
                                                     <span
-                                                        className="block text-xs font-semibold"
+                                                        className="block truncate text-xs font-semibold"
                                                         style={{
                                                             color: palette.text,
                                                         }}
@@ -1695,10 +1954,10 @@ export default function Play() {
                                                                 .label
                                                         }
                                                     </span>
-                                                    <span className="text-ink-muted block text-[10px]">
+                                                    <span className="text-ink-muted block truncate text-[10px]">
                                                         {selected
                                                             ? 'Kamu'
-                                                            : 'Pilih ini'}
+                                                            : 'Pilih'}
                                                     </span>
                                                 </span>
                                             </button>
@@ -1707,7 +1966,13 @@ export default function Play() {
                                 </div>
                             </fieldset>
 
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2 [@media(max-height:620px)]:grid-cols-2">
+                            <div
+                                className={`mt-3 grid gap-2 ${
+                                    setupCount === 2
+                                        ? 'sm:grid-cols-2 [@media(max-height:620px)]:grid-cols-2'
+                                        : ''
+                                }`}
+                            >
                                 <label className="block">
                                     <span className="text-ink text-xs font-semibold">
                                         Nama kamu
@@ -1723,41 +1988,40 @@ export default function Play() {
                                         className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
                                     />
                                 </label>
-                                <label className="block">
-                                    <span className="text-ink text-xs font-semibold">
-                                        Nama lawan
-                                    </span>
-                                    <input
-                                        value={opponentName}
-                                        onChange={(event) =>
-                                            setOpponentName(event.target.value)
-                                        }
-                                        maxLength={16}
-                                        autoComplete="off"
-                                        placeholder="Nama lawan"
-                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
-                                    />
-                                </label>
+                                {setupCount === 2 && (
+                                    <label className="block">
+                                        <span className="text-ink text-xs font-semibold">
+                                            Nama lawan
+                                        </span>
+                                        <input
+                                            value={opponentName}
+                                            onChange={(event) =>
+                                                setOpponentName(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            maxLength={16}
+                                            autoComplete="off"
+                                            placeholder="Nama lawan"
+                                            className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                        />
+                                    </label>
+                                )}
                             </div>
 
                             <div className="bg-surface-muted mt-3 flex items-center gap-2 rounded-xl px-3 py-2 [@media(max-height:620px)]:hidden">
                                 <span className="flex shrink-0 -space-x-1">
-                                    <span
-                                        className="h-4 w-4 rounded-full border-2 border-white"
-                                        style={{
-                                            background:
-                                                PLAYER_CONFIG[humanColor]
-                                                    .palette.base,
-                                        }}
-                                    />
-                                    <span
-                                        className="h-4 w-4 rounded-full border-2 border-white"
-                                        style={{
-                                            background:
-                                                PLAYER_CONFIG[setupOpponent]
-                                                    .palette.base,
-                                        }}
-                                    />
+                                    {setupColors.map((color) => (
+                                        <span
+                                            key={color}
+                                            className="h-4 w-4 rounded-full border-2 border-white"
+                                            style={{
+                                                background:
+                                                    PLAYER_CONFIG[color].palette
+                                                        .base,
+                                            }}
+                                        />
+                                    ))}
                                 </span>
                                 <p className="text-ink-muted min-w-0 text-[10px] leading-4">
                                     Kamu memakai{' '}
@@ -1769,16 +2033,34 @@ export default function Play() {
                                     >
                                         {PLAYER_CONFIG[humanColor].label}
                                     </strong>
-                                    , lawan memakai{' '}
-                                    <strong
-                                        style={{
-                                            color: PLAYER_CONFIG[setupOpponent]
-                                                .palette.text,
-                                        }}
-                                    >
-                                        {PLAYER_CONFIG[setupOpponent].label}
-                                    </strong>
-                                    .
+                                    {setupCount === 2 ? (
+                                        <>
+                                            , lawan memakai{' '}
+                                            <strong
+                                                style={{
+                                                    color: PLAYER_CONFIG[
+                                                        setupOpponent
+                                                    ].palette.text,
+                                                }}
+                                            >
+                                                {
+                                                    PLAYER_CONFIG[setupOpponent]
+                                                        .label
+                                                }
+                                            </strong>
+                                            .
+                                        </>
+                                    ) : (
+                                        <>
+                                            {' '}
+                                            melawan {setupCount - 1} bot di
+                                            papan{' '}
+                                            {setupCount >= 5
+                                                ? `${setupCount} sisi`
+                                                : '4 sisi'}
+                                            .
+                                        </>
+                                    )}
                                 </p>
                             </div>
 
@@ -1808,28 +2090,89 @@ export default function Play() {
                     <main className="mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
                         <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_280px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4">
                             <section className="flex min-h-0 min-w-0 flex-col gap-2">
-                                <div className="border-line/80 shadow-card grid shrink-0 grid-cols-2 items-stretch rounded-[18px] border bg-white md:hidden">
-                                    {state.order.map((color) => (
-                                        <PlayerCard
-                                            key={color}
-                                            size="sm"
-                                            color={color}
-                                            name={state.names[color]}
-                                            role={
-                                                color === state.human
-                                                    ? 'Kamu'
-                                                    : 'Lawan'
-                                            }
-                                            subtitle={activeSubtitle(color)}
-                                            active={
+                                {state.order.length >= 5 ? (
+                                    <div
+                                        className={`border-line/80 shadow-card grid shrink-0 gap-1 overflow-hidden rounded-[16px] border bg-white p-1 md:hidden ${
+                                            state.order.length === 7
+                                                ? 'grid-cols-4'
+                                                : 'grid-cols-3'
+                                        }`}
+                                    >
+                                        {state.order.map((color) => {
+                                            const palette =
+                                                PLAYER_CONFIG[color].palette;
+                                            const isTurn =
                                                 state.turn === color &&
-                                                !state.winner
-                                            }
-                                            finished={finished(color)}
-                                            className="min-w-0 flex-1"
-                                        />
-                                    ))}
-                                </div>
+                                                !state.winner;
+                                            const winRank =
+                                                state.winners.indexOf(color);
+
+                                            return (
+                                                <div
+                                                    key={color}
+                                                    className="flex min-w-0 items-center gap-1.5 rounded-xl px-1.5 py-1 transition-colors"
+                                                    style={
+                                                        isTurn
+                                                            ? {
+                                                                  background:
+                                                                      palette.soft,
+                                                                  boxShadow: `inset 0 0 0 1.5px ${palette.base}`,
+                                                              }
+                                                            : undefined
+                                                    }
+                                                >
+                                                    <span
+                                                        className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-[9px] font-bold text-white"
+                                                        style={{
+                                                            background:
+                                                                palette.base,
+                                                        }}
+                                                    >
+                                                        {state.names[color]
+                                                            .charAt(0)
+                                                            .toUpperCase()}
+                                                    </span>
+                                                    <span className="text-ink min-w-0 flex-1 truncate text-[10px] font-semibold">
+                                                        {state.names[color]}
+                                                    </span>
+                                                    <span
+                                                        className="shrink-0 text-[9px] font-bold tabular-nums"
+                                                        style={{
+                                                            color: palette.text,
+                                                        }}
+                                                    >
+                                                        {winRank !== -1
+                                                            ? `#${winRank + 1}`
+                                                            : `${finished(color)}/4`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="border-line/80 shadow-card grid shrink-0 grid-cols-2 items-stretch rounded-[18px] border bg-white md:hidden">
+                                        {state.order.map((color) => (
+                                            <PlayerCard
+                                                key={color}
+                                                size="sm"
+                                                color={color}
+                                                name={state.names[color]}
+                                                role={
+                                                    color === state.human
+                                                        ? 'Kamu'
+                                                        : 'Lawan'
+                                                }
+                                                subtitle={activeSubtitle(color)}
+                                                active={
+                                                    state.turn === color &&
+                                                    !state.winner
+                                                }
+                                                finished={finished(color)}
+                                                className="min-w-0 flex-1"
+                                            />
+                                        ))}
+                                    </div>
+                                )}
 
                                 <div
                                     ref={boardRef}
@@ -1845,6 +2188,8 @@ export default function Play() {
                                         >
                                             <LudoBoard
                                                 tokens={boardTokens}
+                                                order={state.order}
+                                                arms={state.arms}
                                                 playerNames={Object.fromEntries(
                                                     state.order.map((color) => [
                                                         color,
@@ -1940,28 +2285,45 @@ export default function Play() {
                                 <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white">
                                     <div className="shrink-0 px-4 pt-3.5 pb-2">
                                         <h2 className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
-                                            PEMAIN
+                                            PEMAIN ({state.order.length})
                                         </h2>
                                     </div>
-                                    {state.order.map((color) => (
-                                        <PlayerCard
-                                            key={color}
-                                            color={color}
-                                            name={state.names[color]}
-                                            role={
-                                                color === state.human
-                                                    ? 'Kamu'
-                                                    : 'Lawan'
-                                            }
-                                            subtitle={activeSubtitle(color)}
-                                            active={
-                                                state.turn === color &&
-                                                !state.winner
-                                            }
-                                            finished={finished(color)}
-                                            className="min-h-0 flex-1"
-                                        />
-                                    ))}
+                                    <div
+                                        className={`flex min-h-0 flex-1 flex-col ${
+                                            state.order.length >= 5
+                                                ? 'divide-line/50 divide-y overflow-y-auto'
+                                                : ''
+                                        }`}
+                                    >
+                                        {state.order.map((color) => (
+                                            <PlayerCard
+                                                key={color}
+                                                size={
+                                                    state.order.length >= 5
+                                                        ? 'sm'
+                                                        : 'md'
+                                                }
+                                                color={color}
+                                                name={state.names[color]}
+                                                role={
+                                                    color === state.human
+                                                        ? 'Kamu'
+                                                        : 'Lawan'
+                                                }
+                                                subtitle={activeSubtitle(color)}
+                                                active={
+                                                    state.turn === color &&
+                                                    !state.winner
+                                                }
+                                                finished={finished(color)}
+                                                className={
+                                                    state.order.length >= 5
+                                                        ? 'shrink-0'
+                                                        : 'min-h-0 flex-1'
+                                                }
+                                            />
+                                        ))}
+                                    </div>
                                     <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3 [@media(max-height:640px)]:hidden">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">

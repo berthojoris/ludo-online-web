@@ -16,6 +16,7 @@ Route::post('/rooms', [RoomController::class, 'store'])->name('rooms.store');
 Route::patch('/rooms/{code}/settings', [RoomController::class, 'updateSettings'])->name('rooms.settings');
 Route::post('/rooms/{code}/seat', [RoomController::class, 'selectSeat'])->name('rooms.seat');
 Route::post('/rooms/{code}/name', [RoomController::class, 'updateName'])->name('rooms.name');
+Route::patch('/rooms/{code}/players/{player}/name', [RoomController::class, 'updatePlayerName'])->name('rooms.players.name');
 Route::post('/rooms/{code}/ready', [RoomController::class, 'toggleReady'])->name('rooms.ready');
 Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('rooms.start');
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');

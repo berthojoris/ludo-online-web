@@ -135,7 +135,7 @@ export default function HowItWorksModal({
                                                     Pemain
                                                 </dt>
                                                 <dd className="text-xs font-semibold">
-                                                    2–4 orang
+                                                    2–7 orang
                                                 </dd>
                                             </div>
                                             <div className="flex items-center justify-between gap-3 border-b border-white/10 py-2.5">

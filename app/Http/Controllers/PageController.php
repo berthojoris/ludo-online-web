@@ -205,7 +205,7 @@ class PageController extends Controller
                     'user_id' => $request->user()?->id,
                     'name' => RoomController::defaultPlayerName($request, true),
                     'seat_color' => $created->allowedSeats()[0],
-                    'is_ready' => false,
+                    'is_ready' => true,
                     'is_host' => true,
                 ]);
 
