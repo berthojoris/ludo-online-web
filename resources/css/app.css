@@ -568,13 +568,32 @@
     position: absolute;
     transform: translateX(-50%);
     width: min(48cqw, 16rem);
-    padding: clamp(.5rem, 2.5cqw, .85rem) clamp(1rem, 5cqw, 1.6rem);
-    border: 1.5px solid #b5c8df;
-    border-radius: 50%;
+    padding: clamp(.55rem, 2.5cqw, .85rem) clamp(.75rem, 3.5cqw, 1.15rem);
+    border: 2px solid #202b3a;
+    border-radius: clamp(.65rem, 3cqw, 1rem);
     background: #fff;
     color: #172b46;
     box-shadow: 0 2px 4px #172b4633;
     animation: home-chat-arrive 260ms ease-out both;
+}
+.home-chat-bubble::before,
+.home-chat-bubble::after {
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 15%;
+    width: clamp(1.2rem, 6cqw, 2rem);
+    height: clamp(.85rem, 4.5cqw, 1.4rem);
+    content: '';
+    pointer-events: none;
+}
+.home-chat-bubble::before {
+    background: #202b3a;
+    clip-path: polygon(32% 0, 100% 0, 0 100%);
+}
+.home-chat-bubble::after {
+    top: calc(100% - 3px);
+    background: #fff;
+    clip-path: polygon(34% 0, 91% 0, 13% 77%);
 }
 .home-chat-bubble__message {
     position: relative;
