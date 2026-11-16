@@ -1,4 +1,9 @@
-import { CloseIcon, LockIcon } from '@/Components/Game/Icons';
+import {
+    CloseIcon,
+    EyeIcon,
+    EyeOffIcon,
+    LockIcon,
+} from '@/Components/Game/Icons';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
@@ -23,6 +28,7 @@ export default function CreateRoomPasswordModal({
     onSubmit,
 }: Props) {
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
     const overlayStyle = useModalViewport(open);
@@ -37,6 +43,7 @@ export default function CreateRoomPasswordModal({
         }
 
         setPassword('');
+        setShowPassword(false);
 
         const focusTimeout = window.setTimeout(() => {
             if (hasCoarsePointer()) {
@@ -134,24 +141,51 @@ export default function CreateRoomPasswordModal({
                     >
                         Kata sandi
                     </label>
-                    <input
-                        ref={inputRef}
-                        id="create-room-password"
-                        type="password"
-                        name="password"
-                        value={password}
-                        autoComplete="off"
-                        enterKeyHint="done"
-                        disabled={processing}
-                        onChange={(event) => setPassword(event.target.value)}
-                        aria-invalid={error ? true : undefined}
-                        aria-describedby={
-                            error ? 'create-room-password-error' : undefined
-                        }
-                        className={`text-ink focus-visible:ring-brand/60 mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
-                            error ? 'border-danger' : 'border-line'
-                        }`}
-                    />
+                    <div className="relative mt-1.5">
+                        <input
+                            ref={inputRef}
+                            id="create-room-password"
+                            type={showPassword ? 'text' : 'password'}
+                            name="password"
+                            value={password}
+                            autoComplete="off"
+                            enterKeyHint="done"
+                            disabled={processing}
+                            onChange={(event) => setPassword(event.target.value)}
+                            aria-invalid={error ? true : undefined}
+                            aria-describedby={
+                                error ? 'create-room-password-error' : undefined
+                            }
+                            className={`text-ink focus-visible:ring-brand/60 h-11 w-full rounded-xl border bg-white pr-12 pl-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
+                                error ? 'border-danger' : 'border-line'
+                            }`}
+                        />
+                        <button
+                            type="button"
+                            disabled={processing}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => setShowPassword((visible) => !visible)}
+                            aria-label={
+                                showPassword
+                                    ? 'Sembunyikan kata sandi'
+                                    : 'Tampilkan kata sandi'
+                            }
+                            aria-pressed={showPassword}
+                            aria-controls="create-room-password"
+                            title={
+                                showPassword
+                                    ? 'Sembunyikan kata sandi'
+                                    : 'Tampilkan kata sandi'
+                            }
+                            className="text-ink-muted hover:text-ink focus-visible:ring-brand/60 absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl transition outline-none focus-visible:ring-2 disabled:opacity-50"
+                        >
+                            {showPassword ? (
+                                <EyeOffIcon className="h-5 w-5" />
+                            ) : (
+                                <EyeIcon className="h-5 w-5" />
+                            )}
+                        </button>
+                    </div>
                     {error && (
                         <p
                             id="create-room-password-error"

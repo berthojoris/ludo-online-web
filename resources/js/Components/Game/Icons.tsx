@@ -182,6 +182,26 @@ export function LockIcon(props: IconProps) {
     );
 }
 
+export function EyeIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M2.8 12S6 5.8 12 5.8 21.2 12 21.2 12 18 18.2 12 18.2 2.8 12 2.8 12Z" />
+            <circle cx="12" cy="12" r="2.8" />
+        </svg>
+    );
+}
+
+export function EyeOffIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M10.7 5.2A9.9 9.9 0 0 1 12 5.1c6 0 9.2 6.9 9.2 6.9a17.6 17.6 0 0 1-2.9 3.7" />
+            <path d="M6.9 7.4A17.1 17.1 0 0 0 2.8 12s3.2 6.9 9.2 6.9a9.6 9.6 0 0 0 3.8-.8" />
+            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+            <path d="m4 4 16 16" />
+        </svg>
+    );
+}
+
 export function RefreshIcon(props: IconProps) {
     return (
         <svg {...base} {...props}>
