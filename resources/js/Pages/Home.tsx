@@ -4,7 +4,12 @@ import HowItWorksModal from '@/Components/Game/HowItWorksModal';
 import { InfoIcon } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
-import { PlayerColor, tokenPoint } from '@/lib/ludo';
+import {
+    ARENA_BACKGROUND_IMAGE,
+    DEFAULT_CHARACTER_BY_COLOR,
+    PlayerColor,
+    tokenPoint,
+} from '@/lib/ludo';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +21,7 @@ function previewTokens(): BoardToken[] {
         [0, 1, 2, 3].map((tokenIndex) => ({
             id: `${color}-${tokenIndex}`,
             color,
+            character: DEFAULT_CHARACTER_BY_COLOR[color],
             point: tokenPoint(color, tokenIndex === 0 ? 8 : -1, tokenIndex),
         })),
     );
@@ -171,9 +177,15 @@ export default function Home() {
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden"
                 >
+                    <div
+                        className="absolute inset-0 bg-cover bg-center opacity-35"
+                        style={{
+                            backgroundImage: `url('${ARENA_BACKGROUND_IMAGE}')`,
+                        }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/55 via-white/75 to-white/90" />
                     <div className="bg-brand/10 absolute top-20 -left-32 h-80 w-80 rounded-full blur-3xl" />
                     <div className="bg-ludo-yellow/10 absolute top-44 -right-24 h-96 w-96 rounded-full blur-3xl" />
-                    <div className="dot-grid absolute inset-0 [mask-image:linear-gradient(to_bottom,black,transparent_72%)] opacity-40" />
                 </div>
 
                 <header className="border-line/60 bg-canvas/80 z-40 shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
@@ -313,10 +325,26 @@ export default function Home() {
                                     aria-hidden="true"
                                     className="from-brand/15 to-ludo-yellow/20 absolute -inset-4 rounded-[3rem] bg-gradient-to-br via-transparent blur-2xl sm:-inset-6"
                                 />
-                                <div className="shadow-board relative h-full w-full rounded-[32px] border border-white/80 bg-white/75 p-1.5 backdrop-blur-sm sm:p-3">
-                                    <div className="bg-surface-muted/70 h-full w-full rounded-[26px] p-2 sm:p-4">
+                                <div className="shadow-board relative h-full w-full overflow-hidden rounded-[32px] border border-white/85 bg-white/80 p-1.5 backdrop-blur-sm sm:p-3">
+                                    <div
+                                        aria-hidden="true"
+                                        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-50"
+                                        style={{
+                                            backgroundImage: `url('${ARENA_BACKGROUND_IMAGE}')`,
+                                        }}
+                                    />
+                                    <div className="relative h-full w-full rounded-[26px] bg-white/60 p-2 backdrop-blur-[1px] sm:p-4">
                                         <LudoBoard
                                             tokens={tokens}
+                                            playerNames={{
+                                                red: 'Ignivar',
+                                                green: 'Verdantor',
+                                                yellow: 'Solgarde',
+                                                blue: 'Frostclaw',
+                                            }}
+                                            playerCharacters={
+                                                DEFAULT_CHARACTER_BY_COLOR
+                                            }
                                             className="h-full w-full"
                                         />
                                     </div>

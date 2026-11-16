@@ -17,6 +17,26 @@ class Room extends Model
         'teal',
     ];
 
+    public const ALL_CHARACTERS = [
+        'ignivar',
+        'frost_claw',
+        'solgarde',
+        'verdantor',
+        'umrax',
+        'aqualon',
+        'zephyira',
+    ];
+
+    public const DEFAULT_CHARACTER_BY_COLOR = [
+        'red' => 'ignivar',
+        'green' => 'verdantor',
+        'yellow' => 'solgarde',
+        'blue' => 'frost_claw',
+        'purple' => 'umrax',
+        'orange' => 'zephyira',
+        'teal' => 'aqualon',
+    ];
+
     public const SEATS_BY_COUNT = [
         2 => ['red', 'yellow'],
         3 => ['red', 'green', 'yellow'],
@@ -80,6 +100,7 @@ class Room extends Model
                 'id' => $player->id,
                 'name' => $player->name,
                 'seat_color' => $player->seat_color,
+                'character' => $player->character ?? ($player->seat_color ? (self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null),
                 'is_ready' => $player->is_ready,
                 'is_host' => $player->is_host,
             ])->values()->all(),

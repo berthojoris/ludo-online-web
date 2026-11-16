@@ -1,6 +1,9 @@
 import {
+    ARENA_BACKGROUND_IMAGE,
     Cell,
+    CharacterId,
     getBoardSpec,
+    getCharacterConfig,
     PLAYER_CONFIG,
     PlayerColor,
     SAFE_TRACK_INDICES,
@@ -14,6 +17,7 @@ import LudoPin from './LudoPin';
 export type BoardToken = {
     id: string;
     color: PlayerColor;
+    character?: CharacterId | string | null;
     point: Cell;
     legal?: boolean;
     moving?: boolean;
@@ -25,6 +29,7 @@ export type BoardToken = {
 type LudoBoardProps = {
     tokens?: BoardToken[];
     playerNames?: Partial<Record<PlayerColor, string>>;
+    playerCharacters?: Partial<Record<PlayerColor, CharacterId | string | null>>;
     activeColor?: PlayerColor;
     activeLabel?: string;
     order?: PlayerColor[];
@@ -100,6 +105,7 @@ function tokenGroups(tokens: BoardToken[]) {
 export default function LudoBoard({
     tokens = [],
     playerNames = {},
+    playerCharacters = {},
     activeColor,
     activeLabel,
     order,
@@ -130,7 +136,20 @@ export default function LudoBoard({
             aria-label={`Papan Ludo ${spec.arms} pemain`}
             style={{ containerType: 'inline-size' }}
         >
-            <div className="border-line/80 absolute inset-0 overflow-hidden rounded-[5.5%] border bg-white shadow-[0_18px_45px_-24px_rgba(32,43,58,0.45)]">
+            <div className="border-white/90 absolute inset-0 overflow-hidden rounded-[5.5%] border-[3px] bg-white shadow-[0_22px_55px_-20px_rgba(20,32,52,0.55)]">
+                {/* Scenic arena background texture beneath the board */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.16]"
+                    style={{
+                        backgroundImage: `url('${ARENA_BACKGROUND_IMAGE}')`,
+                    }}
+                />
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-white/84"
+                />
+
                 {spec.isRadial ? (
                     <>
                         <svg
@@ -200,15 +219,15 @@ export default function LudoBoard({
                                                 cx={pad.x}
                                                 cy={pad.y}
                                                 r={spec.padSizePercent / 2}
-                                                fill="rgba(255,255,255,0.6)"
-                                                stroke={`${palette.base}59`}
-                                                strokeWidth="0.4"
+                                                fill="rgba(255,255,255,0.65)"
+                                                stroke={`${palette.base}75`}
+                                                strokeWidth="0.45"
                                             />
                                         ))}
                                         {activeColor && !isActive && (
                                             <path
                                                 d={wedge.outerPath}
-                                                fill="rgba(255,255,255,0.30)"
+                                                fill="rgba(255,255,255,0.26)"
                                             />
                                         )}
                                         {isActive && (
@@ -258,7 +277,7 @@ export default function LudoBoard({
                                             stroke={
                                                 ownerPalette
                                                     ? ownerPalette.dark
-                                                    : '#e4e8ee'
+                                                    : '#dfe5ee'
                                             }
                                             strokeWidth="0.24"
                                         />
@@ -268,7 +287,7 @@ export default function LudoBoard({
                                                 fill={
                                                     ownerPalette
                                                         ? 'rgba(255,255,255,0.92)'
-                                                        : '#c9d1dd'
+                                                        : '#b8c3d2'
                                                 }
                                             />
                                         )}
@@ -298,8 +317,8 @@ export default function LudoBoard({
                                         <circle
                                             cx="0"
                                             cy="0"
-                                            r={cellBox * 0.11}
-                                            fill="rgba(255,255,255,0.58)"
+                                            r={cellBox * 0.12}
+                                            fill="rgba(255,255,255,0.75)"
                                         />
                                     </g>
                                 ));
@@ -378,222 +397,233 @@ export default function LudoBoard({
                 ) : (
                     <>
                         {QUADRANTS.map(({ color, row, col }) => {
-                    const config = PLAYER_CONFIG[color];
-                    const palette = config.palette;
-                    const isActive = color === activeColor;
+                            const config = PLAYER_CONFIG[color];
+                            const palette = config.palette;
+                            const isActive = color === activeColor;
 
-                    return (
+                            return (
+                                <div
+                                    key={color}
+                                    className="absolute rounded-[8%]"
+                                    style={{
+                                        left: `${col * CELL_SIZE}%`,
+                                        top: `${row * CELL_SIZE}%`,
+                                        width: `${6 * CELL_SIZE}%`,
+                                        height: `${6 * CELL_SIZE}%`,
+                                        background: `radial-gradient(circle at 28% 22%, ${palette.light}66, transparent 58%), ${palette.base}`,
+                                    }}
+                                >
+                                    <div
+                                        className="absolute inset-[11.5%] rounded-[15%] bg-white/92"
+                                        style={{
+                                            boxShadow:
+                                                'inset 0 2px 10px rgba(32,43,58,0.10), 0 1px 0 rgba(255,255,255,0.8)',
+                                        }}
+                                    />
+                                    {activeColor && !isActive && (
+                                        <div
+                                            aria-hidden="true"
+                                            className="pointer-events-none absolute inset-0 z-[1] rounded-[8%] bg-white/18"
+                                        />
+                                    )}
+                                    {isActive && (
+                                        <div
+                                            aria-hidden="true"
+                                            className="pointer-events-none absolute inset-0 z-[3]"
+                                        >
+                                            <div
+                                                className="absolute inset-[2.5%] rounded-[9%]"
+                                                style={{
+                                                    boxShadow: `inset 0 0 0 2.5px rgba(255,255,255,0.95), 0 0 0 3px ${palette.base}, 0 0 18px 2px ${palette.base}66`,
+                                                }}
+                                            />
+                                            <div
+                                                className="animate-turn-flash absolute inset-[2.5%] rounded-[9%]"
+                                                style={{
+                                                    boxShadow: `0 0 0 6px ${palette.base}, 0 0 30px 8px ${palette.base}80`,
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+                                    {isActive && activeLabel && (
+                                        <div
+                                            aria-hidden="true"
+                                            className="pointer-events-none absolute inset-x-[8%] top-[5.5%] z-[2] flex justify-center"
+                                        >
+                                            <span
+                                                className="max-w-full truncate rounded-full px-2.5 py-0.5 font-extrabold tracking-[0.06em] text-white uppercase"
+                                                style={{
+                                                    background: palette.dark,
+                                                    fontSize:
+                                                        'clamp(7px, 2.05cqw, 12px)',
+                                                    lineHeight: 1.3,
+                                                    boxShadow: `0 2px 8px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.32)`,
+                                                }}
+                                            >
+                                                {activeLabel}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {playerNames[color] && (
+                                        <div className="absolute inset-x-[12%] bottom-[6%] z-[2] flex justify-center">
+                                            <span
+                                                className="max-w-full truncate rounded-full bg-white/95 px-2.5 py-0.5 font-extrabold shadow-[0_1px_5px_rgba(32,43,58,0.18)]"
+                                                style={{
+                                                    color: palette.text,
+                                                    fontSize:
+                                                        'clamp(6.5px, 1.85cqw, 11.5px)',
+                                                    lineHeight: 1.3,
+                                                }}
+                                            >
+                                                {playerNames[color]}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {QUADRANTS.map(({ color }) => {
+                            const palette = PLAYER_CONFIG[color].palette;
+
+                            return PLAYER_CONFIG[color].base.map(
+                                (pad, index) => (
+                                    <span
+                                        key={`pad-${color}-${index}`}
+                                        className="absolute z-[1] rounded-full border-2 bg-white/70"
+                                        style={{
+                                            left: `${(pad.col / BOARD_SIZE) * 100}%`,
+                                            top: `${(pad.row / BOARD_SIZE) * 100}%`,
+                                            width: '9.4%',
+                                            aspectRatio: '1 / 1',
+                                            transform: 'translate(-50%, -50%)',
+                                            borderColor: `${palette.base}65`,
+                                        }}
+                                    />
+                                ),
+                            );
+                        })}
+
+                        {TRACK.map((cell, index) => {
+                            const owner = START_OWNER[index];
+                            const ownerPalette = owner
+                                ? PLAYER_CONFIG[owner].palette
+                                : null;
+                            const safe = SAFE_TRACK_INDICES.has(index);
+
+                            return (
+                                <div
+                                    key={`track-${index}`}
+                                    className="absolute"
+                                    style={cellStyle(cell)}
+                                >
+                                    <div
+                                        className="absolute inset-[5%] flex items-center justify-center rounded-[20%] border"
+                                        style={
+                                            ownerPalette
+                                                ? {
+                                                      background:
+                                                          ownerPalette.base,
+                                                      borderColor:
+                                                          ownerPalette.dark,
+                                                      boxShadow:
+                                                          'inset 0 1px 0 rgba(255,255,255,0.28)',
+                                                  }
+                                                : {
+                                                      background: '#ffffff',
+                                                      borderColor: '#dfe5ee',
+                                                  }
+                                        }
+                                    >
+                                        {safe && (
+                                            <StarIcon
+                                                className="h-[46%] w-[46%]"
+                                                style={{
+                                                    color: ownerPalette
+                                                        ? 'rgba(255,255,255,0.94)'
+                                                        : '#b8c3d2',
+                                                }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {LANE_CELLS.map(({ color, cell }, index) => {
+                            const palette = PLAYER_CONFIG[color].palette;
+
+                            return (
+                                <div
+                                    key={`lane-${color}-${index}`}
+                                    className="absolute"
+                                    style={cellStyle(cell)}
+                                >
+                                    <div
+                                        className="absolute inset-[5%] flex items-center justify-center rounded-[20%] border"
+                                        style={{
+                                            background: palette.base,
+                                            borderColor: palette.dark,
+                                            boxShadow:
+                                                'inset 0 1px 0 rgba(255,255,255,0.28)',
+                                        }}
+                                    >
+                                        <span className="h-[22%] w-[22%] rounded-full bg-white/80" />
+                                    </div>
+                                </div>
+                            );
+                        })}
+
                         <div
-                            key={color}
                             className="absolute"
                             style={{
-                                left: `${col * CELL_SIZE}%`,
-                                top: `${row * CELL_SIZE}%`,
-                                width: `${6 * CELL_SIZE}%`,
-                                height: `${6 * CELL_SIZE}%`,
-                                background: `radial-gradient(circle at 28% 22%, ${palette.light}66, transparent 56%), ${palette.base}`,
+                                left: `${6 * CELL_SIZE}%`,
+                                top: `${6 * CELL_SIZE}%`,
+                                width: `${3 * CELL_SIZE}%`,
+                                height: `${3 * CELL_SIZE}%`,
                             }}
                         >
-                            <div
-                                className="absolute inset-[11%] rounded-[16%] bg-white/95"
-                                style={{
-                                    boxShadow:
-                                        'inset 0 2px 10px rgba(32,43,58,0.13), 0 1px 0 rgba(255,255,255,0.7)',
-                                }}
-                            />
-                            {activeColor && !isActive && (
+                            <div className="border-line/70 absolute inset-0 overflow-hidden rounded-[6%] border">
                                 <div
-                                    aria-hidden="true"
-                                    className="pointer-events-none absolute inset-0 z-[1] bg-white/30"
+                                    className="bg-ludo-red absolute inset-0"
+                                    style={{
+                                        clipPath:
+                                            'polygon(0 0, 50% 50%, 0 100%)',
+                                    }}
                                 />
-                            )}
-                            {isActive && (
                                 <div
-                                    aria-hidden="true"
-                                    className="pointer-events-none absolute inset-0 z-[3]"
-                                >
-                                    <div
-                                        className="absolute inset-[2.5%] rounded-[9%]"
-                                        style={{
-                                            boxShadow: `inset 0 0 0 2px rgba(255,255,255,0.95), 0 0 0 3px ${palette.base}, 0 0 18px 2px ${palette.base}66`,
-                                        }}
-                                    />
-                                    <div
-                                        className="animate-turn-flash absolute inset-[2.5%] rounded-[9%]"
-                                        style={{
-                                            boxShadow: `0 0 0 6px ${palette.base}, 0 0 30px 8px ${palette.base}80`,
-                                        }}
-                                    />
-                                </div>
-                            )}
-                            {isActive && activeLabel && (
+                                    className="bg-ludo-green absolute inset-0"
+                                    style={{
+                                        clipPath:
+                                            'polygon(0 0, 100% 0, 50% 50%)',
+                                    }}
+                                />
                                 <div
-                                    aria-hidden="true"
-                                    className="pointer-events-none absolute inset-x-[10%] top-[6.5%] z-[2] flex justify-center"
-                                >
-                                    <span
-                                        className="max-w-full truncate rounded-full px-2 py-0.5 font-extrabold tracking-[0.08em] text-white uppercase"
-                                        style={{
-                                            background: palette.dark,
-                                            fontSize:
-                                                'clamp(7px, 2.1cqw, 12px)',
-                                            lineHeight: 1.3,
-                                            boxShadow: `0 2px 8px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.28)`,
-                                        }}
-                                    >
-                                        {activeLabel}
-                                    </span>
-                                </div>
-                            )}
-                            {playerNames[color] && (
-                                <div className="absolute inset-x-[13%] bottom-[7%] z-[2] flex justify-center">
-                                    <span
-                                        className="max-w-full truncate rounded-full bg-white/95 px-1.5 py-px font-extrabold shadow-[0_1px_4px_rgba(32,43,58,0.16)]"
-                                        style={{
-                                            color: palette.text,
-                                            fontSize:
-                                                'clamp(6.5px, 1.75cqw, 11px)',
-                                            lineHeight: 1.35,
-                                        }}
-                                    >
-                                        {playerNames[color]}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-
-                {QUADRANTS.map(({ color }) => {
-                    const palette = PLAYER_CONFIG[color].palette;
-
-                    return PLAYER_CONFIG[color].base.map((pad, index) => (
-                        <span
-                            key={`pad-${color}-${index}`}
-                            className="absolute z-[1] rounded-full border-2 bg-white/55"
-                            style={{
-                                left: `${(pad.col / BOARD_SIZE) * 100}%`,
-                                top: `${(pad.row / BOARD_SIZE) * 100}%`,
-                                width: '9.4%',
-                                aspectRatio: '1 / 1',
-                                transform: 'translate(-50%, -50%)',
-                                borderColor: `${palette.base}50`,
-                            }}
-                        />
-                    ));
-                })}
-
-                {TRACK.map((cell, index) => {
-                    const owner = START_OWNER[index];
-                    const ownerPalette = owner
-                        ? PLAYER_CONFIG[owner].palette
-                        : null;
-                    const safe = SAFE_TRACK_INDICES.has(index);
-
-                    return (
-                        <div
-                            key={`track-${index}`}
-                            className="absolute"
-                            style={cellStyle(cell)}
-                        >
-                            <div
-                                className="absolute inset-[5%] flex items-center justify-center rounded-[20%] border"
-                                style={
-                                    ownerPalette
-                                        ? {
-                                              background: ownerPalette.base,
-                                              borderColor: ownerPalette.dark,
-                                              boxShadow:
-                                                  'inset 0 1px 0 rgba(255,255,255,0.25)',
-                                          }
-                                        : {
-                                              background: '#ffffff',
-                                              borderColor: '#e4e8ee',
-                                          }
-                                }
-                            >
-                                {safe && (
-                                    <StarIcon
-                                        className="h-[46%] w-[46%]"
-                                        style={{
-                                            color: ownerPalette
-                                                ? 'rgba(255,255,255,0.92)'
-                                                : '#c9d1dd',
-                                        }}
-                                    />
-                                )}
+                                    className="bg-ludo-yellow absolute inset-0"
+                                    style={{
+                                        clipPath:
+                                            'polygon(100% 0, 100% 100%, 50% 50%)',
+                                    }}
+                                />
+                                <div
+                                    className="bg-ludo-blue absolute inset-0"
+                                    style={{
+                                        clipPath:
+                                            'polygon(0 100%, 100% 100%, 50% 50%)',
+                                    }}
+                                />
                             </div>
                         </div>
-                    );
-                })}
-
-                {LANE_CELLS.map(({ color, cell }, index) => {
-                    const palette = PLAYER_CONFIG[color].palette;
-
-                    return (
-                        <div
-                            key={`lane-${color}-${index}`}
-                            className="absolute"
-                            style={cellStyle(cell)}
-                        >
-                            <div
-                                className="absolute inset-[5%] flex items-center justify-center rounded-[20%] border"
-                                style={{
-                                    background: palette.base,
-                                    borderColor: palette.dark,
-                                    boxShadow:
-                                        'inset 0 1px 0 rgba(255,255,255,0.25)',
-                                }}
-                            >
-                                <span className="h-[20%] w-[20%] rounded-full bg-white/55" />
-                            </div>
-                        </div>
-                    );
-                })}
-
-                <div
-                    className="absolute"
-                    style={{
-                        left: `${6 * CELL_SIZE}%`,
-                        top: `${6 * CELL_SIZE}%`,
-                        width: `${3 * CELL_SIZE}%`,
-                        height: `${3 * CELL_SIZE}%`,
-                    }}
-                >
-                    <div className="absolute inset-0 overflow-hidden rounded-[6%]">
-                        <div
-                            className="bg-ludo-red absolute inset-0"
-                            style={{
-                                clipPath: 'polygon(0 0, 50% 50%, 0 100%)',
-                            }}
-                        />
-                        <div
-                            className="bg-ludo-green absolute inset-0"
-                            style={{
-                                clipPath: 'polygon(0 0, 100% 0, 50% 50%)',
-                            }}
-                        />
-                        <div
-                            className="bg-ludo-yellow absolute inset-0"
-                            style={{
-                                clipPath: 'polygon(100% 0, 100% 100%, 50% 50%)',
-                            }}
-                        />
-                        <div
-                            className="bg-ludo-blue absolute inset-0"
-                            style={{
-                                clipPath: 'polygon(0 100%, 100% 100%, 50% 50%)',
-                            }}
-                        />
-                    </div>
-                    <div className="absolute inset-[37%] rotate-45 rounded-[22%] bg-white/95 shadow-[0_2px_6px_rgba(32,43,58,0.22)]" />
-                </div>
                     </>
                 )}
 
                 {tokens.map((token) => {
                     const config = PLAYER_CONFIG[token.color];
                     const palette = config.palette;
+                    const charConfig = getCharacterConfig(
+                        token.character ?? playerCharacters[token.color],
+                        token.color,
+                    );
                     const { index, count } = layout.get(token.id) ?? {
                         index: 0,
                         count: 1,
@@ -602,7 +632,7 @@ export default function LudoBoard({
                     const positionStyle = {
                         left: `${spec.isRadial ? token.point.col : (token.point.col / BOARD_SIZE) * 100}%`,
                         top: `${spec.isRadial ? token.point.row : (token.point.row / BOARD_SIZE) * 100}%`,
-                        width: `${spec.tokenSizePercent}%`,
+                        width: `${spec.tokenSizePercent * 1.12}%`,
                         aspectRatio: '1 / 1',
                         transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
                     } as CSSProperties;
@@ -629,7 +659,11 @@ export default function LudoBoard({
                             style={positionStyle}
                         >
                             {token.legal && (
-                                <span className="legal-move-beacon" style={tokenStyle} aria-hidden="true" />
+                                <span
+                                    className="legal-move-beacon"
+                                    style={tokenStyle}
+                                    aria-hidden="true"
+                                />
                             )}
                             {token.onClick ? (
                                 <button
@@ -655,7 +689,10 @@ export default function LudoBoard({
                                     }`}
                                     style={tokenStyle}
                                 >
-                                    <LudoPin className="h-full w-full" />
+                                    <LudoPin
+                                        className="h-full w-full drop-shadow-[0_2px_4px_rgba(20,32,52,0.28)]"
+                                        characterImage={charConfig.image}
+                                    />
                                 </button>
                             ) : (
                                 <div
@@ -670,7 +707,10 @@ export default function LudoBoard({
                                     }`}
                                     style={tokenStyle}
                                 >
-                                    <LudoPin className="h-full w-full" />
+                                    <LudoPin
+                                        className="h-full w-full drop-shadow-[0_2px_4px_rgba(20,32,52,0.28)]"
+                                        characterImage={charConfig.image}
+                                    />
                                 </div>
                             )}
                         </div>

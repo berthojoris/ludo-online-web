@@ -110,10 +110,10 @@
     }
 
     .room-seat-piece {
-        position: absolute;
+        position: relative;
         top: 50%;
         left: 50%;
-        width: min(30cqw, 80cqh, 92px);
+        width: min(38cqw, 86cqh, 108px);
         aspect-ratio: 1;
         transform: translate(-50%, -50%);
     }
@@ -121,15 +121,17 @@
     .room-seat-token {
         position: absolute;
         z-index: 1;
-        top: 4%;
-        left: 14%;
-        width: 72%;
+        top: 0%;
+        left: 8%;
+        width: 84%;
+        height: 84%;
         aspect-ratio: 1;
         animation: room-piece-float 4s ease-in-out infinite;
     }
 
     .room-seat-piece-waiting .room-seat-token {
-        opacity: .4;
+        opacity: 0.38;
+        filter: saturate(0.55);
     }
 
     .room-seat-piece-base {

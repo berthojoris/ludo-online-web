@@ -134,6 +134,7 @@ class PageController extends Controller
                         $idle->resume_token = Str::random(40);
                         $idle->user_id = $request->user()?->id;
                         $idle->name = RoomController::defaultPlayerName($request);
+                        $idle->character = null;
                         $idle->is_ready = false;
                         $idle->save();
                         $me = $idle;
@@ -146,6 +147,7 @@ class PageController extends Controller
                             'user_id' => $request->user()?->id,
                             'name' => RoomController::defaultPlayerName($request, $isHost),
                             'seat_color' => null,
+                            'character' => null,
                             'is_ready' => false,
                             'is_host' => $isHost,
                         ]);
@@ -223,12 +225,15 @@ class PageController extends Controller
                     'status' => 'waiting',
                 ]);
 
+                $firstSeat = $created->allowedSeats()[0];
+
                 RoomPlayer::create([
                     'room_id' => $created->id,
                     'player_token' => $token,
                     'user_id' => $request->user()?->id,
                     'name' => RoomController::defaultPlayerName($request, true),
-                    'seat_color' => $created->allowedSeats()[0],
+                    'seat_color' => $firstSeat,
+                    'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$firstSeat] ?? 'ignivar',
                     'is_ready' => true,
                     'is_host' => true,
                 ]);
@@ -264,6 +269,7 @@ class PageController extends Controller
             'id' => $player->id,
             'name' => $player->name,
             'seat_color' => $player->seat_color,
+            'character' => $player->character ?? ($player->seat_color ? (Room::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null),
             'is_ready' => $player->is_ready,
             'is_host' => $player->is_host,
         ];

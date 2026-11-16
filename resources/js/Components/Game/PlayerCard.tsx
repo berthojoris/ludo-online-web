@@ -1,8 +1,14 @@
-import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
+import {
+    CharacterId,
+    getCharacterConfig,
+    PLAYER_CONFIG,
+    PlayerColor,
+} from '@/lib/ludo';
 
 type PlayerCardProps = {
     color: PlayerColor;
     name: string;
+    character?: CharacterId | string | null;
     role: 'Kamu' | 'Lawan' | 'Host' | 'Tamu';
     subtitle: string;
     active: boolean;
@@ -14,6 +20,7 @@ type PlayerCardProps = {
 export default function PlayerCard({
     color,
     name,
+    character,
     role,
     subtitle,
     active,
@@ -22,39 +29,45 @@ export default function PlayerCard({
     className = '',
 }: PlayerCardProps) {
     const palette = PLAYER_CONFIG[color].palette;
+    const charConfig = getCharacterConfig(character, color);
     const compact = size === 'sm';
 
     return (
         <div
             className={`flex min-w-0 items-center transition-colors duration-200 ${
                 compact
-                    ? 'gap-2 px-2.5 py-3'
-                    : 'gap-3 px-4 py-3.5 [@media(max-height:700px)]:py-2'
+                    ? 'gap-2 px-2.5 py-2.5'
+                    : 'gap-3 px-4 py-3 [@media(max-height:700px)]:py-2'
             } ${
-                active ? 'animate-card-nudge' : 'bg-white opacity-[0.85]'
+                active ? 'animate-card-nudge' : 'bg-white/95 opacity-[0.92]'
             } ${className}`}
             style={
                 active
                     ? {
                           background: palette.soft,
-                          boxShadow: `inset 0 0 0 1px ${palette.base}40, inset 3px 0 0 0 ${palette.base}`,
+                          boxShadow: `inset 0 0 0 1px ${palette.base}45, inset 3px 0 0 0 ${palette.base}`,
                       }
                     : undefined
             }
         >
             <div
-                className={`relative grid shrink-0 place-items-center font-bold ${
-                    compact
-                        ? 'h-8 w-8 rounded-[10px] text-[11px]'
-                        : 'h-11 w-11 rounded-[14px] text-[15px]'
+                className={`relative shrink-0 rounded-full p-[2px] ${
+                    compact ? 'h-8 w-8' : 'h-11 w-11'
                 }`}
                 style={{
-                    background: palette.soft,
-                    color: palette.text,
-                    boxShadow: `inset 0 0 0 1px ${palette.base}2e`,
+                    background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
+                    boxShadow: active
+                        ? `0 0 0 2px #ffffff, 0 0 0 4px ${palette.base}55`
+                        : `0 2px 6px ${palette.base}33`,
                 }}
             >
-                {name.charAt(0).toUpperCase()}
+                <img
+                    src={charConfig.image}
+                    alt={charConfig.name}
+                    width={compact ? 32 : 44}
+                    height={compact ? 32 : 44}
+                    className="h-full w-full rounded-full bg-white object-cover"
+                />
                 <span
                     className={`absolute -right-0.5 -bottom-0.5 rounded-full border-2 border-white ${
                         compact ? 'h-2.5 w-2.5' : 'h-3.5 w-3.5'
@@ -66,7 +79,7 @@ export default function PlayerCard({
             <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                     <p
-                        className={`text-ink truncate font-semibold ${
+                        className={`text-ink truncate font-bold ${
                             compact ? 'text-xs' : 'text-sm'
                         }`}
                     >
@@ -74,7 +87,7 @@ export default function PlayerCard({
                     </p>
                     {!compact && (
                         <span
-                            className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold tracking-[0.08em] uppercase"
+                            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-extrabold tracking-[0.06em] uppercase"
                             style={{
                                 background: palette.soft,
                                 color: palette.text,
@@ -89,10 +102,11 @@ export default function PlayerCard({
                     className={`text-ink-muted truncate ${
                         compact
                             ? 'mt-0.5 text-[10px] leading-3'
-                            : 'mt-1 text-[11px] leading-4'
+                            : 'mt-0.5 text-[11px] leading-4'
                     }`}
                 >
                     {subtitle}
+                    {!compact ? ` · ${charConfig.name}` : ''}
                 </p>
             </div>
 
@@ -118,13 +132,13 @@ export default function PlayerCard({
                                 boxShadow:
                                     index < finished
                                         ? undefined
-                                        : `inset 0 0 0 1px ${palette.base}45`,
+                                        : `inset 0 0 0 1.5px ${palette.base}65`,
                             }}
                         />
                     ))}
                 </div>
                 <p
-                    className={`font-bold tabular-nums ${
+                    className={`font-extrabold tabular-nums ${
                         compact ? 'text-[9px]' : 'text-[10px]'
                     }`}
                     aria-hidden="true"

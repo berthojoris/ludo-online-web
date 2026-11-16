@@ -7,6 +7,135 @@ export type PlayerColor =
     | 'orange'
     | 'teal';
 
+export type CharacterId =
+    | 'ignivar'
+    | 'frost_claw'
+    | 'solgarde'
+    | 'verdantor'
+    | 'umrax'
+    | 'aqualon'
+    | 'zephyira';
+
+export type CharacterConfig = {
+    id: CharacterId;
+    name: string;
+    element: string;
+    image: string;
+    accentColor: PlayerColor;
+    description: string;
+    traits: [string, string, string];
+};
+
+export const ARENA_BACKGROUND_IMAGE = '/assets/background.png';
+
+export const ALL_CHARACTER_IDS: CharacterId[] = [
+    'ignivar',
+    'frost_claw',
+    'solgarde',
+    'verdantor',
+    'umrax',
+    'aqualon',
+    'zephyira',
+];
+
+export const DEFAULT_CHARACTER_BY_COLOR: Record<PlayerColor, CharacterId> = {
+    red: 'ignivar',
+    green: 'verdantor',
+    yellow: 'solgarde',
+    blue: 'frost_claw',
+    purple: 'umrax',
+    orange: 'zephyira',
+    teal: 'aqualon',
+};
+
+export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
+    ignivar: {
+        id: 'ignivar',
+        name: 'Ignivar',
+        element: 'Api',
+        image: '/assets/char_ignivar.png',
+        accentColor: 'red',
+        description:
+            'Naga penguasa api dengan kekuatan penuh semangat dan tekad juang tinggi.',
+        traits: ['Berani', 'Agresif', 'Tangguh'],
+    },
+    frost_claw: {
+        id: 'frost_claw',
+        name: 'Frostclaw',
+        element: 'Es',
+        image: '/assets/char_frost_claw.png',
+        accentColor: 'blue',
+        description:
+            'Serigala es abadi yang berburu dengan ketenangan dingin dan presisi tajam.',
+        traits: ['Fokus', 'Lincah', 'Taktis'],
+    },
+    solgarde: {
+        id: 'solgarde',
+        name: 'Solgarde',
+        element: 'Cahaya',
+        image: '/assets/char_solgarde.png',
+        accentColor: 'yellow',
+        description:
+            'Singa penjaga surya yang memimpin arena dengan wibawa emas dan keberanian.',
+        traits: ['Wibawa', 'Kuat', 'Setia'],
+    },
+    verdantor: {
+        id: 'verdantor',
+        name: 'Verdantor',
+        element: 'Alam',
+        image: '/assets/char_verdantor.png',
+        accentColor: 'green',
+        description:
+            'Penjaga hutan purba yang tangguh, sabar, dan selalu menemukan jalan keluar.',
+        traits: ['Tenang', 'Seimbang', 'Kokoh'],
+    },
+    umrax: {
+        id: 'umrax',
+        name: 'Umrax',
+        element: 'Bayangan',
+        image: '/assets/char_umrax.png',
+        accentColor: 'purple',
+        description:
+            'Penguasa bayangan malam yang bergerak senyap dan mengejutkan lawan di tikungan.',
+        traits: ['Cerdik', 'Misterius', 'Cepat'],
+    },
+    aqualon: {
+        id: 'aqualon',
+        name: 'Aqualon',
+        element: 'Samudra',
+        image: '/assets/char_aqualon.png',
+        accentColor: 'teal',
+        description:
+            'Leviathan arus dalam yang menerjang rintangan bagaikan gelombang pasang.',
+        traits: ['Adaptif', 'Deras', 'Gigih'],
+    },
+    zephyira: {
+        id: 'zephyira',
+        name: 'Zephyira',
+        element: 'Angin',
+        image: '/assets/char_zephyira.png',
+        accentColor: 'orange',
+        description:
+            'Griffin langit berkilau yang melesat melintasi papan secepat hembusan badai.',
+        traits: ['Cepat', 'Bebas', 'Tajam'],
+    },
+};
+
+export const CHARACTER_LIST: CharacterConfig[] = ALL_CHARACTER_IDS.map(
+    (id) => CHARACTER_CONFIG[id],
+);
+
+export function getCharacterConfig(
+    character?: string | null,
+    fallbackColor: PlayerColor = 'red',
+): CharacterConfig {
+    if (character && character in CHARACTER_CONFIG) {
+        return CHARACTER_CONFIG[character as CharacterId];
+    }
+
+    return CHARACTER_CONFIG[DEFAULT_CHARACTER_BY_COLOR[fallbackColor]];
+}
+
 export type PlayerCount = 2 | 3 | 4 | 5 | 6 | 7;
 
 export const ALL_PLAYER_COLORS: PlayerColor[] = [

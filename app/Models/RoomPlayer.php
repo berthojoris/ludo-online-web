@@ -33,6 +33,7 @@ class RoomPlayer extends Model
         'user_id',
         'name',
         'seat_color',
+        'character',
         'is_ready',
         'is_host',
     ];

@@ -82,12 +82,15 @@ class RoomController extends Controller
                 'status' => 'waiting',
             ]);
 
+            $firstSeat = $room->allowedSeats()[0];
+
             RoomPlayer::create([
                 'room_id' => $room->id,
                 'player_token' => $token,
                 'user_id' => $request->user()?->id,
                 'name' => self::defaultPlayerName($request, true),
-                'seat_color' => $room->allowedSeats()[0],
+                'seat_color' => $firstSeat,
+                'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$firstSeat] ?? 'ignivar',
                 'is_ready' => true,
                 'is_host' => true,
             ]);
@@ -137,6 +140,7 @@ class RoomController extends Controller
             foreach ($players as $player) {
                 if ($player->seat_color !== null && ! in_array($player->seat_color, $allowedSeats, true)) {
                     $player->seat_color = null;
+                    $player->character = null;
                     $player->is_ready = false;
                     $player->save();
                 }
@@ -153,6 +157,7 @@ class RoomController extends Controller
     {
         $validated = $request->validate([
             'seat_color' => ['nullable', 'string', Rule::in(Room::ALL_COLORS)],
+            'character' => ['nullable', 'string', Rule::in(Room::ALL_CHARACTERS)],
         ]);
 
         $token = self::playerToken($request);
@@ -165,8 +170,9 @@ class RoomController extends Controller
         }
 
         $seatColor = $validated['seat_color'] ?? null;
+        $character = $validated['character'] ?? null;
 
-        DB::transaction(function () use ($room, $token, $seatColor) {
+        DB::transaction(function () use ($room, $token, $seatColor, $character) {
             $lockedRoom = Room::where('id', $room->id)->lockForUpdate()->firstOrFail();
 
             if ($seatColor !== null && ! in_array($seatColor, $lockedRoom->allowedSeats(), true)) {
@@ -194,6 +200,9 @@ class RoomController extends Controller
             }
 
             $player->seat_color = $seatColor;
+            $player->character = $seatColor === null
+                ? null
+                : ($character ?? $player->character ?? (Room::DEFAULT_CHARACTER_BY_COLOR[$seatColor] ?? 'ignivar'));
             // Taking a seat opts the player in right away; they can still
             // switch themselves back to "not ready" from the lobby.
             $player->is_ready = $seatColor !== null;

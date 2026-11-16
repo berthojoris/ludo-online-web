@@ -1,5 +1,7 @@
+import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
+import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ArrowRightIcon,
@@ -12,11 +14,17 @@ import {
     InfoIcon,
     LinkIcon,
     PencilIcon,
+    SparklesIcon,
+    TrophyIcon,
     UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
 import {
+    ARENA_BACKGROUND_IMAGE,
+    CharacterId,
+    DEFAULT_CHARACTER_BY_COLOR,
+    getCharacterConfig,
     PLAYER_CONFIG,
     PlayerColor,
     PlayerCount,
@@ -27,7 +35,7 @@ import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
-import { CSSProperties, FormEvent, useEffect, useState } from 'react';
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 
 type CopyState = 'idle' | 'code' | 'link' | 'error';
 type ViewMode = 'lobby' | 'join';
@@ -36,6 +44,7 @@ type RoomPlayerData = {
     id: number;
     name: string;
     seat_color: PlayerColor | null;
+    character?: CharacterId | string | null;
     is_ready: boolean;
     is_host: boolean;
 };
@@ -134,13 +143,13 @@ function RoomSettingsSummary({
             </div>
 
             {isHost && (
-                <div className="border-line mt-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
+                <div className="border-line mt-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2">
                     <div className="min-w-0">
                         <p className="text-ink text-xs font-semibold">
                             Keuntungan host
                         </p>
-                        <p className="text-ink-muted mt-1 text-xs">
-                            Peluang 50% untuk keluar markas atau menangkap saat
+                        <p className="text-ink-muted mt-0.5 text-[11px]">
+                            Peluang 50% keluar markas atau menangkap saat
                             tersedia.
                         </p>
                     </div>
@@ -152,17 +161,17 @@ function RoomSettingsSummary({
                         aria-busy={pending}
                         disabled={!isHost || pending}
                         onClick={onToggleAdvantage}
-                        className={`focus-visible:ring-primary flex h-11 min-w-14 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
+                        className={`focus-visible:ring-primary flex h-10 min-w-13 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
                     >
                         {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
                     </button>
                 </div>
             )}
-            <dl className="divide-line border-line mt-4 divide-y rounded-2xl border px-3.5">
+            <dl className="divide-line border-line mt-3 divide-y rounded-2xl border px-3">
                 {getRoomRules(playerCount).map((item) => (
                     <div
                         key={item.label}
-                        className="flex items-center justify-between py-2.5 text-xs"
+                        className="flex items-center justify-between py-2 text-xs"
                     >
                         <dt className="text-ink-muted">{item.label}</dt>
                         <dd className="text-ink font-semibold tabular-nums">
@@ -250,6 +259,9 @@ function RoomContent() {
     const [renamingPlayerId, setRenamingPlayerId] = useState<number | null>(
         null,
     );
+    const [characterModalOpen, setCharacterModalOpen] = useState(false);
+    const [characterModalSeat, setCharacterModalSeat] =
+        useState<PlayerColor | null>(null);
 
     useEffect(() => {
         setLiveRoom(serverRoom ?? null);
@@ -386,6 +398,16 @@ function RoomContent() {
     const allReady =
         players.length >= 2 && allSeated && players.every((p) => p.is_ready);
 
+    const takenCharacters = useMemo(() => {
+        const map: Partial<Record<CharacterId, string>> = {};
+        for (const p of players) {
+            if (p.id !== currentMe?.id && p.character) {
+                map[p.character as CharacterId] = p.name;
+            }
+        }
+        return map;
+    }, [players, currentMe?.id]);
+
     const startBlockedReason =
         players.length < 2
             ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
@@ -395,8 +417,6 @@ function RoomContent() {
                 ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
                 : null;
 
-    // An invitation link carries the room code, so a failed auto-join should
-    // explain why instead of asking the visitor to type that same code again.
     const joinBlocked =
         !liveRoom && Boolean(actionError) && Boolean(attemptedCode);
 
@@ -458,7 +478,10 @@ function RoomContent() {
             );
     };
 
-    const handleSelectSeat = (color: PlayerColor | null) => {
+    const handleSelectSeat = (
+        color: PlayerColor | null,
+        character?: CharacterId,
+    ) => {
         if (!liveRoom || pendingAction) {
             return;
         }
@@ -467,13 +490,42 @@ function RoomContent() {
         setPendingAction(true);
         router.post(
             route('rooms.seat', { code: liveRoom.code }),
-            { seat_color: color },
+            {
+                seat_color: color,
+                ...(character ? { character } : {}),
+            },
             {
                 preserveScroll: true,
+                onSuccess: () => setCharacterModalOpen(false),
                 onError: handleFirstError,
                 onFinish: () => setPendingAction(false),
             },
         );
+    };
+
+    const openCharacterPickerForSeat = (color: PlayerColor) => {
+        if (!liveRoom || pendingAction) {
+            return;
+        }
+        cue();
+        setActionError(null);
+        setCharacterModalSeat(color);
+        setCharacterModalOpen(true);
+    };
+
+    const handleConfirmCharacter = (
+        character: CharacterId,
+        seatColor: PlayerColor | null,
+    ) => {
+        const targetSeat =
+            seatColor ??
+            currentMe?.seat_color ??
+            activeSeats.find(
+                (seat) => !players.some((p) => p.seat_color === seat),
+            ) ??
+            activeSeats[0];
+
+        handleSelectSeat(targetSeat, character);
     };
 
     const handleToggleReady = () => {
@@ -690,8 +742,21 @@ function RoomContent() {
         <>
             <Head title="Ruang privat" />
 
-            <div className="bg-canvas flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
-                <header className="border-line shrink-0 border-b bg-white/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+            <div className="bg-canvas relative flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
+                {/* Full-bleed Arena Background Image */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-cover bg-center"
+                    style={{
+                        backgroundImage: `url('${ARENA_BACKGROUND_IMAGE}')`,
+                    }}
+                />
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-b from-sky-950/15 via-white/30 to-white/65 backdrop-blur-[1.5px]"
+                />
+
+                <header className="border-white/60 relative z-20 shrink-0 border-b bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
                     <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:h-14 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
@@ -719,6 +784,11 @@ function RoomContent() {
                                     />
                                 </span>
                             </Link>
+                            {liveRoom && viewMode === 'lobby' && (
+                                <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] uppercase lg:inline-flex">
+                                    Ruang #{liveRoom.code}
+                                </span>
+                            )}
                         </div>
 
                         <div
@@ -789,8 +859,8 @@ function RoomContent() {
                 </header>
 
                 {joinBlocked ? (
-                    <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
-                        <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
+                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-danger/10 text-danger grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5.5 w-5.5" />
@@ -836,8 +906,8 @@ function RoomContent() {
                         </div>
                     </main>
                 ) : viewMode === 'join' || !liveRoom ? (
-                    <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
-                        <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
+                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-brand/10 text-brand-ink grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5.5 w-5.5" />
@@ -939,32 +1009,73 @@ function RoomContent() {
                         </div>
                     </main>
                 ) : (
-                    <main className="mx-auto flex min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col pt-2.5 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-4 sm:pb-4">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col pt-2 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-3 sm:pb-4">
                         <div
-                            className={`grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-4 md:my-auto md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_328px] ${
+                            className={`grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-3.5 md:my-auto md:grid-cols-[minmax(0,1fr)_316px] lg:grid-cols-[minmax(0,1fr)_344px] ${
                                 playerCount >= 5
-                                    ? 'md:max-h-[680px]'
-                                    : 'md:max-h-[580px]'
+                                    ? 'md:max-h-[700px]'
+                                    : 'md:max-h-[620px]'
                             }`}
                         >
-                            <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
-                                <div className="border-line shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white px-2.5 py-2 sm:px-4 sm:py-3">
-                                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
+                            <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-2.5 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
+                                {/* Hero Room Code & Crowned Dice Banner */}
+                                <div className="border-white/85 shadow-card relative flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 overflow-hidden rounded-2xl border bg-white/92 px-2.5 py-2 backdrop-blur-md sm:px-4 sm:py-2.5">
+                                    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                                        {/* Crowned Dice Emblem */}
+                                        <div className="relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 via-sky-50 to-indigo-100 shadow-inner min-[380px]:flex sm:h-12 sm:w-12">
+                                            <span
+                                                aria-hidden="true"
+                                                className="text-ludo-yellow absolute -top-1.5 z-10 drop-shadow-xs"
+                                            >
+                                                <TrophyIcon className="h-4 w-4" />
+                                            </span>
+                                            <Dice
+                                                value={6}
+                                                className="h-7 w-7 sm:h-8 sm:w-8"
+                                            />
+                                        </div>
+
                                         <div className="min-w-0">
-                                            <p className="text-ink-muted text-[11px] leading-none font-medium">
-                                                Kode ruang
-                                            </p>
-                                            <p className="text-ink mt-1 font-mono text-sm font-semibold tracking-[0.12em] min-[360px]:text-base min-[360px]:tracking-[0.14em] sm:text-2xl sm:tracking-[0.22em]">
-                                                {liveRoom.code}
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="inline-flex items-center rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-2.5 py-0.5 font-mono text-xs font-extrabold tracking-[0.14em] text-white shadow-xs sm:px-3 sm:text-sm">
+                                                    RUANG #{liveRoom.code}
+                                                </span>
+                                                <span className="border-line bg-canvas text-ink-muted inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums">
+                                                    <UsersIcon className="h-3 w-3" />
+                                                    {occupiedCount}/
+                                                    {playerCount}
+                                                </span>
+                                            </div>
+                                            <p className="text-ink-muted mt-1 truncate text-[11px] font-medium">
+                                                {allReady
+                                                    ? 'Semua pemain siap bertanding!'
+                                                    : 'Menunggu pemain memilih kursi & karakter…'}
                                             </p>
                                         </div>
-                                        <span className="border-line bg-canvas text-ink-muted inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold tabular-nums">
-                                            <UsersIcon className="h-3.5 w-3.5" />
-                                            {occupiedCount}/{playerCount}
-                                        </span>
                                     </div>
 
                                     <div className="flex shrink-0 items-center gap-1.5">
+                                        {currentMe && (
+                                            <button
+                                                type="button"
+                                                disabled={pendingAction}
+                                                onClick={() =>
+                                                    openCharacterPickerForSeat(
+                                                        currentMe.seat_color ??
+                                                            activeSeats[0],
+                                                    )
+                                                }
+                                                className="border-brand/30 bg-brand/10 text-brand-ink hover:bg-brand/15 inline-flex h-10 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-bold transition sm:h-11 sm:px-3"
+                                            >
+                                                <SparklesIcon className="h-3.5 w-3.5" />
+                                                <span className="hidden min-[420px]:inline">
+                                                    Pilih Karakter
+                                                </span>
+                                                <span className="min-[420px]:hidden">
+                                                    Karakter
+                                                </span>
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -980,7 +1091,7 @@ function RoomContent() {
                                             ) : (
                                                 <>
                                                     <CopyIcon className="h-3.5 w-3.5" />
-                                                    <span>Salin</span>
+                                                    <span>Salin Kode</span>
                                                 </>
                                             )}
                                         </button>
@@ -989,12 +1100,12 @@ function RoomContent() {
                                             onClick={() =>
                                                 copy(shareLink, 'link')
                                             }
-                                            aria-label="Salin tautan ruang"
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:min-w-11 sm:px-3"
+                                            aria-label="Undang teman dengan menyalin tautan ruang"
+                                            className="bg-ludo-red hover:bg-ludo-red/90 inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-white shadow-xs transition sm:h-11 sm:min-w-11 sm:px-3.5"
                                         >
                                             {copyState === 'link' ? (
                                                 <>
-                                                    <CheckIcon className="text-success-ink h-3.5 w-3.5" />
+                                                    <CheckIcon className="h-3.5 w-3.5" />
                                                     <span className="hidden sm:inline">
                                                         Tautan tersalin
                                                     </span>
@@ -1005,8 +1116,8 @@ function RoomContent() {
                                             ) : (
                                                 <>
                                                     <LinkIcon className="h-3.5 w-3.5" />
-                                                    <span className="hidden min-[400px]:inline">
-                                                        Tautan
+                                                    <span className="hidden min-[440px]:inline">
+                                                        Undang Teman
                                                     </span>
                                                 </>
                                             )}
@@ -1015,42 +1126,73 @@ function RoomContent() {
                                 </div>
 
                                 {/* Joined players & display name bar */}
-                                <div className="border-line shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white px-2.5 py-2 sm:gap-3 sm:px-4 sm:py-3">
+                                <div className="border-white/85 shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white/92 px-2.5 py-2 backdrop-blur-md sm:gap-3 sm:px-4 sm:py-2.5">
                                     <div
                                         className={`min-w-0 flex-1 ${editingName ? 'hidden sm:block' : ''}`}
                                     >
-                                        <p className="text-ink-muted text-[11px] leading-none font-medium">
-                                            Pemain di ruang
+                                        <p className="text-ink-muted text-[11px] leading-none font-semibold">
+                                            Pemain ({occupiedCount}/
+                                            {playerCount})
                                         </p>
                                         <div className="mt-1.5 flex min-w-0 items-center gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-visible">
                                             {players.map((player) => {
-                                                const seatCfg = player.seat_color
-                                                    ? PLAYER_CONFIG[
-                                                          player.seat_color
-                                                      ]
-                                                    : null;
+                                                const seatCfg =
+                                                    player.seat_color
+                                                        ? PLAYER_CONFIG[
+                                                              player.seat_color
+                                                          ]
+                                                        : null;
+                                                const charCfg =
+                                                    player.seat_color ||
+                                                    player.character
+                                                        ? getCharacterConfig(
+                                                              player.character,
+                                                              player.seat_color ??
+                                                                  'red',
+                                                          )
+                                                        : null;
                                                 const pillContent = (
                                                     <>
-                                                        <span
-                                                            className="h-2 w-2 shrink-0 rounded-full"
-                                                            style={{
-                                                                backgroundColor:
-                                                                    seatCfg
-                                                                        ? seatCfg
-                                                                              .palette
-                                                                              .base
-                                                                        : '#94A3B8',
-                                                            }}
-                                                        />
+                                                        {charCfg ? (
+                                                            <img
+                                                                src={
+                                                                    charCfg.image
+                                                                }
+                                                                alt={
+                                                                    charCfg.name
+                                                                }
+                                                                width={18}
+                                                                height={18}
+                                                                className="h-4.5 w-4.5 shrink-0 rounded-full object-cover ring-1 ring-black/10"
+                                                            />
+                                                        ) : (
+                                                            <span
+                                                                className="h-2 w-2 shrink-0 rounded-full"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        seatCfg
+                                                                            ? seatCfg
+                                                                                  .palette
+                                                                                  .base
+                                                                            : '#94A3B8',
+                                                                }}
+                                                            />
+                                                        )}
                                                         <span className="text-ink max-w-[92px] truncate sm:max-w-[128px]">
                                                             {player.name}
                                                         </span>
-                                                        {player.id ===
-                                                            currentMe?.id && (
-                                                            <span className="text-ink-muted">
-                                                                (Kamu)
+                                                        {player.is_host && (
+                                                            <span className="text-warning-ink text-[10px] font-bold">
+                                                                (Host)
                                                             </span>
                                                         )}
+                                                        {player.id ===
+                                                            currentMe?.id &&
+                                                            !player.is_host && (
+                                                                <span className="text-ink-muted">
+                                                                    (Kamu)
+                                                                </span>
+                                                            )}
                                                         <span
                                                             className={
                                                                 player.is_ready
@@ -1205,7 +1347,7 @@ function RoomContent() {
                                 )}
 
                                 <div
-                                    className={`relative grid min-h-0 min-w-0 flex-1 gap-2.5 sm:gap-3.5 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
+                                    className={`relative grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
                                     role="group"
                                     aria-label="Kursi meja Ludo"
                                 >
@@ -1257,6 +1399,13 @@ function RoomContent() {
                                             occupant !== undefined &&
                                             occupant.id === currentMe?.id;
                                         const occupied = Boolean(occupant);
+                                        const seatCharacter = getCharacterConfig(
+                                            occupant?.character ??
+                                                DEFAULT_CHARACTER_BY_COLOR[
+                                                    color
+                                                ],
+                                            color,
+                                        );
 
                                         const tokenStyle = {
                                             '--token-light': palette.light,
@@ -1267,44 +1416,65 @@ function RoomContent() {
                                         return (
                                             <div
                                                 key={color}
-                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-3.5 ${
+                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-3 ${
                                                     occupied
-                                                        ? 'border-line shadow-card bg-white'
-                                                        : 'border-line/90 bg-white/70 hover:bg-white'
+                                                        ? 'border-white/90 shadow-card bg-white/95 backdrop-blur-md'
+                                                        : 'border-white/75 bg-white/82 backdrop-blur-sm hover:bg-white/95'
                                                 }`}
                                                 style={
                                                     isYou
                                                         ? {
-                                                              borderColor: `${palette.base}55`,
-                                                              background: `linear-gradient(180deg, ${palette.soft}52 0%, #ffffff 56%)`,
+                                                              borderColor: `${palette.base}88`,
+                                                              background: `linear-gradient(180deg, ${palette.soft}90 0%, rgba(255,255,255,0.96) 58%)`,
                                                           }
                                                         : undefined
                                                 }
                                             >
                                                 <div className="flex min-w-0 items-center justify-between gap-1">
-                                                    <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+                                                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                                                         <LudoPin
                                                             className="h-5 w-5 shrink-0 min-[400px]:h-6 min-[400px]:w-6 sm:h-7 sm:w-7"
                                                             style={tokenStyle}
+                                                            characterImage={
+                                                                occupied
+                                                                    ? seatCharacter.image
+                                                                    : undefined
+                                                            }
                                                         />
                                                         <span
-                                                            className="truncate text-xs font-semibold sm:text-sm"
+                                                            className="truncate text-xs font-bold sm:text-sm"
                                                             style={{
                                                                 color: palette.text,
                                                             }}
                                                         >
                                                             {config.label}
                                                         </span>
+                                                        {occupied && (
+                                                            <span
+                                                                className="hidden truncate rounded-full px-1.5 py-0.5 text-[9px] font-extrabold text-white min-[420px]:inline-block"
+                                                                style={{
+                                                                    background:
+                                                                        palette.base,
+                                                                }}
+                                                            >
+                                                                {
+                                                                    seatCharacter.name
+                                                                }
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     {occupant ? (
                                                         <span
-                                                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold sm:px-2 sm:text-[10px] ${
+                                                            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:px-2 sm:text-[10px] ${
                                                                 occupant.is_ready
-                                                                    ? 'bg-success/10 text-success-ink'
-                                                                    : 'bg-warning/10 text-warning-ink'
+                                                                    ? 'bg-success/12 text-success-ink'
+                                                                    : 'bg-warning/12 text-warning-ink'
                                                             }`}
                                                         >
+                                                            {occupant.is_ready && (
+                                                                <CheckIcon className="h-3 w-3" />
+                                                            )}
                                                             {occupant.is_ready
                                                                 ? 'Siap'
                                                                 : 'Belum siap'}
@@ -1330,7 +1500,15 @@ function RoomContent() {
                                                     <div
                                                         className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}
                                                     >
-                                                        <LudoPin className="room-seat-token" />
+                                                        <img
+                                                            src={
+                                                                seatCharacter.image
+                                                            }
+                                                            alt=""
+                                                            width={84}
+                                                            height={84}
+                                                            className="room-seat-token rounded-full object-contain drop-shadow-[0_6px_10px_rgba(20,32,52,0.28)]"
+                                                        />
                                                         <span className="room-seat-piece-base" />
                                                     </div>
                                                     <div className="room-seat-marker room-seat-marker-one" />
@@ -1339,30 +1517,40 @@ function RoomContent() {
 
                                                 {occupant ? (
                                                     <div className="mt-auto flex min-w-0 items-center justify-between gap-1.5 pt-1 sm:gap-2 sm:pt-1.5">
-                                                        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
-                                                            <span
-                                                                className="hidden h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold min-[400px]:grid sm:h-10 sm:w-10 sm:text-sm"
+                                                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                            <div
+                                                                className="relative hidden h-9 w-9 shrink-0 rounded-full p-[2px] min-[400px]:block sm:h-10 sm:w-10"
                                                                 style={{
-                                                                    background:
-                                                                        palette.soft,
-                                                                    color: palette.text,
+                                                                    background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
                                                                 }}
                                                             >
-                                                                {occupant.name
-                                                                    .charAt(0)
-                                                                    .toUpperCase()}
-                                                            </span>
+                                                                <img
+                                                                    src={
+                                                                        seatCharacter.image
+                                                                    }
+                                                                    alt={
+                                                                        seatCharacter.name
+                                                                    }
+                                                                    width={40}
+                                                                    height={40}
+                                                                    className="h-full w-full rounded-full bg-white object-cover"
+                                                                />
+                                                            </div>
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-ink truncate text-xs font-semibold min-[360px]:text-sm sm:text-base">
+                                                                <p className="text-ink truncate text-xs font-bold min-[360px]:text-sm">
                                                                     {
                                                                         occupant.name
                                                                     }
                                                                 </p>
                                                                 <p className="text-ink-muted truncate text-[10px] leading-tight min-[360px]:text-[11px]">
+                                                                    {
+                                                                        seatCharacter.name
+                                                                    }{' '}
+                                                                    ·{' '}
                                                                     {isYou
                                                                         ? occupant.is_host
-                                                                            ? 'Kamu · Host'
-                                                                            : 'Kamu · Tamu'
+                                                                            ? 'Kamu (Host)'
+                                                                            : 'Kamu'
                                                                         : occupant.is_host
                                                                           ? 'Host'
                                                                           : 'Pemain'}
@@ -1371,20 +1559,41 @@ function RoomContent() {
                                                         </div>
 
                                                         {isYou && (
-                                                            <button
-                                                                type="button"
-                                                                disabled={
-                                                                    pendingAction
-                                                                }
-                                                                onClick={() =>
-                                                                    handleSelectSeat(
-                                                                        null,
-                                                                    )
-                                                                }
-                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
-                                                            >
-                                                                Berdiri
-                                                            </button>
+                                                            <div className="flex shrink-0 items-center gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={
+                                                                        pendingAction
+                                                                    }
+                                                                    onClick={() =>
+                                                                        openCharacterPickerForSeat(
+                                                                            color,
+                                                                        )
+                                                                    }
+                                                                    aria-label="Ganti karakter"
+                                                                    title="Ganti karakter"
+                                                                    className="border-line text-ink hover:bg-surface-muted inline-flex h-10 items-center gap-1 rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
+                                                                >
+                                                                    <SparklesIcon className="text-brand h-3.5 w-3.5" />
+                                                                    <span className="hidden lg:inline">
+                                                                        Karakter
+                                                                    </span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={
+                                                                        pendingAction
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleSelectSeat(
+                                                                            null,
+                                                                        )
+                                                                    }
+                                                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
+                                                                >
+                                                                    Berdiri
+                                                                </button>
+                                                            </div>
                                                         )}
 
                                                         {isHost && !isYou && (
@@ -1428,14 +1637,23 @@ function RoomContent() {
                                                                 pendingAction
                                                             }
                                                             onClick={() =>
-                                                                handleSelectSeat(
+                                                                openCharacterPickerForSeat(
                                                                     color,
                                                                 )
                                                             }
-                                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-0 flex-1 items-center justify-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition min-[360px]:text-xs sm:h-11 sm:flex-none sm:px-3"
+                                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border bg-white px-2 text-[11px] font-bold transition min-[360px]:text-xs sm:h-11 sm:px-3"
+                                                            style={{
+                                                                borderColor: `${palette.base}55`,
+                                                            }}
                                                         >
+                                                            <SparklesIcon
+                                                                className="h-3.5 w-3.5 shrink-0"
+                                                                style={{
+                                                                    color: palette.base,
+                                                                }}
+                                                            />
                                                             <span className="truncate">
-                                                                Duduk
+                                                                Duduk & Pilih
                                                             </span>
                                                         </button>
                                                         <button
@@ -1463,10 +1681,11 @@ function RoomContent() {
                             </section>
 
                             <aside className="hidden min-h-0 flex-col md:flex">
-                                <section className="border-line shadow-card flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[22px] border bg-white p-4">
-                                    <div className="mb-4 flex items-center justify-between gap-2">
-                                        <h1 className="text-ink text-base font-semibold tracking-tight">
-                                            Pengaturan meja
+                                <section className="border-white/85 shadow-card flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[22px] border bg-white/94 p-4 backdrop-blur-md">
+                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                        <h1 className="text-ink text-base font-bold tracking-tight">
+                                            Pemain ({occupiedCount}/
+                                            {playerCount})
                                         </h1>
                                         {isHost ? (
                                             <button
@@ -1484,6 +1703,97 @@ function RoomContent() {
                                         )}
                                     </div>
 
+                                    {/* Visual Player Roster matching Image 1 */}
+                                    <ul className="divide-line border-line mb-3.5 divide-y rounded-2xl border bg-white px-3">
+                                        {players.map((p) => {
+                                            const seatCfg = p.seat_color
+                                                ? PLAYER_CONFIG[p.seat_color]
+                                                : null;
+                                            const charCfg = getCharacterConfig(
+                                                p.character,
+                                                p.seat_color ?? 'red',
+                                            );
+
+                                            return (
+                                                <li
+                                                    key={p.id}
+                                                    className="flex items-center justify-between gap-2 py-2"
+                                                >
+                                                    <div className="flex min-w-0 items-center gap-2.5">
+                                                        <div
+                                                            className="h-8 w-8 shrink-0 rounded-full p-[1.5px]"
+                                                            style={{
+                                                                background:
+                                                                    seatCfg
+                                                                        ? seatCfg
+                                                                              .palette
+                                                                              .base
+                                                                        : '#cbd5e1',
+                                                            }}
+                                                        >
+                                                            <img
+                                                                src={
+                                                                    charCfg.image
+                                                                }
+                                                                alt={
+                                                                    charCfg.name
+                                                                }
+                                                                width={32}
+                                                                height={32}
+                                                                className="h-full w-full rounded-full bg-white object-cover"
+                                                            />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-ink truncate text-xs font-bold">
+                                                                {p.name}
+                                                                {p.is_host
+                                                                    ? ' (Host)'
+                                                                    : ''}
+                                                            </p>
+                                                            <p className="text-ink-muted truncate text-[10px]">
+                                                                {p.seat_color
+                                                                    ? `${charCfg.name} · ${PLAYER_CONFIG[p.seat_color].label}`
+                                                                    : 'Belum pilih kursi'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex shrink-0 items-center gap-1.5">
+                                                        {p.is_host && (
+                                                            <span
+                                                                title="Host"
+                                                                className="text-ludo-yellow"
+                                                            >
+                                                                <TrophyIcon className="h-4 w-4" />
+                                                            </span>
+                                                        )}
+                                                        <span
+                                                            className={`grid h-5 w-5 place-items-center rounded-full text-white ${
+                                                                p.is_ready
+                                                                    ? 'bg-ludo-green'
+                                                                    : 'bg-line text-ink-muted'
+                                                            }`}
+                                                        >
+                                                            <CheckIcon className="h-3 w-3" />
+                                                        </span>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                        {occupiedCount < playerCount && (
+                                            <li className="flex items-center justify-between gap-2 py-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="border-line bg-canvas h-8 w-8 shrink-0 rounded-full border border-dashed" />
+                                                    <span className="text-ink-muted text-xs italic">
+                                                        Menunggu pemain…
+                                                    </span>
+                                                </div>
+                                                <span className="text-ink-muted text-xs font-bold tracking-widest">
+                                                    •••
+                                                </span>
+                                            </li>
+                                        )}
+                                    </ul>
+
                                     <RoomSettingsSummary
                                         playerCount={playerCount}
                                         hostAdvantage={Boolean(
@@ -1499,7 +1809,7 @@ function RoomContent() {
                                         }
                                     />
 
-                                    <div className="border-line/80 mt-auto flex flex-col gap-2 border-t pt-4">
+                                    <div className="border-line/80 mt-auto flex flex-col gap-2 border-t pt-3.5">
                                         <button
                                             type="button"
                                             disabled={
@@ -1553,7 +1863,7 @@ function RoomContent() {
                                             </div>
                                         )}
 
-                                        <p className="text-ink-muted pt-1 text-center text-[11px] leading-4">
+                                        <p className="text-ink-muted pt-0.5 text-center text-[11px] leading-4">
                                             {startBlockedReason ??
                                                 'Semua pemain sudah siap. Host bisa memulai permainan.'}
                                         </p>
@@ -1562,7 +1872,7 @@ function RoomContent() {
                             </aside>
                         </div>
 
-                        <div className="border-line shadow-card mt-2.5 min-w-0 shrink-0 rounded-2xl border bg-white p-2 md:hidden">
+                        <div className="border-white/85 shadow-card mt-2 min-w-0 shrink-0 rounded-2xl border bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex min-w-0 items-center gap-2">
                                 <button
                                     type="button"
@@ -1616,6 +1926,27 @@ function RoomContent() {
                     </main>
                 )}
             </div>
+
+            <CharacterSelectModal
+                open={characterModalOpen}
+                seatColor={characterModalSeat}
+                initialCharacter={
+                    characterModalSeat &&
+                    currentMe?.seat_color === characterModalSeat
+                        ? currentMe.character
+                        : characterModalSeat
+                          ? DEFAULT_CHARACTER_BY_COLOR[characterModalSeat]
+                          : currentMe?.character
+                }
+                processing={pendingAction}
+                takenCharacters={takenCharacters}
+                onClose={() => {
+                    if (!pendingAction) {
+                        setCharacterModalOpen(false);
+                    }
+                }}
+                onConfirm={handleConfirmCharacter}
+            />
 
             {rulesModalOpen && liveRoom && (
                 <div

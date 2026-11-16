@@ -1,3 +1,4 @@
+import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
@@ -20,10 +21,16 @@ import MatchResultModal, {
 } from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
 import {
+    ALL_CHARACTER_IDS,
+    ARENA_BACKGROUND_IMAGE,
     BASE_POSITION,
     boardAbsoluteTrackIndex,
     boardTokenPoint,
+    CHARACTER_LIST,
+    CharacterId,
+    DEFAULT_CHARACTER_BY_COLOR,
     getBoardSpec,
+    getCharacterConfig,
     isBoardSafeIndex,
     PLAYER_CONFIG,
     PlayerColor,
@@ -76,6 +83,7 @@ type LogEntry = {
 };
 
 type SetupNames = Record<PlayerId, string>;
+type SetupCharacters = Record<PlayerId, CharacterId>;
 
 type GameState = {
     order: PlayerId[];
@@ -84,6 +92,7 @@ type GameState = {
     turn: PlayerId;
     human: PlayerId;
     names: SetupNames;
+    characters: SetupCharacters;
     phase: Phase;
     dice: number | null;
     legalMoves: LegalMove[];
@@ -121,6 +130,7 @@ type Action =
           type: 'START';
           human: PlayerId;
           names: SetupNames;
+          characters?: Partial<SetupCharacters>;
           order?: PlayerId[];
           arms?: number;
           now: number;
@@ -180,6 +190,10 @@ const DEFAULT_NAMES: SetupNames = {
     teal: 'Toska',
 };
 
+const DEFAULT_CHARACTERS: SetupCharacters = {
+    ...DEFAULT_CHARACTER_BY_COLOR,
+};
+
 const initialState: GameState = {
     order: PLAYER_IDS,
     arms: 4,
@@ -187,6 +201,7 @@ const initialState: GameState = {
     turn: 'blue',
     human: 'blue',
     names: DEFAULT_NAMES,
+    characters: DEFAULT_CHARACTERS,
     phase: 'idle',
     dice: null,
     legalMoves: [],
@@ -268,8 +283,13 @@ function createInitialState(
     startingTurn?: PlayerId,
     order: PlayerId[] = PLAYER_IDS,
     arms?: number,
+    rawCharacters?: Partial<SetupCharacters>,
 ): GameState {
     const names = cleanNames(human, rawNames);
+    const characters: SetupCharacters = {
+        ...DEFAULT_CHARACTERS,
+        ...(rawCharacters ?? {}),
+    };
     const turn = startingTurn ?? human;
     const resolvedArms = arms ?? (order.length >= 5 ? order.length : 4);
 
@@ -280,6 +300,7 @@ function createInitialState(
         tokens: createTokenMap(),
         human,
         names,
+        characters,
         turn,
         message:
             turn === human
@@ -468,6 +489,7 @@ function reducer(state: GameState, action: Action): GameState {
             action.turn,
             action.order,
             action.arms,
+            action.characters,
         );
     }
 
@@ -479,6 +501,7 @@ function reducer(state: GameState, action: Action): GameState {
             action.turn,
             state.order,
             state.arms,
+            state.characters,
         );
     }
 
@@ -794,6 +817,7 @@ export default function Play() {
                 id: number;
                 name: string;
                 seat_color: PlayerColor | null;
+                character?: CharacterId | string | null;
                 is_ready: boolean;
                 is_host: boolean;
             }[];
@@ -802,6 +826,7 @@ export default function Play() {
             id: number;
             name: string;
             seat_color: PlayerColor | null;
+            character?: CharacterId | string | null;
             is_host: boolean;
         } | null;
         roomNotice?: string | null;
@@ -821,6 +846,8 @@ export default function Play() {
     const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
     const [setupCount, setSetupCount] = useState<PlayerCount>(2);
     const [humanColor, setHumanColor] = useState<PlayerId>('blue');
+    const [humanCharacter, setHumanCharacter] = useState<CharacterId>('frost_claw');
+    const [setupCharModalOpen, setSetupCharModalOpen] = useState(false);
     const [yourName, setYourName] = useState(accountName);
     const [opponentName, setOpponentName] = useState(
         roomOtherPlayer?.name ?? 'Lawan',
@@ -850,8 +877,16 @@ export default function Play() {
                 )
             ] ?? roomOrder[0];
         const names = { ...initialState.names };
+        const characters = { ...initialState.characters };
         room.players.forEach((player, index) => {
-            if (roomOrder[index]) names[roomOrder[index]] = player.name;
+            const seatColor = roomOrder[index];
+            if (seatColor) {
+                names[seatColor] = player.name;
+                characters[seatColor] = getCharacterConfig(
+                    player.character,
+                    seatColor,
+                ).id;
+            }
         });
 
         previousTurnRef.current = initialTurn;
@@ -860,6 +895,7 @@ export default function Play() {
             human: myRoomColor,
             turn: initialTurn,
             names,
+            characters,
             order: roomOrder,
             arms: roomArms,
             now: Date.now(),
@@ -1346,6 +1382,7 @@ export default function Play() {
                 return {
                     id: `${color}-${tokenIndex}`,
                     color,
+                    character: state.characters[color],
                     point: boardTokenPoint(
                         activeSpec,
                         color,
@@ -1372,6 +1409,7 @@ export default function Play() {
         state.phase,
         state.legalMoves,
         state.names,
+        state.characters,
         state.human,
         room,
         movingToken,
@@ -1418,6 +1456,7 @@ export default function Play() {
             .map((color) => ({
                 color,
                 name: state.names[color],
+                character: state.characters[color],
                 role: color === state.human ? 'Kamu' : 'Lawan',
                 finished: finishedCount(color),
                 captures: state.captures[color],
@@ -1430,6 +1469,7 @@ export default function Play() {
         state.order,
         state.tokens,
         state.names,
+        state.characters,
         state.human,
         state.captures,
         state.rolls,
@@ -1622,6 +1662,7 @@ export default function Play() {
 
     const selectColor = (color: PlayerId) => {
         setHumanColor(color);
+        setHumanCharacter(DEFAULT_CHARACTER_BY_COLOR[color]);
         cue(playUiSound);
     };
 
@@ -1631,13 +1672,27 @@ export default function Play() {
         const order = setupColors;
         const arms = setupCount >= 5 ? setupCount : 4;
         const names = { ...DEFAULT_NAMES } as SetupNames;
+        const characters = { ...DEFAULT_CHARACTERS } as SetupCharacters;
+        const usedChars = new Set<CharacterId>([humanCharacter]);
+
         order.forEach((color) => {
             if (color === humanColor) {
                 names[color] = yourName;
-            } else if (setupCount === 2) {
-                names[color] = opponentName;
+                characters[color] = humanCharacter;
             } else {
-                names[color] = `Bot ${PLAYER_CONFIG[color].label}`;
+                const defaultChar = DEFAULT_CHARACTER_BY_COLOR[color];
+                const botChar = !usedChars.has(defaultChar)
+                    ? defaultChar
+                    : (ALL_CHARACTER_IDS.find((id) => !usedChars.has(id)) ??
+                      defaultChar);
+                usedChars.add(botChar);
+                characters[color] = botChar;
+
+                if (setupCount === 2) {
+                    names[color] = opponentName;
+                } else {
+                    names[color] = getCharacterConfig(botChar, color).name;
+                }
             }
         });
 
@@ -1650,6 +1705,7 @@ export default function Play() {
             human: humanColor,
             turn: starter,
             names,
+            characters,
             order,
             arms,
             now: Date.now(),
@@ -1668,6 +1724,10 @@ export default function Play() {
         ) as PlayerCount;
         setSetupCount(count);
         setHumanColor(state.human);
+        setHumanCharacter(
+            state.characters[state.human] ??
+                DEFAULT_CHARACTER_BY_COLOR[state.human],
+        );
         setYourName(state.names[state.human]);
         setOpponentName(state.names[opponentColor]);
         setScreen('setup');
@@ -1690,8 +1750,21 @@ export default function Play() {
                 title={screen === 'setup' ? 'Siapkan pemain' : 'Papan latihan'}
             />
 
-            <div className="bg-canvas flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
-                <header className="border-line/60 bg-canvas/90 shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+            <div className="bg-canvas relative flex h-screen min-h-0 w-full flex-col overflow-hidden supports-[height:100dvh]:h-[100dvh]">
+                {/* Full-bleed Arena Background Image */}
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-cover bg-center"
+                    style={{
+                        backgroundImage: `url('${ARENA_BACKGROUND_IMAGE}')`,
+                    }}
+                />
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 bg-gradient-to-b from-sky-950/15 via-white/30 to-white/65 backdrop-blur-[1.5px]"
+                />
+
+                <header className="border-white/60 relative z-20 shrink-0 border-b bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
                     <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
@@ -1713,27 +1786,39 @@ export default function Play() {
                                     compact
                                 />
                             </Link>
-                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] uppercase md:inline-flex">
-                                {room ? `Ruang ${room.code}` : 'Latihan'}
+                            <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] uppercase md:inline-flex">
+                                {room ? `RUANG #${room.code}` : 'LATIHAN'}
                             </span>
                         </div>
 
                         <div className="flex items-center gap-1.5">
                             {screen === 'game' && !blockedByRoom && (
                                 <span
-                                    className="border-line hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-semibold sm:inline-flex"
+                                    className="border-line hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold sm:inline-flex"
                                     style={{
                                         color: PLAYER_CONFIG[state.human]
                                             .palette.text,
                                     }}
                                 >
                                     <span
-                                        className="h-1.5 w-1.5 rounded-full"
+                                        className="h-2 w-2 rounded-full"
                                         style={{
                                             background:
                                                 PLAYER_CONFIG[state.human]
                                                     .palette.base,
                                         }}
+                                    />
+                                    <img
+                                        src={
+                                            getCharacterConfig(
+                                                state.characters[state.human],
+                                                state.human,
+                                            ).image
+                                        }
+                                        alt=""
+                                        width={18}
+                                        height={18}
+                                        className="h-4.5 w-4.5 rounded-full object-cover"
                                     />
                                     {state.names[state.human]}
                                 </span>
@@ -1745,7 +1830,7 @@ export default function Play() {
                                         cue(playUiSound);
                                         setEndGameModalOpen(true);
                                     }}
-                                    className="border-danger/30 bg-danger/10 text-danger hover:bg-danger/15 inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-semibold tracking-wide uppercase transition"
+                                    className="border-danger/30 bg-danger/10 text-danger hover:bg-danger/15 inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-bold tracking-wide uppercase transition"
                                 >
                                     End Game
                                 </button>
@@ -1800,8 +1885,8 @@ export default function Play() {
                 </header>
 
                 {blockedByRoom || (roomNotice && !room) ? (
-                    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
-                        <div className="animate-modal-enter border-line shadow-card w-full max-w-md rounded-[24px] border bg-white p-5 sm:p-7">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-brand/10 text-brand-ink grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5 w-5" />
@@ -1849,23 +1934,24 @@ export default function Play() {
                         </div>
                     </main>
                 ) : screen === 'setup' ? (
-                    <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
                         <form
                             onSubmit={startGame}
-                            className="border-line/80 shadow-card animate-fade-up max-h-[calc(100dvh-72px)] w-full max-w-lg overflow-y-auto rounded-[26px] border bg-white p-4 sm:p-6 [@media(max-height:620px)]:p-3"
+                            className="border-white/85 shadow-card animate-fade-up max-h-[calc(100dvh-72px)] w-full max-w-lg overflow-y-auto rounded-[26px] border bg-white/95 p-4 backdrop-blur-md sm:p-6 [@media(max-height:620px)]:p-3"
                         >
                             <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
                                 SEBELUM BERMAIN
                             </p>
-                            <h1 className="text-ink mt-1.5 text-xl font-semibold tracking-tight sm:text-2xl [@media(max-height:620px)]:text-lg">
-                                Siapkan nama & warna
+                            <h1 className="text-ink mt-1 text-xl font-semibold tracking-tight sm:text-2xl [@media(max-height:620px)]:text-lg">
+                                Siapkan nama, warna & karakter
                             </h1>
                             <p className="text-ink-muted mt-1 text-[11px] leading-5 sm:text-xs [@media(max-height:620px)]:hidden">
-                                Pilih jumlah pemain, warna, dan namamu. Papan
-                                menyesuaikan otomatis untuk 2–7 pemain.
+                                Pilih jumlah pemain, warna, dan karakter
+                                favoritmu. Papan menyesuaikan otomatis untuk
+                                2–7 pemain.
                             </p>
 
-                            <fieldset className="mt-3 [@media(max-height:620px)]:mt-2">
+                            <fieldset className="mt-2.5 [@media(max-height:620px)]:mt-2">
                                 <legend className="text-ink text-xs font-semibold">
                                     Jumlah pemain
                                 </legend>
@@ -1894,12 +1980,12 @@ export default function Play() {
                                 </div>
                             </fieldset>
 
-                            <fieldset className="mt-3 [@media(max-height:620px)]:mt-2">
+                            <fieldset className="mt-2.5 [@media(max-height:620px)]:mt-2">
                                 <legend className="text-ink text-xs font-semibold">
                                     Pilih warnamu
                                 </legend>
                                 <div
-                                    className={`mt-2 grid gap-1.5 sm:gap-2 ${
+                                    className={`mt-1.5 grid gap-1.5 sm:gap-2 ${
                                         setupColors.length >= 5
                                             ? 'grid-cols-3 sm:grid-cols-4'
                                             : setupColors.length >= 3
@@ -1920,7 +2006,7 @@ export default function Play() {
                                                     selectColor(color)
                                                 }
                                                 aria-pressed={selected}
-                                                className={`flex items-center gap-2 rounded-2xl border px-2.5 py-2 text-left transition [@media(max-height:620px)]:py-1.5 ${
+                                                className={`flex items-center gap-2 rounded-2xl border px-2.5 py-1.5 text-left transition ${
                                                     selected
                                                         ? 'border-transparent'
                                                         : 'border-line hover:border-ink/15 bg-white'
@@ -1936,7 +2022,7 @@ export default function Play() {
                                                 }
                                             >
                                                 <span
-                                                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
+                                                    className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white"
                                                     style={{
                                                         background:
                                                             palette.base,
@@ -1956,11 +2042,6 @@ export default function Play() {
                                                                 .label
                                                         }
                                                     </span>
-                                                    <span className="text-ink-muted block truncate text-[10px]">
-                                                        {selected
-                                                            ? 'Kamu'
-                                                            : 'Pilih'}
-                                                    </span>
                                                 </span>
                                             </button>
                                         );
@@ -1968,8 +2049,73 @@ export default function Play() {
                                 </div>
                             </fieldset>
 
+                            {/* Character Selector Strip */}
+                            <div className="mt-2.5 [@media(max-height:620px)]:mt-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-ink text-xs font-semibold">
+                                        Karakter kamu
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            cue(playUiSound);
+                                            setSetupCharModalOpen(true);
+                                        }}
+                                        className="text-brand-ink text-[11px] font-bold hover:underline"
+                                    >
+                                        Lihat detail 7 karakter →
+                                    </button>
+                                </div>
+                                <div className="mt-1.5 grid grid-cols-7 gap-1.5">
+                                    {CHARACTER_LIST.map((char) => {
+                                        const isSelected =
+                                            humanCharacter === char.id;
+                                        const palette =
+                                            PLAYER_CONFIG[char.accentColor]
+                                                .palette;
+
+                                        return (
+                                            <button
+                                                key={char.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    cue(playUiSound);
+                                                    setHumanCharacter(char.id);
+                                                }}
+                                                aria-pressed={isSelected}
+                                                title={`${char.name} (${char.element})`}
+                                                className={`flex flex-col items-center rounded-xl p-1 transition ${
+                                                    isSelected
+                                                        ? 'scale-[1.03]'
+                                                        : 'opacity-75 hover:opacity-100'
+                                                }`}
+                                                style={{
+                                                    background: isSelected
+                                                        ? palette.soft
+                                                        : '#ffffff',
+                                                    boxShadow: isSelected
+                                                        ? `0 0 0 2px ${palette.base}`
+                                                        : 'inset 0 0 0 1px #e4e8ee',
+                                                }}
+                                            >
+                                                <img
+                                                    src={char.image}
+                                                    alt={char.name}
+                                                    width={44}
+                                                    height={44}
+                                                    className="aspect-square w-full rounded-lg object-cover"
+                                                />
+                                                <span className="text-ink mt-0.5 w-full truncate text-center text-[8px] font-bold sm:text-[9px]">
+                                                    {char.name}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <div
-                                className={`mt-3 grid gap-2 ${
+                                className={`mt-2.5 grid gap-2 ${
                                     setupCount === 2
                                         ? 'sm:grid-cols-2 [@media(max-height:620px)]:grid-cols-2'
                                         : ''
@@ -1987,7 +2133,7 @@ export default function Play() {
                                         maxLength={16}
                                         autoComplete="off"
                                         placeholder="Nama kamu"
-                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
                                     />
                                 </label>
                                 {setupCount === 2 && (
@@ -2005,65 +2151,10 @@ export default function Play() {
                                             maxLength={16}
                                             autoComplete="off"
                                             placeholder="Nama lawan"
-                                            className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1.5 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                            className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
                                         />
                                     </label>
                                 )}
-                            </div>
-
-                            <div className="bg-surface-muted mt-3 flex items-center gap-2 rounded-xl px-3 py-2 [@media(max-height:620px)]:hidden">
-                                <span className="flex shrink-0 -space-x-1">
-                                    {setupColors.map((color) => (
-                                        <span
-                                            key={color}
-                                            className="h-4 w-4 rounded-full border-2 border-white"
-                                            style={{
-                                                background:
-                                                    PLAYER_CONFIG[color].palette
-                                                        .base,
-                                            }}
-                                        />
-                                    ))}
-                                </span>
-                                <p className="text-ink-muted min-w-0 text-[10px] leading-4">
-                                    Kamu memakai{' '}
-                                    <strong
-                                        style={{
-                                            color: PLAYER_CONFIG[humanColor]
-                                                .palette.text,
-                                        }}
-                                    >
-                                        {PLAYER_CONFIG[humanColor].label}
-                                    </strong>
-                                    {setupCount === 2 ? (
-                                        <>
-                                            , lawan memakai{' '}
-                                            <strong
-                                                style={{
-                                                    color: PLAYER_CONFIG[
-                                                        setupOpponent
-                                                    ].palette.text,
-                                                }}
-                                            >
-                                                {
-                                                    PLAYER_CONFIG[setupOpponent]
-                                                        .label
-                                                }
-                                            </strong>
-                                            .
-                                        </>
-                                    ) : (
-                                        <>
-                                            {' '}
-                                            melawan {setupCount - 1} bot di
-                                            papan{' '}
-                                            {setupCount >= 5
-                                                ? `${setupCount} sisi`
-                                                : '4 sisi'}
-                                            .
-                                        </>
-                                    )}
-                                </p>
                             </div>
 
                             <button
@@ -2074,7 +2165,7 @@ export default function Play() {
                                 Mulai bermain
                             </button>
 
-                            <div className="mt-3 flex items-center justify-between gap-2 [@media(max-height:620px)]:mt-2">
+                            <div className="mt-2.5 flex items-center justify-between gap-2 [@media(max-height:620px)]:mt-2">
                                 <Link
                                     href={route('home')}
                                     className="text-ink-muted hover:text-ink text-[11px] font-semibold transition"
@@ -2083,18 +2174,19 @@ export default function Play() {
                                 </Link>
                                 <span className="text-ink-muted inline-flex items-center gap-1 text-[10px] font-medium">
                                     <SparklesIcon className="h-3 w-3" />
-                                    Latihan lokal
+                                    {getCharacterConfig(humanCharacter).name} ·{' '}
+                                    {PLAYER_CONFIG[humanColor].label}
                                 </span>
                             </div>
                         </form>
                     </main>
                 ) : (
-                    <main className="mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
-                        <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_280px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-4">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col px-2 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] sm:px-4 sm:pt-3">
+                        <div className="grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 md:grid-cols-[minmax(0,1fr)_288px] md:gap-3 lg:grid-cols-[minmax(0,1fr)_328px] lg:gap-4">
                             <section className="flex min-h-0 min-w-0 flex-col gap-2">
                                 {state.order.length >= 5 ? (
                                     <div
-                                        className={`border-line/80 shadow-card grid shrink-0 gap-1 overflow-hidden rounded-[16px] border bg-white p-1 md:hidden ${
+                                        className={`border-white/85 shadow-card grid shrink-0 gap-1 overflow-hidden rounded-[16px] border bg-white/94 p-1 backdrop-blur-md md:hidden ${
                                             state.order.length === 7
                                                 ? 'grid-cols-4'
                                                 : 'grid-cols-3'
@@ -2103,6 +2195,10 @@ export default function Play() {
                                         {state.order.map((color) => {
                                             const palette =
                                                 PLAYER_CONFIG[color].palette;
+                                            const charCfg = getCharacterConfig(
+                                                state.characters[color],
+                                                color,
+                                            );
                                             const isTurn =
                                                 state.turn === color &&
                                                 !state.winner;
@@ -2123,17 +2219,17 @@ export default function Play() {
                                                             : undefined
                                                     }
                                                 >
-                                                    <span
-                                                        className="grid h-5 w-5 shrink-0 place-items-center rounded-md text-[9px] font-bold text-white"
+                                                    <img
+                                                        src={charCfg.image}
+                                                        alt={charCfg.name}
+                                                        width={20}
+                                                        height={20}
+                                                        className="h-5 w-5 shrink-0 rounded-full object-cover ring-1"
                                                         style={{
-                                                            background:
+                                                            borderColor:
                                                                 palette.base,
                                                         }}
-                                                    >
-                                                        {state.names[color]
-                                                            .charAt(0)
-                                                            .toUpperCase()}
-                                                    </span>
+                                                    />
                                                     <span className="text-ink min-w-0 flex-1 truncate text-[10px] font-semibold">
                                                         {state.names[color]}
                                                     </span>
@@ -2152,13 +2248,16 @@ export default function Play() {
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="border-line/80 shadow-card grid shrink-0 grid-cols-2 items-stretch rounded-[18px] border bg-white md:hidden">
+                                    <div className="border-white/85 shadow-card grid shrink-0 grid-cols-2 items-stretch overflow-hidden rounded-[18px] border bg-white/95 backdrop-blur-md md:hidden">
                                         {state.order.map((color) => (
                                             <PlayerCard
                                                 key={color}
                                                 size="sm"
                                                 color={color}
                                                 name={state.names[color]}
+                                                character={
+                                                    state.characters[color]
+                                                }
                                                 role={
                                                     color === state.human
                                                         ? 'Kamu'
@@ -2198,6 +2297,9 @@ export default function Play() {
                                                         state.names[color],
                                                     ]),
                                                 )}
+                                                playerCharacters={
+                                                    state.characters
+                                                }
                                                 activeColor={
                                                     state.winner
                                                         ? undefined
@@ -2216,11 +2318,11 @@ export default function Play() {
                             </section>
 
                             <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
-                                <section className="border-line/80 shadow-card shrink-0 rounded-[22px] border bg-white p-4">
+                                <section className="border-white/85 shadow-card shrink-0 rounded-[22px] border bg-white/95 p-4 backdrop-blur-md">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <p
-                                                className="text-[10px] font-semibold tracking-[0.16em]"
+                                                className="text-[10px] font-extrabold tracking-[0.14em]"
                                                 style={{
                                                     color: PLAYER_CONFIG[
                                                         state.turn
@@ -2230,7 +2332,7 @@ export default function Play() {
                                                 {turnLabel}
                                             </p>
                                             <p
-                                                className="text-ink mt-1 text-sm leading-5 font-semibold"
+                                                className="text-ink mt-1 text-sm leading-5 font-bold"
                                                 aria-live="polite"
                                             >
                                                 {instruction}
@@ -2270,7 +2372,7 @@ export default function Play() {
                                                 type="button"
                                                 onClick={handleRoll}
                                                 disabled={!canRoll}
-                                                className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold transition active:scale-[0.99] enabled:hover:brightness-90 disabled:cursor-not-allowed"
+                                                className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold transition active:scale-[0.99] enabled:hover:brightness-95 disabled:cursor-not-allowed"
                                                 style={rollButtonStyle}
                                             >
                                                 <DiceIcon className="h-4.5 w-4.5" />
@@ -2278,16 +2380,16 @@ export default function Play() {
                                             </button>
 
                                             <p className="text-ink-muted mt-2 text-center text-[10px] font-medium">
-                                                Lempar 6 untuk keluar
+                                                Lempar dadu untuk melangkah
                                             </p>
                                         </>
                                     )}
                                 </section>
 
-                                <section className="border-line/80 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white">
+                                <section className="border-white/85 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white/95 backdrop-blur-md">
                                     <div className="shrink-0 px-4 pt-3.5 pb-2">
-                                        <h2 className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
-                                            PEMAIN ({state.order.length})
+                                        <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">
+                                            PEMAIN
                                         </h2>
                                     </div>
                                     <div
@@ -2307,6 +2409,9 @@ export default function Play() {
                                                 }
                                                 color={color}
                                                 name={state.names[color]}
+                                                character={
+                                                    state.characters[color]
+                                                }
                                                 role={
                                                     color === state.human
                                                         ? 'Kamu'
@@ -2326,12 +2431,12 @@ export default function Play() {
                                             />
                                         ))}
                                     </div>
-                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t px-4 py-3 [@media(max-height:640px)]:hidden">
+                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t bg-white/70 px-4 py-3 [@media(max-height:640px)]:hidden">
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">
+                                            <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
                                                 Bidakmu keluar
                                             </p>
-                                            <p className="text-ink mt-0.5 text-xs font-bold tabular-nums">
+                                            <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
                                                 {outOfBase(state.human)}/4
                                             </p>
                                         </div>
@@ -2340,10 +2445,10 @@ export default function Play() {
                                             aria-hidden="true"
                                         />
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-ink-muted text-[9px] font-semibold tracking-[0.12em] uppercase">
+                                            <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
                                                 Total langkah
                                             </p>
-                                            <p className="text-ink mt-0.5 text-xs font-bold tabular-nums">
+                                            <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
                                                 {state.totalMoves}
                                             </p>
                                         </div>
@@ -2352,7 +2457,7 @@ export default function Play() {
                             </aside>
                         </div>
 
-                        <div className="border-line/80 shadow-card mt-2 shrink-0 rounded-[20px] border bg-white p-2 md:hidden">
+                        <div className="border-white/85 shadow-card mt-2 shrink-0 rounded-[20px] border bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex items-center gap-2">
                                 <Dice
                                     value={displayDice}
@@ -2414,6 +2519,18 @@ export default function Play() {
                     </main>
                 )}
             </div>
+
+            <CharacterSelectModal
+                open={setupCharModalOpen}
+                seatColor={humanColor}
+                initialCharacter={humanCharacter}
+                onClose={() => setSetupCharModalOpen(false)}
+                onConfirm={(character) => {
+                    cue(playUiSound);
+                    setHumanCharacter(character);
+                    setSetupCharModalOpen(false);
+                }}
+            />
 
             {state.winner && screen === 'game' && (
                 <MatchResultModal

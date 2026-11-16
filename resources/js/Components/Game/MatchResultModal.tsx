@@ -5,13 +5,19 @@ import {
     TrophyIcon,
     UsersIcon,
 } from '@/Components/Game/Icons';
-import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
+import {
+    CharacterId,
+    getCharacterConfig,
+    PLAYER_CONFIG,
+    PlayerColor,
+} from '@/lib/ludo';
 import { Link } from '@inertiajs/react';
 import { useEffect, useRef } from 'react';
 
 export type MatchStanding = {
     color: PlayerColor;
     name: string;
+    character?: CharacterId | string | null;
     role: 'Kamu' | 'Lawan';
     finished: number;
     captures: number;
@@ -177,6 +183,10 @@ export default function MatchResultModal({
                     <ul className="divide-line divide-y">
                         {standings.map((entry, index) => {
                             const palette = PLAYER_CONFIG[entry.color].palette;
+                            const charCfg = getCharacterConfig(
+                                entry.character,
+                                entry.color,
+                            );
                             const isWinnerRow = entry.color === winner;
 
                             return (
@@ -209,14 +219,18 @@ export default function MatchResultModal({
                                     </span>
 
                                     <div
-                                        className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold"
+                                        className="relative h-9 w-9 shrink-0 rounded-full p-[2px]"
                                         style={{
-                                            background: palette.soft,
-                                            color: palette.text,
-                                            boxShadow: `inset 0 0 0 1px ${palette.base}2e`,
+                                            background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
                                         }}
                                     >
-                                        {entry.name.charAt(0).toUpperCase()}
+                                        <img
+                                            src={charCfg.image}
+                                            alt={charCfg.name}
+                                            width={36}
+                                            height={36}
+                                            className="h-full w-full rounded-full bg-white object-cover"
+                                        />
                                         <span
                                             className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white"
                                             style={{ background: palette.base }}
@@ -239,6 +253,7 @@ export default function MatchResultModal({
                                             </span>
                                         </div>
                                         <p className="text-ink-muted mt-0.5 text-xs">
+                                            {charCfg.name} ·{' '}
                                             {PLAYER_CONFIG[entry.color].label}
                                             {entry.captures > 0
                                                 ? ` · ${entry.captures} tangkapan`

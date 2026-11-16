@@ -700,4 +700,81 @@ class RoomFlowTest extends TestCase
                 ->where('roomError', 'Permainan di ruang ini sudah dimulai.')
                 ->where('attemptedCode', $room->code));
     }
+
+    public function test_players_can_select_and_change_characters_when_sitting_in_a_room(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])
+            ->get('/room')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Room')
+                ->where('me.seat_color', 'red')
+                ->where('me.character', 'ignivar')
+                ->where('room.players.0.character', 'ignivar'));
+
+        $room = Room::firstOrFail();
+        $hostToken = session('ludo_player_token');
+
+        // Host can change character while keeping red seat
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => 'red',
+            'character' => 'solgarde',
+        ])->assertRedirect();
+
+        $this->assertSame('solgarde', $room->players()->where('is_host', true)->value('character'));
+
+        // Guest joins and picks seat + character from the 7 assets
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+
+        // Invalid character is rejected
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => 'green',
+            'character' => 'unknown_dragon',
+        ])->assertSessionHasErrors('character');
+
+        foreach (Room::ALL_CHARACTERS as $character) {
+            $this->post("/rooms/{$room->code}/seat", [
+                'seat_color' => 'green',
+                'character' => $character,
+            ])->assertRedirect();
+
+            $guest = $room->players()->where('is_host', false)->firstOrFail();
+            $this->assertSame('green', $guest->seat_color);
+            $this->assertSame($character, $guest->character);
+            $this->assertTrue($guest->is_ready);
+        }
+
+        // Standing up clears seat_color and character
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => null,
+        ])->assertRedirect();
+
+        $guest = $room->players()->where('is_host', false)->firstOrFail();
+        $this->assertNull($guest->seat_color);
+        $this->assertNull($guest->character);
+        $this->assertFalse($guest->is_ready);
+
+        // Sitting down again with zephyira and starting match passes character to Play page
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => 'yellow',
+            'character' => 'zephyira',
+        ])->assertRedirect();
+
+        $this->withSession([
+            'ludo_player_token' => $hostToken,
+            'ludo_host_room_code' => $room->code,
+        ]);
+        $this->post("/rooms/{$room->code}/start")
+            ->assertRedirect(route('play', ['room' => $room->code]));
+
+        $this->get("/play?room={$room->code}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Play')
+                ->where('room.players.0.character', 'solgarde')
+                ->where('room.players.1.character', 'zephyira'));
+    }
 }
