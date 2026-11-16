@@ -93,6 +93,34 @@ function groupOffset(index: number, count: number): number[] {
     );
 }
 
+/**
+ * Fan slots ordered from the front-most (largest downward offset, drawn last)
+ * to the back-most, matching the offsets returned by groupOffset().
+ */
+function frontToBackSlots(count: number): number[] {
+    if (count <= 1) {
+        return [0];
+    }
+
+    if (count === 2) {
+        return [1, 0];
+    }
+
+    if (count === 3) {
+        return [2, 0, 1];
+    }
+
+    return [2, 3, 0, 1];
+}
+
+function stackPriority(token: BoardToken, activeColor?: PlayerColor): number {
+    if (token.legal) {
+        return 2;
+    }
+
+    return token.color === activeColor ? 1 : 0;
+}
+
 function tokenGroups(tokens: BoardToken[]) {
     const groups = new Map<string, BoardToken[]>();
 
@@ -125,11 +153,31 @@ export default function LudoBoard({
     const cellBox = spec.cellSizePercent * 0.9;
     const cellRx = cellBox * 0.2;
 
-    const layout = new Map<string, { index: number; count: number }>();
+    const layout = new Map<
+        string,
+        { index: number; slot: number; count: number; raised: boolean }
+    >();
 
     for (const group of tokenGroups(tokens).values()) {
-        group.forEach((token, index) => {
-            layout.set(token.id, { index, count: group.length });
+        const count = group.length;
+        const slots = frontToBackSlots(count);
+        // The turn player's pions take the front fan slots so they are not buried under opponents.
+        const ranked = group
+            .map((token, index) => ({ token, index }))
+            .sort(
+                (a, b) =>
+                    stackPriority(b.token, activeColor) -
+                        stackPriority(a.token, activeColor) ||
+                    a.index - b.index,
+            );
+
+        ranked.forEach(({ token, index }, rank) => {
+            layout.set(token.id, {
+                index,
+                slot: slots[rank % slots.length],
+                count,
+                raised: count > 1 && token.color === activeColor,
+            });
         });
     }
 
@@ -633,11 +681,15 @@ export default function LudoBoard({
                         token.character ?? playerCharacters[token.color],
                         token.color,
                     );
-                    const { index, count } = layout.get(token.id) ?? {
+                    const { index, slot, count, raised } = layout.get(
+                        token.id,
+                    ) ?? {
                         index: 0,
+                        slot: 0,
                         count: 1,
+                        raised: false,
                     };
-                    const [dx, dy] = groupOffset(index, count);
+                    const [dx, dy] = groupOffset(slot, count);
                     const leftPercent = spec.isRadial
                         ? token.point.col
                         : (token.point.col / BOARD_SIZE) * 100;
@@ -645,14 +697,17 @@ export default function LudoBoard({
                         ? token.point.row
                         : (token.point.row / BOARD_SIZE) * 100;
                     const depth =
-                        Math.round(topPercent * 4) + (dy > 0 ? 2 : dy < 0 ? 0 : 1);
+                        Math.round(topPercent * 4) +
+                        (dy > 0 ? 2 : dy < 0 ? 0 : 1);
                     const zIndex = token.returning
                         ? 1500 + depth
                         : token.moving
                           ? 1000 + depth
                           : token.legal
                             ? 500 + depth
-                            : 10 + depth;
+                            : raised
+                              ? 250 + depth
+                              : 10 + depth;
                     const positionStyle = {
                         left: `${leftPercent}%`,
                         top: `${topPercent}%`,
@@ -690,7 +745,7 @@ export default function LudoBoard({
                     return (
                         <div
                             key={token.id}
-                            className={`absolute transition-[left,top] ${
+                            className={`absolute transition-[left,top,transform] ${
                                 token.returning
                                     ? 'duration-[50ms] ease-linear'
                                     : 'duration-[140ms] ease-[cubic-bezier(0.37,0,0.63,1)]'
