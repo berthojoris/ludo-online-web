@@ -113,13 +113,13 @@ export default function Home() {
         setCreateRoomError(null);
     }, [creatingRoom]);
 
-    const submitCreateRoom = useCallback((password: string) => {
+    const submitCreateRoom = useCallback((password: string, vsComputer: boolean) => {
         setCreatingRoom(true);
         setCreateRoomError(null);
 
         router.post(
             route('rooms.store'),
-            { max_players: 4, password },
+            { max_players: 4, password, vs_computer: vsComputer },
             {
                 onError: (errors) => {
                     setCreateRoomError(

@@ -58,10 +58,11 @@ class RoomController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'password' => ['required', 'string'],
+            'password' => [$request->session()->get('ludo_room_access') ? 'nullable' : 'required', 'string'],
+            'vs_computer' => ['sometimes', 'boolean'],
         ]);
 
-        if (! hash_equals((string) config('ludo.room_password'), (string) $request->input('password'))) {
+        if (! $request->session()->get('ludo_room_access') && ! hash_equals((string) config('ludo.room_password'), (string) $request->input('password'))) {
             throw ValidationException::withMessages([
                 'password' => 'Kata sandi salah. Periksa kembali lalu coba lagi.',
             ]);
@@ -96,6 +97,20 @@ class RoomController extends Controller
                 'is_host' => true,
             ]);
 
+            if ($request->boolean('vs_computer')) {
+                $seat = $room->allowedSeats()[1];
+                RoomPlayer::create([
+                    'room_id' => $room->id,
+                    'player_token' => Str::random(40),
+                    'name' => 'Computer',
+                    'seat_color' => $seat,
+                    'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$seat],
+                    'is_ready' => true,
+                    'is_host' => false,
+                    'is_computer' => true,
+                ]);
+            }
+
             return $room;
         });
 
@@ -111,6 +126,7 @@ class RoomController extends Controller
         $validated = $request->validate([
             'max_players' => ['sometimes', 'integer', Rule::in([2, 3, 4, 5, 6, 7])],
             'host_advantage' => ['sometimes', 'boolean'],
+            'vs_computer' => ['sometimes', 'boolean'],
         ]);
 
         $token = self::playerToken($request);
@@ -135,11 +151,44 @@ class RoomController extends Controller
             $lockedRoom->host_advantage = $validated['host_advantage'] ?? $lockedRoom->host_advantage;
             $lockedRoom->save();
 
+            if (array_key_exists('vs_computer', $validated)) {
+                $computer = $lockedRoom->players()->where('is_computer', true)->first();
+                if (! $validated['vs_computer']) {
+                    $computer?->delete();
+                } elseif (! $computer) {
+                    $players = $lockedRoom->players()->get();
+                    $seat = collect($lockedRoom->allowedSeats())->first(fn ($color) => ! $players->contains('seat_color', $color));
+                    if ($players->count() >= $lockedRoom->max_players || ! $seat) {
+                        throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer.']);
+                    }
+                    $taken = $players->pluck('character')->filter()->all();
+                    RoomPlayer::create([
+                        'room_id' => $lockedRoom->id,
+                        'player_token' => Str::random(40),
+                        'name' => 'Computer',
+                        'seat_color' => $seat,
+                        'character' => self::firstFreeCharacter($taken, [Room::DEFAULT_CHARACTER_BY_COLOR[$seat] ?? null]),
+                        'is_ready' => true,
+                        'is_host' => false,
+                        'is_computer' => true,
+                    ]);
+                }
+            }
+
             $allowedSeats = $lockedRoom->allowedSeats();
             $players = $lockedRoom->players()->get();
 
             foreach ($players as $player) {
                 if ($player->seat_color !== null && ! in_array($player->seat_color, $allowedSeats, true)) {
+                    if ($player->is_computer) {
+                        $seat = collect($allowedSeats)->first(fn ($color) => ! $players->contains('seat_color', $color));
+                        if (! $seat) {
+                            throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer pada kapasitas ini.']);
+                        }
+                        $player->seat_color = $seat;
+                        $player->save();
+                        continue;
+                    }
                     $player->seat_color = null;
                     $player->character = null;
                     $player->is_ready = false;
@@ -409,17 +458,25 @@ class RoomController extends Controller
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
 
+        if ($request->boolean('computer')) {
+            $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
+            $player = $room->players()->where('is_computer', true)->firstOrFail();
+        }
+
         if ($room->status !== 'started') {
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, $player) {
+        $action = DB::transaction(function () use ($room, $player, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
+            if ($player->is_computer) {
+                abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
+            }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && ! in_array($index, $state['winners'] ?? [], true) && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
-            $value = MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
+            $value = $player->is_computer ? random_int(1, 6) : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
             if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
                 $state['had_six'] = array_fill(0, count($state['tokens']), false);
             }
@@ -459,7 +516,7 @@ class RoomController extends Controller
     public function move(Request $request, string $code): JsonResponse
     {
         $validated = $request->validate([
-            'token_index' => ['required', 'integer', 'min:0', 'max:3'],
+            'token_index' => [$request->boolean('computer') ? 'sometimes' : 'required', 'integer', 'min:0', 'max:3'],
         ]);
 
         self::playerToken($request);
@@ -470,17 +527,25 @@ class RoomController extends Controller
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
 
+        if ($request->boolean('computer')) {
+            $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
+            $player = $room->players()->where('is_computer', true)->firstOrFail();
+        }
+
         if ($room->status !== 'started') {
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, $player, $validated) {
+        $action = DB::transaction(function () use ($room, $player, $validated, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
+            if ($player->is_computer) {
+                abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
+            }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
-            $tokenIndex = (int) $validated['token_index'];
+            $tokenIndex = $player->is_computer ? MatchRules::computerMove($state, $index) : (int) $validated['token_index'];
             $moves = MatchRules::moves($state, $index, $state['dice']);
             abort_unless(array_key_exists($tokenIndex, $moves), 422, 'Langkah tidak sah.');
             $target = $moves[$tokenIndex];

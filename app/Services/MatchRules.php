@@ -247,6 +247,36 @@ class MatchRules
         return $rolls;
     }
 
+    public static function computerMove(array $state, int $player): ?int
+    {
+        $colors = $state['colors'];
+        $arms = $state['arms'] ?? null;
+        $spec = self::spec($colors, $arms);
+        $best = null;
+        $bestScore = -INF;
+        foreach (self::moves($state, $player, $state['dice']) as $index => $target) {
+            $score = $target / 10;
+            $score += $state['tokens'][$player][$index] === -1 ? 12 : 0;
+            $score += $target > $spec['last_track_position'] ? 30 : 0;
+            $score += $target === $spec['finish_position'] ? 60 : 0;
+            $absolute = self::absolute($player, $target, $colors, $arms);
+            if ($absolute !== null && ! in_array($absolute, $spec['safe'], true)) {
+                foreach ($state['tokens'] as $opponent => $tokens) {
+                    if ($opponent === $player) continue;
+                    foreach ($tokens as $position) {
+                        if (self::absolute($opponent, $position, $colors, $arms) === $absolute) $score += 80;
+                    }
+                }
+            }
+            if ($score > $bestScore) {
+                $best = $index;
+                $bestScore = $score;
+            }
+        }
+
+        return $best;
+    }
+
     public static function absolute(int $player, int $position, array $colors = ['blue', 'green'], ?int $arms = null): ?int
     {
         $spec = self::spec($colors, $arms);

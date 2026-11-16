@@ -48,6 +48,7 @@ type RoomPlayerData = {
     character?: CharacterId | string | null;
     is_ready: boolean;
     is_host: boolean;
+    is_computer?: boolean;
 };
 
 type RoomData = {
@@ -102,6 +103,8 @@ function RoomSettingsSummary({
     pending,
     onSelectPlayerCount,
     onToggleAdvantage,
+    vsComputer,
+    onSelectOpponent,
     showRules = true,
 }: {
     playerCount: PlayerCount;
@@ -110,10 +113,20 @@ function RoomSettingsSummary({
     pending: boolean;
     onSelectPlayerCount: (count: PlayerCount) => void;
     onToggleAdvantage: () => void;
+    vsComputer: boolean;
+    onSelectOpponent: (computer: boolean) => void;
     showRules?: boolean;
 }) {
     return (
         <>
+            <fieldset className="mb-3" disabled={!isHost || pending} aria-busy={pending}>
+                <legend className="text-ink-muted text-xs font-medium">Lawan</legend>
+                <div className="segmented mt-1.5 grid grid-cols-2">
+                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => onSelectOpponent(false)}>Pemain asli</button>
+                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => onSelectOpponent(true)}>VS COMPUTER</button>
+                </div>
+                {vsComputer && <p className="text-ink-muted mt-1 text-xs">Komputer: MEDIUM</p>}
+            </fieldset>
             <div>
                 <div className="flex items-center justify-between gap-2">
                     <span className="text-ink-muted block text-xs font-medium">
@@ -486,6 +499,17 @@ function RoomContent() {
             );
     };
 
+    const handleSelectOpponent = (computer: boolean) => {
+        if (!liveRoom || !isHost || pendingAction || liveRoom.players.some((player) => player.is_computer) === computer) return;
+        setActionError(null);
+        setPendingAction(true);
+        router.patch(route('rooms.settings', { code: liveRoom.code }), { vs_computer: computer }, {
+            preserveScroll: true,
+            onError: handleFirstError,
+            onFinish: () => setPendingAction(false),
+        });
+    };
+
     const handleSelectSeat = (
         color: PlayerColor | null,
         character?: CharacterId,
@@ -675,7 +699,7 @@ function RoomContent() {
             );
     };
 
-    const postRoomCreation = (password?: string) => {
+    const postRoomCreation = (password?: string, vsComputer = false) => {
         setActionError(null);
         setCreatePasswordError(null);
         setPendingAction(true);
@@ -683,6 +707,7 @@ function RoomContent() {
             route('rooms.store'),
             {
                 max_players: playerCount,
+                vs_computer: vsComputer,
                 ...(password === undefined ? {} : { password }),
             },
             {
@@ -711,12 +736,7 @@ function RoomContent() {
         setActionError(null);
         setCreatePasswordError(null);
 
-        if (!canCreateRoom) {
-            setCreatePasswordOpen(true);
-            return;
-        }
-
-        postRoomCreation();
+        setCreatePasswordOpen(true);
     };
 
     const handleJoin = (event: FormEvent<HTMLFormElement>) => {
@@ -1802,6 +1822,8 @@ function RoomContent() {
                                     </ul>
 
                                     <RoomSettingsSummary
+                                        vsComputer={Boolean(liveRoom?.players.some((player) => player.is_computer))}
+                                        onSelectOpponent={handleSelectOpponent}
                                         playerCount={playerCount}
                                         hostAdvantage={Boolean(
                                             liveRoom?.host_advantage,
@@ -2016,6 +2038,8 @@ function RoomContent() {
                         </div>
 
                         <RoomSettingsSummary
+                            vsComputer={Boolean(liveRoom?.players.some((player) => player.is_computer))}
+                            onSelectOpponent={handleSelectOpponent}
                             playerCount={playerCount}
                             hostAdvantage={Boolean(liveRoom?.host_advantage)}
                             onToggleAdvantage={handleToggleAdvantage}
@@ -2165,6 +2189,7 @@ function RoomContent() {
 
             <CreateRoomPasswordModal
                 open={createPasswordOpen}
+                passwordRequired={!canCreateRoom}
                 processing={pendingAction}
                 error={createPasswordError}
                 onCancel={() => {
@@ -2173,9 +2198,9 @@ function RoomContent() {
                         setCreatePasswordError(null);
                     }
                 }}
-                onSubmit={(password) => {
+                onSubmit={(password, vsComputer) => {
                     cue();
-                    postRoomCreation(password);
+                    postRoomCreation(password || undefined, vsComputer);
                 }}
             />
 

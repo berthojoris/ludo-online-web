@@ -31,6 +31,7 @@ export type BoardToken = {
 
 type LudoBoardProps = {
     tokens?: BoardToken[];
+    chatBubbles?: Partial<Record<PlayerColor, { id: number; message: string }>>;
     playerNames?: Partial<Record<PlayerColor, string>>;
     playerCharacters?: Partial<
         Record<PlayerColor, CharacterId | string | null>
@@ -139,6 +140,7 @@ function tokenGroups(tokens: BoardToken[]) {
 
 export default function LudoBoard({
     tokens = [],
+    chatBubbles = {},
     playerNames = {},
     playerCharacters = {},
     activeColor,
@@ -757,6 +759,9 @@ export default function LudoBoard({
                             }`}
                             style={positionStyle}
                         >
+                            {token.id === `${token.color}-0` && chatBubbles[token.color] && (
+                                <div className="pion-chat-bubble">{chatBubbles[token.color]?.message}</div>
+                            )}
                             {token.onClick ? (
                                 <button
                                     type="button"

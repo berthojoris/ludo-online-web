@@ -36,6 +36,7 @@ class RoomPlayer extends Model
         'character',
         'is_ready',
         'is_host',
+        'is_computer',
     ];
 
     protected function casts(): array
@@ -43,6 +44,7 @@ class RoomPlayer extends Model
         return [
             'is_ready' => 'boolean',
             'is_host' => 'boolean',
+            'is_computer' => 'boolean',
         ];
     }
 

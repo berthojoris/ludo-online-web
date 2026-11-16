@@ -11,8 +11,9 @@ type Props = {
     open: boolean;
     processing?: boolean;
     error?: string | null;
+    passwordRequired?: boolean;
     onCancel: () => void;
-    onSubmit: (password: string) => void;
+    onSubmit: (password: string, vsComputer: boolean) => void;
 };
 
 /**
@@ -24,10 +25,12 @@ export default function CreateRoomPasswordModal({
     open,
     processing = false,
     error = null,
+    passwordRequired = true,
     onCancel,
     onSubmit,
 }: Props) {
     const [password, setPassword] = useState('');
+    const [vsComputer, setVsComputer] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -43,10 +46,11 @@ export default function CreateRoomPasswordModal({
         }
 
         setPassword('');
+        setVsComputer(false);
         setShowPassword(false);
 
         const focusTimeout = window.setTimeout(() => {
-            if (hasCoarsePointer()) {
+            if (hasCoarsePointer() || !passwordRequired) {
                 panelRef.current?.focus({ preventScroll: true });
             } else {
                 inputRef.current?.focus();
@@ -66,7 +70,7 @@ export default function CreateRoomPasswordModal({
             window.clearTimeout(focusTimeout);
             window.removeEventListener('keydown', onKeyDown);
         };
-    }, [open]);
+    }, [open, passwordRequired]);
 
     if (!open) {
         return null;
@@ -75,11 +79,11 @@ export default function CreateRoomPasswordModal({
     const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        if (processing || password === '') {
+        if (processing || (passwordRequired && password === '')) {
             return;
         }
 
-        onSubmit(password);
+        onSubmit(password, vsComputer);
     };
 
     return (
@@ -118,8 +122,7 @@ export default function CreateRoomPasswordModal({
                                 id="create-room-password-description"
                                 className="text-ink-muted mt-1 text-xs leading-relaxed"
                             >
-                                Pembuatan ruang dibatasi. Masukkan kata sandi
-                                akses untuk melanjutkan.
+                                {passwordRequired ? 'Masukkan kata sandi akses dan pilih lawan.' : 'Pilih lawan untuk ruang baru.'}
                             </p>
                         </div>
                     </div>
@@ -135,6 +138,15 @@ export default function CreateRoomPasswordModal({
                 </div>
 
                 <form onSubmit={handleSubmit}>
+                    <fieldset className="mt-4" disabled={processing}>
+                        <legend className="text-ink text-xs font-semibold">Lawan</legend>
+                        <div className="segmented mt-1.5 grid grid-cols-2">
+                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => setVsComputer(false)}>Pemain asli</button>
+                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => setVsComputer(true)}>VS COMPUTER</button>
+                        </div>
+                        {vsComputer && <p className="text-ink-muted mt-1 text-xs">Komputer: MEDIUM</p>}
+                    </fieldset>
+                    {passwordRequired && <>
                     <label
                         htmlFor="create-room-password"
                         className="text-ink mt-4 block text-xs font-semibold"
@@ -195,6 +207,7 @@ export default function CreateRoomPasswordModal({
                             {error}
                         </p>
                     )}
+                    </>}
 
                     <div className="mt-5 flex items-center gap-2">
                         <button
@@ -207,7 +220,8 @@ export default function CreateRoomPasswordModal({
                         </button>
                         <button
                             type="submit"
-                            disabled={processing || password === ''}
+                            disabled={processing || (passwordRequired && password === '')}
+                            aria-busy={processing}
                             className="btn btn-primary flex-1"
                         >
                             {processing ? 'Memeriksa…' : 'Buat ruang'}

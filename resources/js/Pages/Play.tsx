@@ -21,6 +21,7 @@ import MatchResultModal, {
     MatchStanding,
 } from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
+import RoomChat from '@/Components/Game/RoomChat';
 import { reportClientIssue } from '@/lib/clientIssues';
 import {
     ALL_CHARACTER_IDS,
@@ -928,6 +929,15 @@ function useBoardSize(active: boolean) {
 }
 
 export default function Play() {
+    const [chatBubbles, setChatBubbles] = useState<Partial<Record<PlayerColor, { id: number; message: string }>>>({});
+    const showChatBubble = useCallback((item: { id: number; seat_color: PlayerColor; message: string }) => {
+        setChatBubbles((current) => ({ ...current, [item.seat_color]: { id: item.id, message: item.message } }));
+        window.setTimeout(() => {
+            setChatBubbles((current) => current[item.seat_color]?.id === item.id
+                ? { ...current, [item.seat_color]: undefined }
+                : current);
+        }, 7000);
+    }, []);
     const { auth, room, me, roomNotice } = usePage().props as unknown as {
         auth?: { user: User | null };
         room?: {
@@ -944,6 +954,7 @@ export default function Play() {
                 character?: CharacterId | string | null;
                 is_ready: boolean;
                 is_host: boolean;
+                is_computer?: boolean;
             }[];
         } | null;
         me?: {
@@ -995,6 +1006,9 @@ export default function Play() {
     const moveHttp = useHttp<{ token_index: number }, MatchCommandResponse>({
         token_index: 0,
     });
+    const computerHttp = useHttp<{ computer: boolean; state_version: number }, MatchCommandResponse>({ computer: true, state_version: 0 });
+    const computerPendingRef = useRef(false);
+    const [computerRetry, setComputerRetry] = useState(0);
     const connectionStatus = useConnectionStatus();
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
@@ -1838,6 +1852,39 @@ export default function Play() {
      * Replays actions and snapshots that arrived while the dice or a token was
      * still animating, so they are not applied mid-animation as a jump.
      */
+    useEffect(() => {
+        const player = room?.players[state.order.indexOf(state.turn)];
+        if (!room || !me || !player?.is_computer || state.winner ||
+            (state.phase !== 'idle' && state.phase !== 'choosing') || movingToken || returningTokens.length > 0) return;
+
+        let cancelled = false;
+        let retryTimer: number | undefined;
+        const timer = window.setTimeout(async () => {
+            if (computerPendingRef.current) return;
+            computerPendingRef.current = true;
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+                computerHttp.transform(() => ({ computer: true, state_version: state.version }));
+                const data = await computerHttp.post(route(
+                    state.phase === 'idle' ? 'rooms.match.roll' : 'rooms.match.move',
+                    { code: room.code },
+                ), { headers: { 'X-CSRF-TOKEN': csrf } });
+                if (data?.action) processMatchActionRef.current(data.action);
+                else throw new Error('Computer action was rejected');
+            } catch {
+                syncRoomState('computer-action-failed');
+                if (!cancelled) retryTimer = window.setTimeout(() => setComputerRetry((n) => n + 1), 3000);
+            } finally {
+                computerPendingRef.current = false;
+            }
+        }, state.phase === 'idle' ? 900 : 800);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+            if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+        };
+    }, [room?.code, room?.players, me?.id, state.turn, state.phase, state.version, state.winner, state.order, movingToken, returningTokens, computerRetry]);
+
     const drainPendingMatchUpdates = useCallback(() => {
         while (pendingActionsRef.current.length > 0) {
             if (isMatchAnimating()) {
@@ -2930,6 +2977,7 @@ export default function Play() {
                                         >
                                             <LudoBoard
                                                 tokens={boardTokens}
+                                                 chatBubbles={chatBubbles}
                                                 order={state.order}
                                                 arms={state.arms}
                                                 playerNames={Object.fromEntries(
@@ -3260,6 +3308,10 @@ export default function Play() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {room && me && screen === 'game' && !state.winner && (
+                <RoomChat code={room.code} playerId={me.id} onMessage={showChatBubble} />
             )}
 
             <ConfirmLeaveModal

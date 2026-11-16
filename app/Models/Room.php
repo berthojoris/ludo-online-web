@@ -103,6 +103,7 @@ class Room extends Model
                 'character' => $player->character ?? ($player->seat_color ? (self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null),
                 'is_ready' => $player->is_ready,
                 'is_host' => $player->is_host,
+                'is_computer' => $player->is_computer,
             ])->values()->all(),
         ];
     }

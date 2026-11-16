@@ -4,6 +4,7 @@ use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomController;
+use App\Http\Controllers\RoomChatController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
@@ -23,6 +24,8 @@ Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('room
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
 Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
 Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
+Route::get('/rooms/{code}/chat', [RoomChatController::class, 'index'])->name('rooms.chat.index');
+Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->middleware('throttle:30,1')->name('rooms.chat.store');
 Route::post('/client-issues', [ClientIssueController::class, 'store'])
     ->middleware('throttle:12,1')
     ->name('client-issues.store');
