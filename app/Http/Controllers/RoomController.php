@@ -98,17 +98,7 @@ class RoomController extends Controller
             ]);
 
             if ($request->boolean('vs_computer')) {
-                $seat = $room->allowedSeats()[1];
-                RoomPlayer::create([
-                    'room_id' => $room->id,
-                    'player_token' => Str::random(40),
-                    'name' => 'Computer',
-                    'seat_color' => $seat,
-                    'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$seat],
-                    'is_ready' => true,
-                    'is_host' => false,
-                    'is_computer' => true,
-                ]);
+                self::fillComputerSeats($room);
             }
 
             return $room;
@@ -151,28 +141,11 @@ class RoomController extends Controller
             $lockedRoom->host_advantage = $validated['host_advantage'] ?? $lockedRoom->host_advantage;
             $lockedRoom->save();
 
-            if (array_key_exists('vs_computer', $validated)) {
-                $computer = $lockedRoom->players()->where('is_computer', true)->first();
-                if (! $validated['vs_computer']) {
-                    $computer?->delete();
-                } elseif (! $computer) {
-                    $players = $lockedRoom->players()->get();
-                    $seat = collect($lockedRoom->allowedSeats())->first(fn ($color) => ! $players->contains('seat_color', $color));
-                    if ($players->count() >= $lockedRoom->max_players || ! $seat) {
-                        throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer.']);
-                    }
-                    $taken = $players->pluck('character')->filter()->all();
-                    RoomPlayer::create([
-                        'room_id' => $lockedRoom->id,
-                        'player_token' => Str::random(40),
-                        'name' => 'Computer',
-                        'seat_color' => $seat,
-                        'character' => self::firstFreeCharacter($taken, [Room::DEFAULT_CHARACTER_BY_COLOR[$seat] ?? null]),
-                        'is_ready' => true,
-                        'is_host' => false,
-                        'is_computer' => true,
-                    ]);
-                }
+            $hasComputers = $lockedRoom->players()->where('is_computer', true)->exists();
+            $computerMode = $validated['vs_computer'] ?? $hasComputers;
+            $refreshComputers = array_key_exists('vs_computer', $validated) || (array_key_exists('max_players', $validated) && $hasComputers);
+            if ($refreshComputers) {
+                $lockedRoom->players()->where('is_computer', true)->delete();
             }
 
             $allowedSeats = $lockedRoom->allowedSeats();
@@ -195,12 +168,45 @@ class RoomController extends Controller
                     $player->save();
                 }
             }
+
+            if ($refreshComputers && $computerMode) {
+                if ($lockedRoom->players()->count() >= $lockedRoom->max_players) {
+                    throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer.']);
+                }
+                self::fillComputerSeats($lockedRoom);
+            }
         });
 
         $room->refresh()->load('players');
         $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
+    }
+
+    private static function fillComputerSeats(Room $room): void
+    {
+        $players = $room->players()->get();
+        $takenCharacters = $players->pluck('character')->filter()->all();
+        foreach ($room->allowedSeats() as $seat) {
+            if ($players->count() >= $room->max_players) {
+                break;
+            }
+            if ($players->contains('seat_color', $seat)) {
+                continue;
+            }
+            $character = self::firstFreeCharacter($takenCharacters, [Room::DEFAULT_CHARACTER_BY_COLOR[$seat] ?? null]);
+            $players->push(RoomPlayer::create([
+                'room_id' => $room->id,
+                'player_token' => Str::random(40),
+                'name' => 'Computer',
+                'seat_color' => $seat,
+                'character' => $character,
+                'is_ready' => true,
+                'is_host' => false,
+                'is_computer' => true,
+            ]));
+            $takenCharacters[] = $character;
+        }
     }
 
     public function selectSeat(Request $request, string $code): RedirectResponse
@@ -475,18 +481,21 @@ class RoomController extends Controller
 
         if ($request->boolean('computer')) {
             $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
-            $player = $room->players()->where('is_computer', true)->firstOrFail();
         }
 
         if ($room->status !== 'started') {
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, $player, $request) {
+        $action = DB::transaction(function () use ($room, &$player, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
-            $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
+            if ($request->boolean('computer')) {
+                $player = $players->get($state['turn'] ?? -1);
+                abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
+            }
+            $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
@@ -544,18 +553,21 @@ class RoomController extends Controller
 
         if ($request->boolean('computer')) {
             $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
-            $player = $room->players()->where('is_computer', true)->firstOrFail();
         }
 
         if ($room->status !== 'started') {
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, $player, $validated, $request) {
+        $action = DB::transaction(function () use ($room, &$player, $validated, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
-            $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
+            if ($request->boolean('computer')) {
+                $player = $players->get($state['turn'] ?? -1);
+                abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
+            }
+            $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
