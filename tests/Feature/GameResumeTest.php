@@ -8,9 +8,16 @@ use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\MatchRules;
 use App\Services\PlayerResume;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request as Psr7Request;
+use Illuminate\Broadcasting\BroadcastException;
+use Illuminate\Contracts\Broadcasting\Broadcaster;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
+use Mockery;
 use Tests\TestCase;
 
 class GameResumeTest extends TestCase
@@ -219,10 +226,147 @@ class GameResumeTest extends TestCase
         $this->assertSame(1, $state['total_moves']);
         $this->assertSame(0, $state['stats'][0]['captures']);
         $this->assertSame(6, $state['tokens'][0][0]);
+        $this->assertSame(1, $state['state_version']);
 
         $this->postJson("/rooms/{$room->code}/match/roll")->assertOk();
 
         $state = $room->fresh()->match_state;
         $this->assertSame(1, $state['stats'][0]['rolls']);
+        $this->assertSame(2, $state['state_version']);
+    }
+
+    public function test_move_succeeds_and_logs_context_when_broadcast_returns_502(): void
+    {
+        [$room, $host] = $this->hostRoom();
+        $this->addGuest($room);
+
+        $state = MatchRules::initial(0, ['red', 'yellow']);
+        $state['dice'] = 6;
+        $state['tokens'][0] = [0, -1, -1, -1];
+        $room->update([
+            'status' => 'started',
+            'starting_player_id' => $host->id,
+            'match_state' => $state,
+        ]);
+
+        $broadcaster = Mockery::mock(Broadcaster::class);
+        $broadcaster->shouldReceive('broadcast')
+            ->once()
+            ->andThrow(new BroadcastException('Pusher error: 502 Bad Gateway'));
+        Broadcast::extend('failing', fn () => $broadcaster);
+        config()->set('broadcasting.default', 'failing');
+        config()->set('broadcasting.connections.failing', ['driver' => 'failing']);
+        Log::spy();
+
+        $response = $this->postJson("/rooms/{$room->code}/match/move", ['token_index' => 0])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('action.type', 'move')
+            ->assertJsonPath('action.state_version', 1)
+            ->assertJsonPath('action.match_state.state_version', 1)
+            ->assertJsonPath('action.match_state.tokens.0.0', 6);
+
+        $state = $room->fresh()->match_state;
+        $this->assertSame(1, $state['total_moves']);
+        $this->assertSame(1, $state['state_version']);
+        $this->assertSame(6, $state['tokens'][0][0]);
+        $this->assertNull($state['dice']);
+        $this->assertSame($state, $response->json('action.match_state'));
+
+        $actionId = $response->json('action.action_id');
+        Log::shouldHaveReceived('error')->once()->with(
+            'Realtime broadcast failed after the room state was committed.',
+            Mockery::on(fn (array $context): bool => $context['room_code'] === $room->code
+                && $context['operation'] === 'match.move'
+                && $context['player_id'] === $host->id
+                && $context['action_id'] === $actionId
+                && $context['state_version'] === 1
+                && $context['token_index'] === 0
+                && $context['exception'] instanceof BroadcastException),
+        );
+    }
+
+    public function test_roll_succeeds_and_logs_context_when_broadcast_returns_502(): void
+    {
+        [$room, $host] = $this->hostRoom();
+        $this->addGuest($room);
+
+        $room->update([
+            'status' => 'started',
+            'starting_player_id' => $host->id,
+            'match_state' => MatchRules::initial(0, ['red', 'yellow']),
+        ]);
+
+        $broadcaster = Mockery::mock(Broadcaster::class);
+        $broadcaster->shouldReceive('broadcast')
+            ->once()
+            ->andThrow(new BroadcastException('Pusher error: 502 Bad Gateway'));
+        Broadcast::extend('failing', fn () => $broadcaster);
+        config()->set('broadcasting.default', 'failing');
+        config()->set('broadcasting.connections.failing', ['driver' => 'failing']);
+        Log::spy();
+
+        $response = $this->postJson("/rooms/{$room->code}/match/roll")
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('action.type', 'roll')
+            ->assertJsonPath('action.state_version', 1)
+            ->assertJsonPath('action.match_state.state_version', 1);
+
+        $state = $room->fresh()->match_state;
+        $this->assertSame(1, $state['stats'][0]['rolls']);
+        $this->assertSame(1, $state['state_version']);
+        $this->assertSame($state, $response->json('action.match_state'));
+
+        $actionId = $response->json('action.action_id');
+        Log::shouldHaveReceived('error')->once()->with(
+            'Realtime broadcast failed after the room state was committed.',
+            Mockery::on(fn (array $context): bool => $context['room_code'] === $room->code
+                && $context['operation'] === 'match.roll'
+                && $context['player_id'] === $host->id
+                && $context['action_id'] === $actionId
+                && $context['state_version'] === 1
+                && $context['dice_value'] === $response->json('action.value')
+                && $context['exception'] instanceof BroadcastException),
+        );
+    }
+
+    public function test_roll_succeeds_when_broadcast_connection_times_out(): void
+    {
+        [$room, $host] = $this->hostRoom();
+        $this->addGuest($room);
+
+        $room->update([
+            'status' => 'started',
+            'starting_player_id' => $host->id,
+            'match_state' => MatchRules::initial(0, ['red', 'yellow']),
+        ]);
+
+        $broadcaster = Mockery::mock(Broadcaster::class);
+        $broadcaster->shouldReceive('broadcast')
+            ->once()
+            ->andThrow(new ConnectException(
+                'Connection timed out',
+                new Psr7Request('POST', 'https://reverb.test/events'),
+            ));
+        Broadcast::extend('failing', fn () => $broadcaster);
+        config()->set('broadcasting.default', 'failing');
+        config()->set('broadcasting.connections.failing', ['driver' => 'failing']);
+        Log::spy();
+
+        $this->postJson("/rooms/{$room->code}/match/roll")
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('action.state_version', 1)
+            ->assertJsonPath('action.match_state.state_version', 1);
+
+        $this->assertSame(1, $room->fresh()->match_state['stats'][0]['rolls']);
+        Log::shouldHaveReceived('error')->once()->with(
+            'Realtime broadcast failed after the room state was committed.',
+            Mockery::on(fn (array $context): bool => $context['room_code'] === $room->code
+                && $context['operation'] === 'match.roll'
+                && $context['player_id'] === $host->id
+                && $context['exception'] instanceof ConnectException),
+        );
     }
 }

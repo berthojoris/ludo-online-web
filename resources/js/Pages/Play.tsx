@@ -20,6 +20,7 @@ import MatchResultModal, {
     MatchStanding,
 } from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
+import { reportClientIssue } from '@/lib/clientIssues';
 import {
     ALL_CHARACTER_IDS,
     ARENA_BACKGROUND_IMAGE,
@@ -55,8 +56,20 @@ import {
 } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { User } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/react';
-import { echo, echoIsConfigured } from '@laravel/echo-react';
+import { HttpResponseError, ReloadOptions } from '@inertiajs/core';
+import {
+    Head,
+    Link,
+    router,
+    useHttp,
+    usePage,
+    usePoll,
+} from '@inertiajs/react';
+import {
+    echo,
+    echoIsConfigured,
+    useConnectionStatus,
+} from '@laravel/echo-react';
 import {
     FormEvent,
     useCallback,
@@ -85,7 +98,37 @@ type LogEntry = {
 type SetupNames = Record<PlayerId, string>;
 type SetupCharacters = Record<PlayerId, CharacterId>;
 
+type MatchSnapshot = {
+    tokens: number[][];
+    colors?: PlayerId[];
+    arms?: number;
+    turn: number;
+    dice: number | null;
+    winner: number | null;
+    winners?: number[];
+    stats?: { rolls: number; captures: number }[];
+    had_six?: boolean[];
+    total_moves?: number;
+    state_version?: number;
+};
+
+type MatchActionData = {
+    action_id?: string;
+    type?: 'roll' | 'move' | 'end';
+    player_id?: number;
+    value?: number;
+    token_index?: number;
+    state_version?: number;
+    match_state?: MatchSnapshot;
+};
+
+type MatchCommandResponse = {
+    ok?: boolean;
+    action?: MatchActionData;
+};
+
 type GameState = {
+    version: number;
     order: PlayerId[];
     arms: number;
     tokens: Record<PlayerId, number[]>;
@@ -112,17 +155,7 @@ type GameState = {
 type Action =
     | {
           type: 'RESTORE';
-          match: {
-              tokens: number[][];
-              colors?: PlayerId[];
-              arms?: number;
-              turn: number;
-              dice: number | null;
-              winner: number | null;
-              winners?: number[];
-              stats?: { rolls: number; captures: number }[];
-              had_six?: boolean[];
-              total_moves?: number;
+          match: MatchSnapshot & {
               started_at?: string | null;
           };
       }
@@ -136,9 +169,9 @@ type Action =
           now: number;
           turn?: PlayerId;
       }
-    | { type: 'ROLL_START'; value: number }
+    | { type: 'ROLL_START'; value: number; version?: number }
     | { type: 'ROLL_RESULT'; value: number }
-    | { type: 'MOVE'; tokenIndex: number; now: number }
+    | { type: 'MOVE'; tokenIndex: number; now: number; version?: number }
     | { type: 'RESET'; now: number; turn?: PlayerId };
 
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
@@ -195,6 +228,7 @@ const DEFAULT_CHARACTERS: SetupCharacters = {
 };
 
 const initialState: GameState = {
+    version: 0,
     order: PLAYER_IDS,
     arms: 4,
     tokens: createTokenMap(),
@@ -223,8 +257,14 @@ const initialState: GameState = {
     finishedAt: null,
 };
 
-function otherPlayer(player: PlayerId, order: PlayerId[] = PLAYER_IDS): PlayerId {
-    return order.find((item) => item !== player) ?? (player === 'blue' ? 'green' : 'blue');
+function otherPlayer(
+    player: PlayerId,
+    order: PlayerId[] = PLAYER_IDS,
+): PlayerId {
+    return (
+        order.find((item) => item !== player) ??
+        (player === 'blue' ? 'green' : 'blue')
+    );
 }
 
 function nextActivePlayer(
@@ -266,6 +306,22 @@ function rollDieForTurn(state: GameState): number {
 
 function randomPlayer(order: PlayerId[] = PLAYER_IDS): PlayerId {
     return order[Math.floor(Math.random() * order.length)];
+}
+
+function rememberAction(actions: Set<string>, actionId?: string): void {
+    if (!actionId) {
+        return;
+    }
+
+    actions.add(actionId);
+
+    if (actions.size > 200) {
+        const oldestAction = actions.values().next().value;
+
+        if (oldestAction) {
+            actions.delete(oldestAction);
+        }
+    }
 }
 
 function cleanNames(human: PlayerId, names: Partial<SetupNames>): SetupNames {
@@ -392,8 +448,11 @@ function chooseAiMove(state: GameState): LegalMove | null {
                 opponents.some((opponent) =>
                     state.tokens[opponent].some(
                         (position) =>
-                            boardAbsoluteTrackIndex(spec, opponent, position) ===
-                            absolute,
+                            boardAbsoluteTrackIndex(
+                                spec,
+                                opponent,
+                                position,
+                            ) === absolute,
                     ),
                 )
             ) {
@@ -452,6 +511,7 @@ function reducer(state: GameState, action: Action): GameState {
 
         return {
             ...state,
+            version: action.match.state_version ?? state.version,
             order,
             arms: spec.arms,
             tokens,
@@ -512,6 +572,7 @@ function reducer(state: GameState, action: Action): GameState {
 
         return {
             ...state,
+            version: action.version ?? state.version,
             phase: 'rolling',
             dice: action.value,
             legalMoves: [],
@@ -657,6 +718,7 @@ function reducer(state: GameState, action: Action): GameState {
               }
             : state.captures;
         const nextTotalMoves = state.totalMoves + 1;
+        const nextVersion = action.version ?? state.version;
 
         const moveDescription =
             from === BASE_POSITION
@@ -681,6 +743,7 @@ function reducer(state: GameState, action: Action): GameState {
             return {
                 ...state,
                 ...logged,
+                version: nextVersion,
                 tokens: nextTokens,
                 legalMoves: [],
                 phase: 'gameover',
@@ -700,6 +763,7 @@ function reducer(state: GameState, action: Action): GameState {
             return {
                 ...state,
                 ...logged,
+                version: nextVersion,
                 tokens: nextTokens,
                 legalMoves: [],
                 phase: 'idle',
@@ -718,6 +782,7 @@ function reducer(state: GameState, action: Action): GameState {
             return {
                 ...state,
                 ...logged,
+                version: nextVersion,
                 tokens: nextTokens,
                 legalMoves: [],
                 phase: 'idle',
@@ -801,18 +866,7 @@ export default function Play() {
             status: string;
             starting_player_id?: number | null;
             started_at?: string | null;
-            match_state?: {
-                tokens: number[][];
-                colors?: PlayerId[];
-                arms?: number;
-                turn: number;
-                dice: number | null;
-                winner: number | null;
-                winners?: number[];
-                stats?: { rolls: number; captures: number }[];
-                had_six?: boolean[];
-                total_moves?: number;
-            } | null;
+            match_state?: MatchSnapshot | null;
             players: {
                 id: number;
                 name: string;
@@ -832,9 +886,12 @@ export default function Play() {
         roomNotice?: string | null;
     };
     const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
-    const roomOrder =
-        room?.match_state?.colors ??
-        (room ? (['blue', 'green'] as PlayerId[]) : PLAYER_IDS);
+    const roomOrder = useMemo<PlayerId[]>(
+        () =>
+            room?.match_state?.colors ??
+            (room ? (['blue', 'green'] as PlayerId[]) : PLAYER_IDS),
+        [room],
+    );
     const roomArms =
         room?.match_state?.arms ??
         (room && room.max_players >= 5 ? room.max_players : 4);
@@ -846,7 +903,8 @@ export default function Play() {
     const [screen, setScreen] = useState<Screen>(room ? 'game' : 'setup');
     const [setupCount, setSetupCount] = useState<PlayerCount>(2);
     const [humanColor, setHumanColor] = useState<PlayerId>('blue');
-    const [humanCharacter, setHumanCharacter] = useState<CharacterId>('frost_claw');
+    const [humanCharacter, setHumanCharacter] =
+        useState<CharacterId>('frost_claw');
     const [setupCharModalOpen, setSetupCharModalOpen] = useState(false);
     const [yourName, setYourName] = useState(accountName);
     const [opponentName, setOpponentName] = useState(
@@ -860,57 +918,235 @@ export default function Play() {
     const [endGameModalOpen, setEndGameModalOpen] = useState(false);
     const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
+    const rollHttp = useHttp<Record<string, never>, MatchCommandResponse>();
+    const moveHttp = useHttp<{ token_index: number }, MatchCommandResponse>({
+        token_index: 0,
+    });
+    const connectionStatus = useConnectionStatus();
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
     const rollPendingRef = useRef(false);
+    const movePendingRef = useRef(false);
+    const autoMoveAttemptRef = useRef<string | null>(null);
     const seenActionsRef = useRef<Set<string>>(new Set());
+    const stateRef = useRef(state);
+    const roomRef = useRef(room);
+    const roomSyncPendingRef = useRef(false);
+    const animationGenerationRef = useRef(0);
+    const activeMatchKeyRef = useRef<string | null>(null);
+    const connectionStatusRef = useRef(connectionStatus);
+    const previousConnectionStatusRef = useRef(connectionStatus);
+    stateRef.current = state;
+    roomRef.current = room;
+    connectionStatusRef.current = connectionStatus;
+
+    const cancelMoveAnimations = useCallback(() => {
+        animationGenerationRef.current += 1;
+        movingRef.current = false;
+        setMovingToken(null);
+        setReturningTokens([]);
+    }, []);
+
+    const restoreMatch = useCallback(
+        (match: MatchSnapshot) => {
+            cancelMoveAnimations();
+            dispatch({
+                type: 'RESTORE',
+                match: {
+                    ...match,
+                    started_at: roomRef.current?.started_at ?? null,
+                },
+            });
+        },
+        [cancelMoveAnimations],
+    );
+
+    const roomSyncOptions = useCallback((trigger: string): ReloadOptions => {
+        let ownsSync = false;
+
+        return {
+            only: ['room'],
+            showProgress: false,
+            onBefore: () => {
+                if (
+                    roomSyncPendingRef.current ||
+                    document.visibilityState === 'hidden' ||
+                    !navigator.onLine
+                ) {
+                    return false;
+                }
+
+                ownsSync = true;
+                roomSyncPendingRef.current = true;
+            },
+            onHttpException: (response) => {
+                reportClientIssue(
+                    'Room synchronization returned an HTTP error',
+                    {
+                        source: 'game.sync',
+                        roomCode: roomRef.current?.code,
+                        action: trigger,
+                        context: {
+                            connection: connectionStatusRef.current,
+                            http_status: response.status,
+                        },
+                    },
+                );
+            },
+            onNetworkError: (error) => {
+                reportClientIssue('Room synchronization failed', {
+                    source: 'game.sync',
+                    roomCode: roomRef.current?.code,
+                    action: trigger,
+                    stack: error.stack,
+                    context: {
+                        connection: connectionStatusRef.current,
+                    },
+                });
+            },
+            onFinish: () => {
+                if (ownsSync) {
+                    roomSyncPendingRef.current = false;
+                }
+            },
+        };
+    }, []);
+
+    const syncRoomState = useCallback(
+        (trigger: string) => {
+            if (
+                !roomRef.current?.code ||
+                roomSyncPendingRef.current ||
+                document.visibilityState === 'hidden' ||
+                !navigator.onLine
+            ) {
+                return;
+            }
+
+            router.reload(roomSyncOptions(trigger));
+        },
+        [roomSyncOptions],
+    );
+
+    const { start: startPolling, stop: stopPolling } = usePoll(
+        5000,
+        () => roomSyncOptions('poll'),
+        { autoStart: false, background: 'pause', mode: 'rest' },
+    );
 
     useEffect(() => {
         if (!room || !me) {
             return;
         }
 
-        const initialTurn: PlayerId =
-            roomOrder[
-                room.players.findIndex(
-                    (player) => player.id === room.starting_player_id,
-                )
-            ] ?? roomOrder[0];
-        const names = { ...initialState.names };
-        const characters = { ...initialState.characters };
-        room.players.forEach((player, index) => {
-            const seatColor = roomOrder[index];
-            if (seatColor) {
-                names[seatColor] = player.name;
-                characters[seatColor] = getCharacterConfig(
-                    player.character,
-                    seatColor,
-                ).id;
-            }
-        });
+        const matchKey = `${room.code}:${me.id}`;
+        const isNewMatch = activeMatchKeyRef.current !== matchKey;
+        const snapshot = room.match_state;
 
-        previousTurnRef.current = initialTurn;
-        dispatch({
-            type: 'START',
-            human: myRoomColor,
-            turn: initialTurn,
-            names,
-            characters,
-            order: roomOrder,
-            arms: roomArms,
-            now: Date.now(),
-        });
-        if (room.match_state) {
+        if (isNewMatch) {
+            activeMatchKeyRef.current = matchKey;
+            seenActionsRef.current.clear();
+            cancelMoveAnimations();
+
+            const initialTurn: PlayerId =
+                roomOrder[
+                    room.players.findIndex(
+                        (player) => player.id === room.starting_player_id,
+                    )
+                ] ?? roomOrder[0];
+            const names = { ...initialState.names };
+            const characters = { ...initialState.characters };
+            room.players.forEach((player, index) => {
+                const seatColor = roomOrder[index];
+                if (seatColor) {
+                    names[seatColor] = player.name;
+                    characters[seatColor] = getCharacterConfig(
+                        player.character,
+                        seatColor,
+                    ).id;
+                }
+            });
+
+            previousTurnRef.current = initialTurn;
             dispatch({
-                type: 'RESTORE',
-                match: {
-                    ...room.match_state,
-                    started_at: room.started_at ?? null,
-                },
+                type: 'START',
+                human: myRoomColor,
+                turn: initialTurn,
+                names,
+                characters,
+                order: roomOrder,
+                arms: roomArms,
+                now: Date.now(),
             });
         }
+
+        if (
+            snapshot &&
+            (isNewMatch ||
+                (snapshot.state_version ?? 0) > stateRef.current.version)
+        ) {
+            restoreMatch(snapshot);
+        }
+
         setScreen('game');
-    }, [room?.code]);
+    }, [
+        room,
+        me,
+        roomOrder,
+        roomArms,
+        myRoomColor,
+        cancelMoveAnimations,
+        restoreMatch,
+    ]);
+
+    useEffect(() => {
+        if (!room?.code || !me?.id) {
+            stopPolling();
+            return;
+        }
+
+        startPolling();
+        syncRoomState('mount');
+
+        return () => stopPolling();
+    }, [room?.code, me?.id, startPolling, stopPolling, syncRoomState]);
+
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                syncRoomState('visibility');
+            }
+        };
+        const handleOnline = () => syncRoomState('online');
+
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('online', handleOnline);
+        };
+    }, [syncRoomState]);
+
+    useEffect(() => {
+        const previous = previousConnectionStatusRef.current;
+
+        if (connectionStatus === 'connected' && previous !== 'connected') {
+            syncRoomState('reconnect');
+        }
+
+        if (connectionStatus === 'failed' && previous !== 'failed') {
+            reportClientIssue('Realtime connection failed', {
+                level: 'warning',
+                source: 'game.realtime',
+                roomCode: room?.code,
+                action: 'connection',
+                context: { connection: connectionStatus },
+            });
+        }
+
+        previousConnectionStatusRef.current = connectionStatus;
+    }, [connectionStatus, room?.code, syncRoomState]);
 
     const activeSpec = useMemo(
         () => getBoardSpec(state.order, state.arms),
@@ -934,12 +1170,13 @@ export default function Play() {
     );
     const canRoll =
         (!room || myRoomIndex >= 0) &&
+        !rollHttp.processing &&
+        !moveHttp.processing &&
         state.turn === state.human &&
         state.phase === 'idle' &&
         !state.winner &&
         !state.winners.includes(state.human);
     const displayDice = state.dice ?? 6;
-    const setupOpponent = otherPlayer(humanColor, setupColors);
 
     useEffect(() => {
         const previous = document.body.style.overflow;
@@ -1051,12 +1288,20 @@ export default function Play() {
     }, [room, state]);
 
     const animateMove = useCallback(
-        async (tokenIndex: number, fromRemote = false) => {
+        async (
+            tokenIndex: number,
+            fromRemote = false,
+            serverAction?: MatchActionData,
+        ) => {
             if (movingRef.current || state.phase !== 'choosing') {
                 return;
             }
 
             if (room && !fromRemote && state.turn !== state.human) {
+                return;
+            }
+
+            if (room && !fromRemote && movePendingRef.current) {
                 return;
             }
 
@@ -1068,32 +1313,120 @@ export default function Play() {
                 return;
             }
 
+            let acceptedAction = serverAction;
+
             if (room && !fromRemote) {
-                const csrf =
-                    document
-                        .querySelector('meta[name="csrf-token"]')
-                        ?.getAttribute('content') ?? '';
-                void fetch(route('rooms.match.move', { code: room.code }), {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        Accept: 'application/json',
-                    },
-                    body: JSON.stringify({ token_index: tokenIndex }),
-                })
-                    .then((response) => {
-                        if (
-                            response.status === 419 ||
-                            response.status === 401
-                        ) {
-                            // The session expired mid-match. Reloading rebinds
-                            // this browser to its saved seat and restores the
-                            // latest board from the server.
-                            window.location.reload();
-                        }
-                    })
-                    .catch(() => undefined);
+                movePendingRef.current = true;
+
+                try {
+                    const csrf =
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') ?? '';
+                    moveHttp.transform(() => ({ token_index: tokenIndex }));
+                    const data = await moveHttp.post(
+                        route('rooms.match.move', { code: room.code }),
+                        { headers: { 'X-CSRF-TOKEN': csrf } },
+                    );
+
+                    if (!data?.action) {
+                        reportClientIssue(
+                            'Move was not accepted; requesting the authoritative state',
+                            {
+                                level: 'warning',
+                                source: 'game.move',
+                                roomCode: room.code,
+                                action: 'rejected',
+                                context: {
+                                    connection: connectionStatusRef.current,
+                                    http_status: 422,
+                                    current_version: stateRef.current.version,
+                                },
+                            },
+                        );
+                        syncRoomState('move-rejected');
+
+                        return;
+                    }
+
+                    acceptedAction = data.action;
+                } catch (error) {
+                    const status =
+                        error instanceof HttpResponseError
+                            ? error.response.status
+                            : undefined;
+
+                    if (status === 401 || status === 419) {
+                        window.location.reload();
+
+                        return;
+                    }
+
+                    reportClientIssue('Move request failed', {
+                        source: 'game.move',
+                        roomCode: room.code,
+                        action: 'request',
+                        stack: error instanceof Error ? error.stack : undefined,
+                        context: {
+                            connection: connectionStatusRef.current,
+                            http_status: status,
+                            current_version: stateRef.current.version,
+                        },
+                    });
+                    syncRoomState('move-failed');
+
+                    return;
+                } finally {
+                    movePendingRef.current = false;
+                }
+            }
+
+            if (room) {
+                const version = acceptedAction?.state_version;
+                const snapshot = acceptedAction?.match_state;
+
+                if (!version || !snapshot) {
+                    reportClientIssue(
+                        'Move response is missing its recovery snapshot',
+                        {
+                            source: 'game.move',
+                            roomCode: room.code,
+                            action: 'snapshot-missing',
+                        },
+                    );
+                    syncRoomState('move-snapshot-missing');
+
+                    return;
+                }
+
+                if (
+                    (acceptedAction?.action_id &&
+                        seenActionsRef.current.has(acceptedAction.action_id)) ||
+                    version <= stateRef.current.version
+                ) {
+                    return;
+                }
+
+                if (
+                    version !== stateRef.current.version + 1 ||
+                    stateRef.current.phase !== 'choosing' ||
+                    !stateRef.current.legalMoves.some(
+                        (candidate) => candidate.tokenIndex === tokenIndex,
+                    )
+                ) {
+                    rememberAction(
+                        seenActionsRef.current,
+                        acceptedAction?.action_id,
+                    );
+                    restoreMatch(snapshot);
+
+                    return;
+                }
+
+                rememberAction(
+                    seenActionsRef.current,
+                    acceptedAction?.action_id,
+                );
             }
 
             const color = state.turn;
@@ -1149,13 +1482,25 @@ export default function Play() {
                 }
             }
 
+            const animationGeneration = animationGenerationRef.current;
+            const animationWasCancelled = () =>
+                animationGeneration !== animationGenerationRef.current;
+
             movingRef.current = true;
             void unlockAudio();
 
             for (const [index, position] of steps.entries()) {
+                if (animationWasCancelled()) {
+                    return;
+                }
+
                 setMovingToken({ color, tokenIndex, position });
                 playHopSound(index);
                 await new Promise((resolve) => window.setTimeout(resolve, 140));
+            }
+
+            if (animationWasCancelled()) {
+                return;
             }
 
             if (capturedTargets.length > 0) {
@@ -1178,6 +1523,10 @@ export default function Play() {
                     );
 
                     for (let pos = maxPos; pos >= 0; pos--) {
+                        if (animationWasCancelled()) {
+                            return;
+                        }
+
                         setReturningTokens(
                             capturedTargets.map((item) => ({
                                 color: item.color,
@@ -1188,6 +1537,10 @@ export default function Play() {
                         await new Promise((resolve) =>
                             window.setTimeout(resolve, stepDelay),
                         );
+                    }
+
+                    if (animationWasCancelled()) {
+                        return;
                     }
 
                     setReturningTokens(
@@ -1205,13 +1558,23 @@ export default function Play() {
                 playFinishSound();
             }
 
-            dispatch({ type: 'MOVE', tokenIndex, now: Date.now() });
+            if (animationWasCancelled()) {
+                return;
+            }
+
+            dispatch({
+                type: 'MOVE',
+                tokenIndex,
+                now: Date.now(),
+                version: acceptedAction?.state_version,
+            });
             setMovingToken(null);
             setReturningTokens([]);
             movingRef.current = false;
         },
         [
             room,
+            moveHttp,
             activeSpec,
             state.phase,
             state.legalMoves,
@@ -1219,13 +1582,130 @@ export default function Play() {
             state.order,
             state.turn,
             state.human,
+            restoreMatch,
+            syncRoomState,
         ],
     );
 
     const animateMoveRef = useRef(animateMove);
     animateMoveRef.current = animateMove;
-    const stateTurnRef = useRef(state.turn);
-    stateTurnRef.current = state.turn;
+    const processMatchActionRef = useRef<(action: MatchActionData) => void>(
+        () => undefined,
+    );
+
+    processMatchActionRef.current = (action) => {
+        if (action.type === 'end') {
+            rememberAction(seenActionsRef.current, action.action_id);
+            router.visit(route('home'));
+
+            return;
+        }
+
+        if (action.action_id && seenActionsRef.current.has(action.action_id)) {
+            return;
+        }
+
+        const currentState = stateRef.current;
+        const currentRoom = roomRef.current;
+        const version = action.state_version;
+        const snapshot = action.match_state;
+
+        if (!action.type || !version || !snapshot || !currentRoom) {
+            reportClientIssue(
+                'Realtime action is missing its recovery snapshot',
+                {
+                    source: 'game.realtime',
+                    roomCode: currentRoom?.code,
+                    action: 'snapshot-missing',
+                    context: {
+                        connection: connectionStatusRef.current,
+                        current_version: currentState.version,
+                    },
+                },
+            );
+            syncRoomState('action-snapshot-missing');
+
+            return;
+        }
+
+        if (version <= currentState.version) {
+            rememberAction(seenActionsRef.current, action.action_id);
+
+            return;
+        }
+
+        const restoreAfterRace = (reason: string) => {
+            reportClientIssue(
+                'Realtime action restored from its authoritative snapshot',
+                {
+                    level: 'warning',
+                    source: 'game.realtime',
+                    roomCode: currentRoom.code,
+                    action: reason,
+                    context: {
+                        connection: connectionStatusRef.current,
+                        state_version: version,
+                        current_version: currentState.version,
+                    },
+                },
+            );
+            rememberAction(seenActionsRef.current, action.action_id);
+            restoreMatch(snapshot);
+        };
+
+        if (version !== currentState.version + 1) {
+            restoreAfterRace('version-gap');
+
+            return;
+        }
+
+        const expectedPlayerId =
+            currentRoom.players[currentState.order.indexOf(currentState.turn)]
+                ?.id;
+        const matchesCurrentPlayer =
+            expectedPlayerId === undefined ||
+            action.player_id === expectedPlayerId;
+
+        if (action.type === 'roll' && typeof action.value === 'number') {
+            if (currentState.phase !== 'idle' || !matchesCurrentPlayer) {
+                restoreAfterRace('roll-race');
+
+                return;
+            }
+
+            rememberAction(seenActionsRef.current, action.action_id);
+            void unlockAudio();
+            dispatch({
+                type: 'ROLL_START',
+                value: action.value,
+                version,
+            });
+
+            return;
+        }
+
+        if (action.type === 'move' && typeof action.token_index === 'number') {
+            const canAnimateMove =
+                currentState.phase === 'choosing' &&
+                matchesCurrentPlayer &&
+                !movingRef.current &&
+                currentState.legalMoves.some(
+                    (candidate) => candidate.tokenIndex === action.token_index,
+                );
+
+            if (!canAnimateMove) {
+                restoreAfterRace('move-race');
+
+                return;
+            }
+
+            void animateMoveRef.current(action.token_index, true, action);
+
+            return;
+        }
+
+        restoreAfterRace('invalid-action');
+    };
 
     useEffect(() => {
         if (!room?.code || !echoIsConfigured()) {
@@ -1237,65 +1717,29 @@ export default function Play() {
 
         channel.listen(
             '.match.action',
-            (payload: {
-                action?: {
-                    action_id?: string;
-                    type?: 'roll' | 'move' | 'end';
-                    player_id?: number;
-                    value?: number;
-                    token_index?: number;
-                };
-            }) => {
-                const action = payload?.action;
-                if (!action) {
+            (payload: { action?: MatchActionData }) => {
+                if (!payload?.action) {
+                    reportClientIssue(
+                        'Realtime event did not contain an action',
+                        {
+                            source: 'game.realtime',
+                            roomCode: room.code,
+                            action: 'invalid-event',
+                        },
+                    );
+                    syncRoomState('invalid-event');
+
                     return;
                 }
 
-                if (action.action_id) {
-                    if (seenActionsRef.current.has(action.action_id)) {
-                        return;
-                    }
-                    seenActionsRef.current.add(action.action_id);
-                }
-
-                if (action.type === 'end') {
-                    router.visit(route('home'));
-                    return;
-                }
-
-                const expectedPlayerId =
-                    room.players[roomOrder.indexOf(stateTurnRef.current)]?.id;
-
-                if (
-                    expectedPlayerId !== undefined &&
-                    action.player_id !== expectedPlayerId
-                ) {
-                    return;
-                }
-
-                if (
-                    action.type === 'roll' &&
-                    typeof action.value === 'number'
-                ) {
-                    void unlockAudio();
-                    dispatch({ type: 'ROLL_START', value: action.value });
-                    return;
-                }
-
-                if (
-                    action.type === 'move' &&
-                    typeof action.token_index === 'number' &&
-                    action.player_id !== me?.id
-                ) {
-                    void animateMoveRef.current(action.token_index, true);
-                }
+                processMatchActionRef.current(payload.action);
             },
         );
 
         return () => {
             echo().leave(channelName);
         };
-    }, [room?.code, me?.id]);
+    }, [room?.code, syncRoomState]);
 
     useEffect(() => {
         if (!endGameModalOpen) {
@@ -1339,15 +1783,22 @@ export default function Play() {
             return;
         }
 
+        const attemptKey = `${state.version}:${state.turn}:${tokenIndex}`;
+
+        if (autoMoveAttemptRef.current === attemptKey) {
+            return;
+        }
+
         const timeout = window.setTimeout(
             () => {
+                autoMoveAttemptRef.current = attemptKey;
                 void animateMove(tokenIndex);
             },
             state.turn === state.human ? 600 : 800,
         );
 
         return () => window.clearTimeout(timeout);
-    }, [state, animateMove]);
+    }, [room, state, animateMove]);
 
     const boardTokens = useMemo<BoardToken[]>(() => {
         return state.order.flatMap((color) =>
@@ -1373,11 +1824,13 @@ export default function Play() {
                           )
                         : undefined;
 
-                const canClickMove =
+                const canInteractWithMove =
                     Boolean(move) &&
                     !movingToken &&
                     returningTokens.length === 0 &&
                     state.turn === state.human;
+                const canClickMove =
+                    canInteractWithMove && !moveHttp.processing;
 
                 return {
                     id: `${color}-${tokenIndex}`,
@@ -1390,9 +1843,10 @@ export default function Play() {
                         tokenIndex,
                     ),
                     legal: canClickMove,
+                    busy: canInteractWithMove && moveHttp.processing,
                     moving: isMoving,
                     returning: isReturning,
-                    onClick: canClickMove
+                    onClick: canInteractWithMove
                         ? () => {
                               void animateMove(tokenIndex);
                           }
@@ -1411,10 +1865,10 @@ export default function Play() {
         state.names,
         state.characters,
         state.human,
-        room,
         movingToken,
         returningTokens,
         animateMove,
+        moveHttp.processing,
     ]);
 
     const finished = (color: PlayerId) =>
@@ -1522,7 +1976,7 @@ export default function Play() {
           : `GILIRAN ${state.names[state.turn].toUpperCase()}`;
 
     const rollLabel =
-        state.phase === 'rolling'
+        rollHttp.processing || state.phase === 'rolling'
             ? 'Melempar…'
             : state.phase === 'choosing' && state.turn === state.human
               ? 'Ketuk bidak yang menyala'
@@ -1578,41 +2032,56 @@ export default function Play() {
                 document
                     .querySelector('meta[name="csrf-token"]')
                     ?.getAttribute('content') ?? '';
-            const response = await fetch(
+            const data = await rollHttp.post(
                 route('rooms.match.roll', { code: room.code }),
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrf,
-                        Accept: 'application/json',
-                    },
-                },
+                { headers: { 'X-CSRF-TOKEN': csrf } },
             );
 
-            if (response.status === 419 || response.status === 401) {
-                // Session expired while the tab sat idle; reload to resume the
-                // saved seat instead of losing the match.
+            if (!data?.action) {
+                reportClientIssue(
+                    'Roll was not accepted; requesting the authoritative state',
+                    {
+                        level: 'warning',
+                        source: 'game.roll',
+                        roomCode: room.code,
+                        action: 'rejected',
+                        context: {
+                            connection: connectionStatusRef.current,
+                            http_status: 422,
+                            current_version: stateRef.current.version,
+                        },
+                    },
+                );
+                syncRoomState('roll-rejected');
+
+                return;
+            }
+
+            processMatchActionRef.current(data.action);
+        } catch (error) {
+            const status =
+                error instanceof HttpResponseError
+                    ? error.response.status
+                    : undefined;
+
+            if (status === 401 || status === 419) {
                 window.location.reload();
 
                 return;
             }
 
-            if (response.ok) {
-                const data = (await response.json()) as {
-                    action?: { action_id?: string; value?: number };
-                };
-                const action = data?.action;
-                if (
-                    action?.action_id &&
-                    !seenActionsRef.current.has(action.action_id)
-                ) {
-                    seenActionsRef.current.add(action.action_id);
-                    if (typeof action.value === 'number') {
-                        dispatch({ type: 'ROLL_START', value: action.value });
-                    }
-                }
-            }
+            reportClientIssue('Roll request failed', {
+                source: 'game.roll',
+                roomCode: room.code,
+                action: 'request',
+                stack: error instanceof Error ? error.stack : undefined,
+                context: {
+                    connection: connectionStatusRef.current,
+                    http_status: status,
+                    current_version: stateRef.current.version,
+                },
+            });
+            syncRoomState('roll-failed');
         } finally {
             rollPendingRef.current = false;
         }
@@ -1764,7 +2233,7 @@ export default function Play() {
                     className="pointer-events-none absolute inset-0 bg-gradient-to-b from-sky-950/15 via-white/30 to-white/65 backdrop-blur-[1.5px]"
                 />
 
-                <header className="border-white/60 relative z-20 shrink-0 border-b bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+                <header className="relative z-20 shrink-0 border-b border-white/60 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
                     <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
@@ -1886,7 +2355,7 @@ export default function Play() {
 
                 {blockedByRoom || (roomNotice && !room) ? (
                     <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
-                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
+                        <div className="animate-modal-enter shadow-card w-full max-w-md rounded-[24px] border border-white/85 bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-brand/10 text-brand-ink grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5 w-5" />
@@ -1937,7 +2406,7 @@ export default function Play() {
                     <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
                         <form
                             onSubmit={startGame}
-                            className="border-white/85 shadow-card animate-fade-up max-h-[calc(100dvh-72px)] w-full max-w-lg overflow-y-auto rounded-[26px] border bg-white/95 p-4 backdrop-blur-md sm:p-6 [@media(max-height:620px)]:p-3"
+                            className="shadow-card animate-fade-up max-h-[calc(100dvh-72px)] w-full max-w-lg overflow-y-auto rounded-[26px] border border-white/85 bg-white/95 p-4 backdrop-blur-md sm:p-6 [@media(max-height:620px)]:p-3"
                         >
                             <p className="text-brand-ink text-[10px] font-semibold tracking-[0.16em]">
                                 SEBELUM BERMAIN
@@ -1947,8 +2416,8 @@ export default function Play() {
                             </h1>
                             <p className="text-ink-muted mt-1 text-[11px] leading-5 sm:text-xs [@media(max-height:620px)]:hidden">
                                 Pilih jumlah pemain, warna, dan karakter
-                                favoritmu. Papan menyesuaikan otomatis untuk
-                                2–7 pemain.
+                                favoritmu. Papan menyesuaikan otomatis untuk 2–7
+                                pemain.
                             </p>
 
                             <fieldset className="mt-2.5 [@media(max-height:620px)]:mt-2">
@@ -2174,8 +2643,9 @@ export default function Play() {
                                 </Link>
                                 <span className="text-ink-muted inline-flex items-center gap-1 text-[10px] font-medium">
                                     <SparklesIcon className="h-3 w-3" />
-                                    {getCharacterConfig(humanCharacter).name} ·{' '}
-                                    {PLAYER_CONFIG[humanColor].label}
+                                    {
+                                        getCharacterConfig(humanCharacter).name
+                                    } · {PLAYER_CONFIG[humanColor].label}
                                 </span>
                             </div>
                         </form>
@@ -2186,7 +2656,7 @@ export default function Play() {
                             <section className="flex min-h-0 min-w-0 flex-col gap-2">
                                 {state.order.length >= 5 ? (
                                     <div
-                                        className={`border-white/85 shadow-card grid shrink-0 gap-1 overflow-hidden rounded-[16px] border bg-white/94 p-1 backdrop-blur-md md:hidden ${
+                                        className={`shadow-card grid shrink-0 gap-1 overflow-hidden rounded-[16px] border border-white/85 bg-white/94 p-1 backdrop-blur-md md:hidden ${
                                             state.order.length === 7
                                                 ? 'grid-cols-4'
                                                 : 'grid-cols-3'
@@ -2248,7 +2718,7 @@ export default function Play() {
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="border-white/85 shadow-card grid shrink-0 grid-cols-2 items-stretch overflow-hidden rounded-[18px] border bg-white/95 backdrop-blur-md md:hidden">
+                                    <div className="shadow-card grid shrink-0 grid-cols-2 items-stretch overflow-hidden rounded-[18px] border border-white/85 bg-white/95 backdrop-blur-md md:hidden">
                                         {state.order.map((color) => (
                                             <PlayerCard
                                                 key={color}
@@ -2318,7 +2788,7 @@ export default function Play() {
                             </section>
 
                             <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
-                                <section className="border-white/85 shadow-card shrink-0 rounded-[22px] border bg-white/95 p-4 backdrop-blur-md">
+                                <section className="shadow-card shrink-0 rounded-[22px] border border-white/85 bg-white/95 p-4 backdrop-blur-md">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <p
@@ -2372,10 +2842,13 @@ export default function Play() {
                                                 type="button"
                                                 onClick={handleRoll}
                                                 disabled={!canRoll}
+                                                aria-busy={rollHttp.processing}
                                                 className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold transition active:scale-[0.99] enabled:hover:brightness-95 disabled:cursor-not-allowed"
                                                 style={rollButtonStyle}
                                             >
-                                                <DiceIcon className="h-4.5 w-4.5" />
+                                                <DiceIcon
+                                                    className={`h-4.5 w-4.5 ${rollHttp.processing ? 'motion-safe:animate-spin' : ''}`}
+                                                />
                                                 {rollLabel}
                                             </button>
 
@@ -2386,7 +2859,7 @@ export default function Play() {
                                     )}
                                 </section>
 
-                                <section className="border-white/85 shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border bg-white/95 backdrop-blur-md">
+                                <section className="shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/85 bg-white/95 backdrop-blur-md">
                                     <div className="shrink-0 px-4 pt-3.5 pb-2">
                                         <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">
                                             PEMAIN
@@ -2457,7 +2930,7 @@ export default function Play() {
                             </aside>
                         </div>
 
-                        <div className="border-white/85 shadow-card mt-2 shrink-0 rounded-[20px] border bg-white/95 p-2 backdrop-blur-md md:hidden">
+                        <div className="shadow-card mt-2 shrink-0 rounded-[20px] border border-white/85 bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex items-center gap-2">
                                 <Dice
                                     value={displayDice}
@@ -2498,12 +2971,16 @@ export default function Play() {
                                         type="button"
                                         onClick={handleRoll}
                                         disabled={!canRoll}
+                                        aria-busy={rollHttp.processing}
                                         className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition active:scale-[0.98] enabled:hover:brightness-90 disabled:cursor-not-allowed"
                                         style={rollButtonStyle}
                                     >
-                                        <DiceIcon className="h-4 w-4" />
+                                        <DiceIcon
+                                            className={`h-4 w-4 ${rollHttp.processing ? 'motion-safe:animate-spin' : ''}`}
+                                        />
                                         <span>
-                                            {state.phase === 'rolling'
+                                            {rollHttp.processing ||
+                                            state.phase === 'rolling'
                                                 ? '…'
                                                 : state.phase === 'choosing' &&
                                                     state.turn === state.human

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\PlayerResume;
+use App\Services\RoomBroadcaster;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +15,8 @@ use Inertia\Response;
 
 class PageController extends Controller
 {
+    public function __construct(private RoomBroadcaster $broadcaster) {}
+
     public function home(Request $request): Response
     {
         return Inertia::render('Home', [
@@ -171,7 +173,7 @@ class PageController extends Controller
 
             $freshRoom = $room->fresh('players');
             if ($result['joined'] && $freshRoom) {
-                broadcast(new RoomUpdated($freshRoom));
+                $this->broadcaster->publishRoomUpdated($freshRoom, 'room.joined', $result['me']);
             }
 
             /** @var RoomPlayer $me */

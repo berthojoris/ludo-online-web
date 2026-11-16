@@ -119,6 +119,7 @@ class MatchRules
             'stats' => array_fill(0, $count, ['rolls' => 0, 'captures' => 0]),
             'had_six' => array_fill(0, $count, false),
             'total_moves' => 0,
+            'state_version' => 0,
         ];
     }
 

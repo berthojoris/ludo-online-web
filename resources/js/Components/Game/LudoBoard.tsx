@@ -20,6 +20,7 @@ export type BoardToken = {
     character?: CharacterId | string | null;
     point: Cell;
     legal?: boolean;
+    busy?: boolean;
     moving?: boolean;
     returning?: boolean;
     onClick?: () => void;
@@ -29,7 +30,9 @@ export type BoardToken = {
 type LudoBoardProps = {
     tokens?: BoardToken[];
     playerNames?: Partial<Record<PlayerColor, string>>;
-    playerCharacters?: Partial<Record<PlayerColor, CharacterId | string | null>>;
+    playerCharacters?: Partial<
+        Record<PlayerColor, CharacterId | string | null>
+    >;
     activeColor?: PlayerColor;
     activeLabel?: string;
     order?: PlayerColor[];
@@ -136,7 +139,7 @@ export default function LudoBoard({
             aria-label={`Papan Ludo ${spec.arms} pemain`}
             style={{ containerType: 'inline-size' }}
         >
-            <div className="border-white/90 absolute inset-0 overflow-hidden rounded-[5.5%] border-[3px] bg-white shadow-[0_22px_55px_-20px_rgba(20,32,52,0.55)]">
+            <div className="absolute inset-0 overflow-hidden rounded-[5.5%] border-[3px] border-white/90 bg-white shadow-[0_22px_55px_-20px_rgba(20,32,52,0.55)]">
                 {/* Scenic arena background texture beneath the board */}
                 <div
                     aria-hidden="true"
@@ -328,7 +331,9 @@ export default function LudoBoard({
                                 <polygon
                                     key={`rcenter-${wedge.color}`}
                                     points={wedge.centerTriangle}
-                                    fill={PLAYER_CONFIG[wedge.color].palette.base}
+                                    fill={
+                                        PLAYER_CONFIG[wedge.color].palette.base
+                                    }
                                     stroke="rgba(255,255,255,0.75)"
                                     strokeWidth="0.24"
                                     strokeLinejoin="round"
@@ -669,12 +674,14 @@ export default function LudoBoard({
                                 <button
                                     type="button"
                                     onClick={token.onClick}
+                                    disabled={token.busy || !token.legal}
+                                    aria-busy={token.busy || undefined}
                                     aria-label={
                                         token.legal
                                             ? `${label} siap digerakkan`
                                             : label
                                     }
-                                    className={`relative block h-full w-full transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] hover:scale-110 active:scale-95 ${
+                                    className={`relative block h-full w-full transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] active:scale-95 enabled:hover:scale-110 disabled:cursor-not-allowed disabled:opacity-70 ${
                                         token.legal
                                             ? 'animate-legal-pulse cursor-pointer'
                                             : 'cursor-default'
@@ -689,6 +696,12 @@ export default function LudoBoard({
                                     }`}
                                     style={tokenStyle}
                                 >
+                                    {token.busy && (
+                                        <span
+                                            aria-hidden="true"
+                                            className="absolute inset-0 m-auto h-3/4 w-3/4 rounded-full border-2 border-white/80 border-t-transparent motion-safe:animate-spin"
+                                        />
+                                    )}
                                     <LudoPin
                                         className="h-full w-full drop-shadow-[0_2px_4px_rgba(20,32,52,0.28)]"
                                         characterImage={charConfig.image}

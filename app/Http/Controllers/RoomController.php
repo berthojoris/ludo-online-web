@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\MatchAction;
-use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\MatchRules;
 use App\Services\PlayerResume;
+use App\Services\RoomBroadcaster;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 class RoomController extends Controller
 {
+    public function __construct(private RoomBroadcaster $broadcaster) {}
+
     public static function playerToken(Request $request): string
     {
         $token = $request->session()->get('ludo_player_token');
@@ -148,7 +149,7 @@ class RoomController extends Controller
         });
 
         $room->refresh()->load('players');
-        broadcast(new RoomUpdated($room));
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
     }
@@ -210,7 +211,7 @@ class RoomController extends Controller
         });
 
         $room->refresh()->load('players');
-        broadcast(new RoomUpdated($room));
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
     }
@@ -263,7 +264,7 @@ class RoomController extends Controller
         $player->save();
 
         $room->refresh()->load('players');
-        broadcast(new RoomUpdated($room));
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
     }
@@ -296,7 +297,7 @@ class RoomController extends Controller
         $player->save();
 
         $room->refresh()->load('players');
-        broadcast(new RoomUpdated($room));
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
     }
@@ -347,7 +348,7 @@ class RoomController extends Controller
         $room->save();
 
         $room->refresh()->load('players');
-        broadcast(new RoomUpdated($room));
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return redirect()->route('play', ['room' => $room->code]);
     }
@@ -385,13 +386,21 @@ class RoomController extends Controller
             } else {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
+            $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
             $room->match_state = $state;
             $room->save();
 
-            return ['action_id' => (string) Str::uuid(), 'type' => 'roll', 'player_id' => $player->id, 'value' => $value];
+            return [
+                'action_id' => (string) Str::uuid(),
+                'type' => 'roll',
+                'player_id' => $player->id,
+                'value' => $value,
+                'state_version' => $state['state_version'],
+                'match_state' => $state,
+            ];
         });
 
-        broadcast(new MatchAction($room->code, $action));
+        $this->broadcaster->publishMatchAction($room, $action, $player);
 
         return response()->json(['ok' => true, 'action' => $action]);
     }
@@ -460,13 +469,21 @@ class RoomController extends Controller
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
             $state['dice'] = null;
+            $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
             $room->match_state = $state;
             $room->save();
 
-            return ['action_id' => (string) Str::uuid(), 'type' => 'move', 'player_id' => $player->id, 'token_index' => $tokenIndex];
+            return [
+                'action_id' => (string) Str::uuid(),
+                'type' => 'move',
+                'player_id' => $player->id,
+                'token_index' => $tokenIndex,
+                'state_version' => $state['state_version'],
+                'match_state' => $state,
+            ];
         });
 
-        broadcast(new MatchAction($room->code, $action));
+        $this->broadcaster->publishMatchAction($room, $action, $player);
 
         return response()->json(['ok' => true, 'action' => $action]);
     }
@@ -488,13 +505,13 @@ class RoomController extends Controller
             $room->save();
 
             $room->refresh()->load('players');
-            broadcast(new RoomUpdated($room));
-            broadcast(new MatchAction($room->code, [
+            $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
+            $this->broadcaster->publishMatchAction($room, [
                 'action_id' => (string) Str::uuid(),
                 'type' => 'end',
                 'player_id' => $player->id,
                 'ended_by' => $player->name,
-            ]));
+            ], $player);
         }
 
         return redirect()->route('home');

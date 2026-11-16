@@ -101,6 +101,7 @@ function RoomSettingsSummary({
     pending,
     onSelectPlayerCount,
     onToggleAdvantage,
+    showRules = true,
 }: {
     playerCount: PlayerCount;
     hostAdvantage: boolean;
@@ -108,6 +109,7 @@ function RoomSettingsSummary({
     pending: boolean;
     onSelectPlayerCount: (count: PlayerCount) => void;
     onToggleAdvantage: () => void;
+    showRules?: boolean;
 }) {
     return (
         <>
@@ -167,19 +169,21 @@ function RoomSettingsSummary({
                     </button>
                 </div>
             )}
-            <dl className="divide-line border-line mt-3 divide-y rounded-2xl border px-3">
-                {getRoomRules(playerCount).map((item) => (
-                    <div
-                        key={item.label}
-                        className="flex items-center justify-between py-2 text-xs"
-                    >
-                        <dt className="text-ink-muted">{item.label}</dt>
-                        <dd className="text-ink font-semibold tabular-nums">
-                            {item.value}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+            {showRules && (
+                <dl className="divide-line border-line mt-3 divide-y rounded-2xl border px-3">
+                    {getRoomRules(playerCount).map((item) => (
+                        <div
+                            key={item.label}
+                            className="flex items-center justify-between py-2 text-xs"
+                        >
+                            <dt className="text-ink-muted">{item.label}</dt>
+                            <dd className="text-ink font-semibold tabular-nums">
+                                {item.value}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            )}
         </>
     );
 }
@@ -833,7 +837,7 @@ function RoomContent() {
                                         setRulesModalOpen(true);
                                     }}
                                     aria-label="Lihat aturan main"
-                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-xs font-semibold transition md:hidden"
+                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-xs font-semibold transition"
                                 >
                                     <InfoIcon className="h-3.5 w-3.5" />
                                     <span className="hidden min-[380px]:inline">
@@ -1807,6 +1811,7 @@ function RoomContent() {
                                         onSelectPlayerCount={
                                             handleSelectPlayerCount
                                         }
+                                        showRules={false}
                                     />
 
                                     <div className="border-line/80 mt-auto flex flex-col gap-2 border-t pt-3.5">

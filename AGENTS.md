@@ -4,9 +4,16 @@
 ## 1. No browser testing, ever
 - Do **not** run any test on a browser in this project: no browse MCP session, no Playwright/headless Chrome, no DevTools device emulation, no screenshots, no live-browser measurement, no automated UI checks.
 - Do not launch `php artisan serve` / `npm run dev` for the purpose of checking the UI, and do not claim viewport measurements or PASS/FAIL tables from a browser.
-- Verification happens in source and in the build only: read the CSS/JSX, then run `npm run build` (and `php artisan test` when routes, controllers, or Blade/Inertia props change).
+- Verification happens in source and in the build only: read the CSS/JSX, then run `npm run build`.
 
-## 2. PASTIKAN KODE YANG DIHASILKAN SESUAI PERMINTAAN USER
+## 2. No automated tests, ever
+
+- Do **not** run any Laravel/PHP test through Artisan or Pest: no `php artisan test`, no `vendor/bin/pest`, no `vendor/bin/phpunit`, no `composer test`, and no single-file or `--filter` test run.
+- Do **not** run any npm/JS test: no `npm test`, `npm run test`, `vitest`, `jest`, `playwright test`, or any other JS test runner or test script.
+- Do not create throwaway test scripts to "verify" a change, and never report test results as evidence for this project. (A test file that `routing-guidelines` asks for may still be written, but it is not executed here.)
+- Verification is limited to reading the source and running `npm run build`; state plainly in the summary that no tests were run.
+
+## 3. PASTIKAN KODE YANG DIHASILKAN SESUAI PERMINTAAN USER
 
 **PASTIKAN KODE YG DIHASILKAN SESUAI PERMINTAAN USER DAN RESPONSIVE DI DEVICE KECIL, SEDANG DAN BESAR**
 
@@ -15,7 +22,7 @@
 - If a requirement is ambiguous or conflicts with an existing rule, ask before building instead of guessing silently.
 - Before finishing, walk through the request item by item and confirm in your summary that each one is present in the code.
 
-## 3. Responsive on small, medium and large devices
+## 4. Responsive on small, medium and large devices
 - Every screen must work on small (≤ 360px wide phones), medium (tablets, 768–1024px), and large (desktop, ≥ 1280px, including 1920×1080) viewports — portrait and landscape.
 - Use fluid sizing (`clamp()`, `%`, `fr`, `minmax(0, 1fr)`, `dvh`/`vmin`) instead of fixed `px` widths or frame heights, so layouts reflow instead of overflowing or clipping.
 - Small devices: stack columns, keep touch targets ≥ 44px, let only the intended content region scroll, and never hide required controls to force a fit.
@@ -115,7 +122,7 @@ Do **not** run browser testing for this project. There is no browse MCP step, no
 Instead, verify layout changes by:
 
 1. **Reading the code**: confirm the shell uses `100dvh`, `min-height: 0`, `min-width: 0` on flex/grid children, `clamp()` sizing, no fixed `px` frame heights, and no `overflow-x` on the page.
-2. **Running the build**: `npm run build` (and `php artisan test` when Blade/Inertia props or routes change). A successful build is the stopping point for UI work.
+2. **Running the build**: `npm run build` only. No `php artisan test`, no Pest/PHPUnit, and no npm/JS test runner. A successful build is the stopping point for UI work.
 3. **Stating evidence honestly**: report what you checked in the source and in the build output. Never fabricate browser results or viewport measurements.
 4. **Confirming the request and breakpoints**: in the final summary, list each requested item and where it is implemented, then name the small / medium / large breakpoints handled in the source. This is the project's substitute for a browser pass.
 </viewport-fitting-guidelines>

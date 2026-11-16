@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomController;
@@ -22,6 +23,9 @@ Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('room
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
 Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
 Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
+Route::post('/client-issues', [ClientIssueController::class, 'store'])
+    ->middleware('throttle:12,1')
+    ->name('client-issues.store');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');

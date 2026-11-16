@@ -26,7 +26,7 @@ export type CharacterConfig = {
     traits: [string, string, string];
 };
 
-export const ARENA_BACKGROUND_IMAGE = '/assets/background.png';
+export const ARENA_BACKGROUND_IMAGE = '/assets/background.webp';
 
 export const ALL_CHARACTER_IDS: CharacterId[] = [
     'ignivar',
@@ -53,7 +53,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'ignivar',
         name: 'Ignivar',
         element: 'Api',
-        image: '/assets/char_ignivar.png',
+        image: '/assets/char_ignivar.webp',
         accentColor: 'red',
         description:
             'Naga penguasa api dengan kekuatan penuh semangat dan tekad juang tinggi.',
@@ -63,7 +63,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'frost_claw',
         name: 'Frostclaw',
         element: 'Es',
-        image: '/assets/char_frost_claw.png',
+        image: '/assets/char_frost_claw.webp',
         accentColor: 'blue',
         description:
             'Serigala es abadi yang berburu dengan ketenangan dingin dan presisi tajam.',
@@ -73,7 +73,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'solgarde',
         name: 'Solgarde',
         element: 'Cahaya',
-        image: '/assets/char_solgarde.png',
+        image: '/assets/char_solgarde.webp',
         accentColor: 'yellow',
         description:
             'Singa penjaga surya yang memimpin arena dengan wibawa emas dan keberanian.',
@@ -83,7 +83,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'verdantor',
         name: 'Verdantor',
         element: 'Alam',
-        image: '/assets/char_verdantor.png',
+        image: '/assets/char_verdantor.webp',
         accentColor: 'green',
         description:
             'Penjaga hutan purba yang tangguh, sabar, dan selalu menemukan jalan keluar.',
@@ -93,7 +93,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'umrax',
         name: 'Umrax',
         element: 'Bayangan',
-        image: '/assets/char_umrax.png',
+        image: '/assets/char_umrax.webp',
         accentColor: 'purple',
         description:
             'Penguasa bayangan malam yang bergerak senyap dan mengejutkan lawan di tikungan.',
@@ -103,7 +103,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'aqualon',
         name: 'Aqualon',
         element: 'Samudra',
-        image: '/assets/char_aqualon.png',
+        image: '/assets/char_aqualon.webp',
         accentColor: 'teal',
         description:
             'Leviathan arus dalam yang menerjang rintangan bagaikan gelombang pasang.',
@@ -113,7 +113,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         id: 'zephyira',
         name: 'Zephyira',
         element: 'Angin',
-        image: '/assets/char_zephyira.png',
+        image: '/assets/char_zephyira.webp',
         accentColor: 'orange',
         description:
             'Griffin langit berkilau yang melesat melintasi papan secepat hembusan badai.',
