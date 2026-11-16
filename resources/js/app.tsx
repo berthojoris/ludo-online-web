@@ -6,8 +6,10 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installClientIssueReporting } from './lib/clientIssues';
+import { installViewportZoomGuard } from './lib/viewportZoom';
 
 installClientIssueReporting();
+installViewportZoomGuard();
 
 const pageHost = window.location.hostname;
 const configuredReverbHost = import.meta.env.VITE_REVERB_HOST as

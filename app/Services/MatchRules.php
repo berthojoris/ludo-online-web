@@ -120,6 +120,7 @@ class MatchRules
             'had_six' => array_fill(0, $count, false),
             'total_moves' => 0,
             'state_version' => 0,
+            'last_roll' => null,
         ];
     }
 

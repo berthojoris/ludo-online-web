@@ -32,6 +32,7 @@ import {
 } from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
+import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
@@ -267,6 +268,8 @@ function RoomContent() {
     const [characterModalOpen, setCharacterModalOpen] = useState(false);
     const [characterModalSeat, setCharacterModalSeat] =
         useState<PlayerColor | null>(null);
+    const rulesOverlayStyle = useModalViewport(rulesModalOpen);
+    const hostRenameOverlayStyle = useModalViewport(hostEditingPlayer !== null);
 
     useEffect(() => {
         setLiveRoom(serverRoom ?? null);
@@ -1281,7 +1284,7 @@ function RoomContent() {
                                                         }
                                                         maxLength={24}
                                                         aria-label="Nama tampilan"
-                                                        className="border-line bg-canvas text-ink focus:border-brand h-10 min-w-0 flex-1 rounded-xl border px-2.5 text-base font-medium focus:bg-white focus:outline-none sm:h-11 sm:w-36 sm:flex-none sm:text-xs"
+                                                        className="border-line bg-canvas text-ink focus:border-brand h-10 min-w-0 flex-1 rounded-xl border px-2.5 text-base font-medium focus:bg-white focus:outline-none sm:h-11 sm:w-36 sm:flex-none"
                                                     />
                                                     <button
                                                         type="submit"
@@ -1437,9 +1440,9 @@ function RoomContent() {
                                                         <LudoPin
                                                             className="h-5 w-5 shrink-0 min-[400px]:h-6 min-[400px]:w-6 sm:h-7 sm:w-7"
                                                             style={tokenStyle}
-                                                            characterImage={
+                                                            pionImage={
                                                                 occupied
-                                                                    ? seatCharacter.image
+                                                                    ? seatCharacter.pion
                                                                     : undefined
                                                             }
                                                         />
@@ -1983,7 +1986,8 @@ function RoomContent() {
 
             {rulesModalOpen && liveRoom && (
                 <div
-                    className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    style={rulesOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="room-rules-title"
@@ -1993,7 +1997,7 @@ function RoomContent() {
                         }
                     }}
                 >
-                    <div className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
+                    <div className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
                         <div className="mb-4 flex items-center justify-between gap-2">
                             <h2
                                 id="room-rules-title"
@@ -2039,7 +2043,8 @@ function RoomContent() {
 
             {hostEditingPlayer && liveRoom && (
                 <div
-                    className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    style={hostRenameOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="host-rename-player-title"
@@ -2055,7 +2060,7 @@ function RoomContent() {
                 >
                     <form
                         onSubmit={handleHostSavePlayerName}
-                        className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                        className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
                     >
                         <div className="mb-4 flex items-center justify-between gap-2">
                             <div className="min-w-0">
@@ -2095,7 +2100,7 @@ function RoomContent() {
                         <input
                             id="host-player-name-input"
                             type="text"
-                            autoFocus
+                            autoFocus={!hasCoarsePointer()}
                             value={hostNameDraft}
                             onChange={(event) => {
                                 setHostNameDraft(
@@ -2108,7 +2113,7 @@ function RoomContent() {
                             maxLength={24}
                             placeholder="Masukkan nama pemain"
                             aria-label="Nama pemain baru"
-                            className="border-line bg-canvas text-ink focus:border-brand focus:ring-brand/10 mt-1.5 h-11 w-full rounded-xl border px-3 text-base font-medium focus:bg-white focus:ring-4 focus:outline-none sm:text-sm"
+                            className="border-line bg-canvas text-ink focus:border-brand focus:ring-brand/10 mt-1.5 h-11 w-full rounded-xl border px-3 text-base font-medium focus:bg-white focus:ring-4 focus:outline-none"
                         />
 
                         {hostNameError && (

@@ -387,6 +387,11 @@ class RoomController extends Controller
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
+            $state['last_roll'] = [
+                'player' => $index,
+                'value' => $value,
+                'state_version' => $state['state_version'],
+            ];
             $room->match_state = $state;
             $room->save();
 

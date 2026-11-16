@@ -55,6 +55,7 @@ import {
     unlockAudio,
 } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
+import { useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
 import { HttpResponseError, ReloadOptions } from '@inertiajs/core';
 import {
@@ -98,6 +99,12 @@ type LogEntry = {
 type SetupNames = Record<PlayerId, string>;
 type SetupCharacters = Record<PlayerId, CharacterId>;
 
+type LastRoll = {
+    player: number;
+    value: number;
+    state_version: number;
+};
+
 type MatchSnapshot = {
     tokens: number[][];
     colors?: PlayerId[];
@@ -110,6 +117,7 @@ type MatchSnapshot = {
     had_six?: boolean[];
     total_moves?: number;
     state_version?: number;
+    last_roll?: LastRoll | null;
 };
 
 type MatchActionData = {
@@ -158,6 +166,7 @@ type Action =
           match: MatchSnapshot & {
               started_at?: string | null;
           };
+          animateRoll?: boolean;
       }
     | {
           type: 'START';
@@ -508,15 +517,54 @@ function reducer(state: GameState, action: Action): GameState {
         const restoredAt = action.match.started_at
             ? Date.parse(action.match.started_at)
             : state.startedAt;
+        const lastRoll = action.match.last_roll ?? null;
+        const roller = lastRoll ? order[lastRoll.player] : undefined;
+        const restoredVersion = action.match.state_version ?? state.version;
+
+        // A snapshot whose newest action is a roll this client has not seen yet
+        // replays that roll so the dice still tumbles before the result lands.
+        if (
+            action.animateRoll &&
+            !winner &&
+            lastRoll &&
+            roller &&
+            lastRoll.state_version === restoredVersion &&
+            restoredVersion > state.version
+        ) {
+            return {
+                ...state,
+                version: restoredVersion,
+                order,
+                arms: spec.arms,
+                tokens,
+                turn: roller,
+                dice: lastRoll.value,
+                winner: null,
+                winners,
+                phase: 'rolling',
+                legalMoves: [],
+                rolls,
+                hadSix,
+                captures,
+                totalMoves: action.match.total_moves ?? state.totalMoves,
+                startedAt: Number.isNaN(restoredAt)
+                    ? state.startedAt
+                    : restoredAt,
+                message:
+                    roller === state.human
+                        ? 'Melempar dadu…'
+                        : `${state.names[roller]} sedang melempar…`,
+            };
+        }
 
         return {
             ...state,
-            version: action.match.state_version ?? state.version,
+            version: restoredVersion,
             order,
             arms: spec.arms,
             tokens,
             turn,
-            dice,
+            dice: dice ?? lastRoll?.value ?? null,
             winner,
             winners,
             phase: winner ? 'gameover' : dice === null ? 'idle' : 'choosing',
@@ -916,6 +964,7 @@ export default function Play() {
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [resultModalOpen, setResultModalOpen] = useState(false);
     const [endGameModalOpen, setEndGameModalOpen] = useState(false);
+    const endGameOverlayStyle = useModalViewport(endGameModalOpen);
     const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const rollHttp = useHttp<Record<string, never>, MatchCommandResponse>();
@@ -929,6 +978,8 @@ export default function Play() {
     const movePendingRef = useRef(false);
     const autoMoveAttemptRef = useRef<string | null>(null);
     const seenActionsRef = useRef<Set<string>>(new Set());
+    const pendingActionsRef = useRef<MatchActionData[]>([]);
+    const pendingSnapshotRef = useRef<MatchSnapshot | null>(null);
     const stateRef = useRef(state);
     const roomRef = useRef(room);
     const roomSyncPendingRef = useRef(false);
@@ -948,7 +999,7 @@ export default function Play() {
     }, []);
 
     const restoreMatch = useCallback(
-        (match: MatchSnapshot) => {
+        (match: MatchSnapshot, { animateRoll = true } = {}) => {
             cancelMoveAnimations();
             dispatch({
                 type: 'RESTORE',
@@ -956,9 +1007,15 @@ export default function Play() {
                     ...match,
                     started_at: roomRef.current?.started_at ?? null,
                 },
+                animateRoll,
             });
         },
         [cancelMoveAnimations],
+    );
+
+    const isMatchAnimating = useCallback(
+        () => stateRef.current.phase === 'rolling' || movingRef.current,
+        [],
     );
 
     const roomSyncOptions = useCallback((trigger: string): ReloadOptions => {
@@ -1046,6 +1103,8 @@ export default function Play() {
         if (isNewMatch) {
             activeMatchKeyRef.current = matchKey;
             seenActionsRef.current.clear();
+            pendingActionsRef.current = [];
+            pendingSnapshotRef.current = null;
             cancelMoveAnimations();
 
             const initialTurn: PlayerId =
@@ -1085,7 +1144,18 @@ export default function Play() {
             (isNewMatch ||
                 (snapshot.state_version ?? 0) > stateRef.current.version)
         ) {
-            restoreMatch(snapshot);
+            if (!isNewMatch && isMatchAnimating()) {
+                const pending = pendingSnapshotRef.current;
+
+                if (
+                    !pending ||
+                    (snapshot.state_version ?? 0) > (pending.state_version ?? 0)
+                ) {
+                    pendingSnapshotRef.current = snapshot;
+                }
+            } else {
+                restoreMatch(snapshot, { animateRoll: !isNewMatch });
+            }
         }
 
         setScreen('game');
@@ -1097,6 +1167,7 @@ export default function Play() {
         myRoomColor,
         cancelMoveAnimations,
         restoreMatch,
+        isMatchAnimating,
     ]);
 
     useEffect(() => {
@@ -1589,20 +1660,30 @@ export default function Play() {
 
     const animateMoveRef = useRef(animateMove);
     animateMoveRef.current = animateMove;
-    const processMatchActionRef = useRef<(action: MatchActionData) => void>(
-        () => undefined,
+    const processMatchActionRef = useRef<(action: MatchActionData) => boolean>(
+        () => false,
     );
 
+    /**
+     * Applies one server action. Returns true when it changed (or will change)
+     * local state, so callers draining a queue wait for the next render.
+     */
     processMatchActionRef.current = (action) => {
         if (action.type === 'end') {
             rememberAction(seenActionsRef.current, action.action_id);
             router.visit(route('home'));
 
-            return;
+            return true;
         }
 
         if (action.action_id && seenActionsRef.current.has(action.action_id)) {
-            return;
+            return false;
+        }
+
+        if (isMatchAnimating()) {
+            pendingActionsRef.current.push(action);
+
+            return true;
         }
 
         const currentState = stateRef.current;
@@ -1625,13 +1706,13 @@ export default function Play() {
             );
             syncRoomState('action-snapshot-missing');
 
-            return;
+            return false;
         }
 
         if (version <= currentState.version) {
             rememberAction(seenActionsRef.current, action.action_id);
 
-            return;
+            return false;
         }
 
         const restoreAfterRace = (reason: string) => {
@@ -1656,7 +1737,7 @@ export default function Play() {
         if (version !== currentState.version + 1) {
             restoreAfterRace('version-gap');
 
-            return;
+            return true;
         }
 
         const expectedPlayerId =
@@ -1670,7 +1751,7 @@ export default function Play() {
             if (currentState.phase !== 'idle' || !matchesCurrentPlayer) {
                 restoreAfterRace('roll-race');
 
-                return;
+                return true;
             }
 
             rememberAction(seenActionsRef.current, action.action_id);
@@ -1681,7 +1762,7 @@ export default function Play() {
                 version,
             });
 
-            return;
+            return true;
         }
 
         if (action.type === 'move' && typeof action.token_index === 'number') {
@@ -1696,16 +1777,58 @@ export default function Play() {
             if (!canAnimateMove) {
                 restoreAfterRace('move-race');
 
-                return;
+                return true;
             }
 
             void animateMoveRef.current(action.token_index, true, action);
 
-            return;
+            return true;
         }
 
         restoreAfterRace('invalid-action');
+
+        return true;
     };
+
+    /**
+     * Replays actions and snapshots that arrived while the dice or a token was
+     * still animating, so they are not applied mid-animation as a jump.
+     */
+    const drainPendingMatchUpdates = useCallback(() => {
+        while (pendingActionsRef.current.length > 0) {
+            if (isMatchAnimating()) {
+                return;
+            }
+
+            const next = pendingActionsRef.current.shift();
+
+            if (next && processMatchActionRef.current(next)) {
+                return;
+            }
+        }
+
+        const snapshot = pendingSnapshotRef.current;
+
+        if (!snapshot || isMatchAnimating()) {
+            return;
+        }
+
+        pendingSnapshotRef.current = null;
+
+        if ((snapshot.state_version ?? 0) > stateRef.current.version) {
+            restoreMatch(snapshot);
+        }
+    }, [isMatchAnimating, restoreMatch]);
+
+    useEffect(() => {
+        drainPendingMatchUpdates();
+    }, [
+        state.phase,
+        state.version,
+        movingToken,
+        returningTokens,
+        drainPendingMatchUpdates,
+    ]);
 
     useEffect(() => {
         if (!room?.code || !echoIsConfigured()) {
@@ -1846,6 +1969,7 @@ export default function Play() {
                     busy: canInteractWithMove && moveHttp.processing,
                     moving: isMoving,
                     returning: isReturning,
+                    step: isMoving ? displayPosition : undefined,
                     onClick: canInteractWithMove
                         ? () => {
                               void animateMove(tokenIndex);
@@ -2602,7 +2726,7 @@ export default function Play() {
                                         maxLength={16}
                                         autoComplete="off"
                                         placeholder="Nama kamu"
-                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                        className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-base transition outline-none"
                                     />
                                 </label>
                                 {setupCount === 2 && (
@@ -2620,7 +2744,7 @@ export default function Play() {
                                             maxLength={16}
                                             autoComplete="off"
                                             placeholder="Nama lawan"
-                                            className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-sm transition outline-none"
+                                            className="border-line text-ink placeholder:text-ink-muted/60 focus:border-brand mt-1 h-10 w-full rounded-xl border bg-white px-3 text-base transition outline-none"
                                         />
                                     </label>
                                 )}
@@ -3025,7 +3149,8 @@ export default function Play() {
 
             {endGameModalOpen && room && me?.is_host && (
                 <div
-                    className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    style={endGameOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="end-game-title"
@@ -3038,7 +3163,7 @@ export default function Play() {
                         }
                     }}
                 >
-                    <div className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
+                    <div className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
                         <div className="flex items-start justify-between gap-3">
                             <div>
                                 <h2

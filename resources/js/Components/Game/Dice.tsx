@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 type DiceProps = {
     value: number;
@@ -69,6 +69,12 @@ export default function Dice({
     const cubeRef = useRef<HTMLDivElement>(null);
     const animationRef = useRef<Animation | null>(null);
     const rotationRef = useRef({ x: 0, y: 0 });
+    // Only the first render's face goes through React; later faces are written
+    // by the layout effect so a re-render cannot snap the cube to the result
+    // before the roll animation starts.
+    const initialTransformRef = useRef(
+        `rotateX(${FACE_ROTATION[value]?.x ?? 0}deg) rotateY(${FACE_ROTATION[value]?.y ?? 0}deg)`,
+    );
     const [halfSize, setHalfSize] = useState(28);
     const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -101,7 +107,7 @@ export default function Dice({
         return () => query.removeEventListener('change', update);
     }, []);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const cube = cubeRef.current;
 
         if (!cube) {
@@ -189,7 +195,7 @@ export default function Dice({
                 className="absolute inset-0"
                 style={{
                     transformStyle: 'preserve-3d',
-                    transform: `rotateX(${FACE_ROTATION[value]?.x ?? 0}deg) rotateY(${FACE_ROTATION[value]?.y ?? 0}deg)`,
+                    transform: initialTransformRef.current,
                     willChange: 'transform',
                 }}
             >

@@ -11,6 +11,7 @@ import {
     PLAYER_CONFIG,
     PlayerColor,
 } from '@/lib/ludo';
+import { useModalViewport } from '@/lib/useModalViewport';
 import { Link } from '@inertiajs/react';
 import { useEffect, useRef } from 'react';
 
@@ -56,6 +57,7 @@ export default function MatchResultModal({
     onClose,
 }: MatchResultModalProps) {
     const playAgainRef = useRef<HTMLButtonElement>(null);
+    const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
         if (!open) {
@@ -92,7 +94,8 @@ export default function MatchResultModal({
 
     return (
         <div
-            className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-[3px] sm:p-4"
+            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            style={overlayStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby="match-result-title"
@@ -103,7 +106,7 @@ export default function MatchResultModal({
                 }
             }}
         >
-            <div className="animate-modal-enter border-line relative max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto rounded-[26px] border bg-white p-4 shadow-[0_28px_70px_-20px_rgba(32,43,58,0.34)] sm:p-6">
+            <div className="modal-panel animate-modal-enter border-line max-w-md overflow-y-auto overscroll-contain rounded-[26px] border bg-white p-4 shadow-[0_28px_70px_-20px_rgba(32,43,58,0.34)] sm:p-6">
                 <div className="flex items-center justify-between gap-3">
                     <span
                         className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"

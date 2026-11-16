@@ -4,6 +4,7 @@ import {
     DiceIcon,
     TrophyIcon,
 } from '@/Components/Game/Icons';
+import { useModalViewport } from '@/lib/useModalViewport';
 import {
     Dialog,
     DialogDescription,
@@ -45,6 +46,8 @@ export default function HowItWorksModal({
     onClose,
     onStart,
 }: HowItWorksModalProps) {
+    const overlayStyle = useModalViewport(open);
+
     return (
         <Transition show={open} as={Fragment}>
             <Dialog
@@ -67,7 +70,7 @@ export default function HowItWorksModal({
                     />
                 </TransitionChild>
 
-                <div className="fixed inset-0 flex items-center justify-center overflow-y-auto p-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:p-4">
+                <div className="modal-overlay" style={overlayStyle}>
                     <TransitionChild
                         as={Fragment}
                         enter="duration-200 ease-out"
@@ -79,7 +82,7 @@ export default function HowItWorksModal({
                     >
                         <DialogPanel
                             data-testid="how-it-works-panel"
-                            className="border-line/80 shadow-board relative my-auto flex max-h-[calc(100dvh-24px)] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border bg-white"
+                            className="modal-panel border-line/80 shadow-board flex max-w-2xl flex-col overflow-hidden rounded-[24px] border bg-white"
                         >
                             <div
                                 aria-hidden="true"

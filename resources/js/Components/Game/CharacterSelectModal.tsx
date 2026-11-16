@@ -8,6 +8,7 @@ import {
     PLAYER_CONFIG,
     PlayerColor,
 } from '@/lib/ludo';
+import { useModalViewport } from '@/lib/useModalViewport';
 import { useEffect, useState } from 'react';
 
 type CharacterSelectModalProps = {
@@ -38,6 +39,7 @@ export default function CharacterSelectModal({
               : 'ignivar';
 
     const [selectedId, setSelectedId] = useState<CharacterId>(resolvedDefault);
+    const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
         if (open) {
@@ -71,7 +73,8 @@ export default function CharacterSelectModal({
 
     return (
         <div
-            className="bg-ink/55 fixed inset-0 z-50 flex items-center justify-center p-2.5 pb-[max(10px,env(safe-area-inset-bottom))] backdrop-blur-[4px] sm:p-4"
+            className="modal-overlay bg-ink/55 backdrop-blur-[4px]"
+            style={overlayStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby="character-select-title"
@@ -82,7 +85,7 @@ export default function CharacterSelectModal({
                 }
             }}
         >
-            <div className="animate-modal-enter relative flex max-h-[calc(100dvh-20px)] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border-2 border-white/80 bg-gradient-to-b from-[#f4f8ff] to-white shadow-[0_28px_70px_-18px_rgba(18,30,52,0.48)]">
+            <div className="modal-panel animate-modal-enter flex max-w-2xl flex-col overflow-hidden rounded-[26px] border-2 border-white/80 bg-gradient-to-b from-[#f4f8ff] to-white shadow-[0_28px_70px_-18px_rgba(18,30,52,0.48)]">
                 {/* Header */}
                 <div className="border-line/70 flex shrink-0 items-center justify-between gap-3 border-b bg-white/90 px-4 py-3 sm:px-6 sm:py-4">
                     <div className="flex min-w-0 items-center gap-3">
@@ -256,6 +259,26 @@ export default function CharacterSelectModal({
                                 height={190}
                                 className="relative z-10 h-full w-full object-contain p-1.5 drop-shadow-[0_10px_16px_rgba(20,32,52,0.28)]"
                             />
+                            <figure className="absolute right-1.5 bottom-1.5 z-20 m-0 flex h-[48%] flex-col items-center rounded-xl bg-white/85 px-1 pt-1 pb-0.5 shadow-[0_6px_14px_-6px_rgba(20,32,52,0.45)] backdrop-blur-sm sm:right-2 sm:bottom-2">
+                                <img
+                                    key={selectedChar.id}
+                                    src={selectedChar.pion}
+                                    alt={`Pion ${selectedChar.name}`}
+                                    width={192}
+                                    height={320}
+                                    draggable={false}
+                                    className="animate-token-pop min-h-0 w-auto flex-1 object-contain drop-shadow-[0_4px_5px_rgba(20,32,52,0.35)]"
+                                />
+                                <figcaption
+                                    className="mt-0.5 rounded-md px-1.5 text-[9px] leading-tight font-extrabold tracking-wide uppercase"
+                                    style={{
+                                        background: charPalette.soft,
+                                        color: charPalette.text,
+                                    }}
+                                >
+                                    Pion
+                                </figcaption>
+                            </figure>
                         </div>
 
                         {/* Right Info & Action */}

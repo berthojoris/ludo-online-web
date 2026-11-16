@@ -1,4 +1,5 @@
 import { CloseIcon } from '@/Components/Game/Icons';
+import { useModalViewport } from '@/lib/useModalViewport';
 import { ReactNode, useCallback, useEffect, useRef } from 'react';
 
 type Props = {
@@ -28,6 +29,7 @@ export default function ConfirmLeaveModal({
     const openerRef = useRef<HTMLElement | null>(null);
     const onCancelRef = useRef(onCancel);
     onCancelRef.current = onCancel;
+    const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
         if (!open) {
@@ -79,7 +81,8 @@ export default function ConfirmLeaveModal({
 
     return (
         <div
-            className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            style={overlayStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-leave-title"
@@ -91,7 +94,7 @@ export default function ConfirmLeaveModal({
             }}
         >
             <div
-                className="animate-modal-enter border-line w-full max-w-sm rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
                 onClick={stopPropagation}
             >
                 <div className="flex items-start justify-between gap-3">

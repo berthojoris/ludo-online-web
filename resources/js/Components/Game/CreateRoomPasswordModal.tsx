@@ -1,4 +1,5 @@
 import { CloseIcon, LockIcon } from '@/Components/Game/Icons';
+import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
 type Props = {
@@ -23,6 +24,8 @@ export default function CreateRoomPasswordModal({
 }: Props) {
     const [password, setPassword] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const overlayStyle = useModalViewport(open);
     const onCancelRef = useRef(onCancel);
     const processingRef = useRef(processing);
     onCancelRef.current = onCancel;
@@ -35,10 +38,13 @@ export default function CreateRoomPasswordModal({
 
         setPassword('');
 
-        const focusTimeout = window.setTimeout(
-            () => inputRef.current?.focus(),
-            40,
-        );
+        const focusTimeout = window.setTimeout(() => {
+            if (hasCoarsePointer()) {
+                panelRef.current?.focus({ preventScroll: true });
+            } else {
+                inputRef.current?.focus();
+            }
+        }, 40);
 
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape' && !processingRef.current) {
@@ -71,7 +77,8 @@ export default function CreateRoomPasswordModal({
 
     return (
         <div
-            className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
+            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            style={overlayStyle}
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-room-password-title"
@@ -83,7 +90,9 @@ export default function CreateRoomPasswordModal({
             }}
         >
             <div
-                className="animate-modal-enter border-line max-h-[calc(100dvh-24px)] w-full max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                ref={panelRef}
+                tabIndex={-1}
+                className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)] outline-none"
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-start justify-between gap-3">
@@ -139,7 +148,7 @@ export default function CreateRoomPasswordModal({
                         aria-describedby={
                             error ? 'create-room-password-error' : undefined
                         }
-                        className={`text-ink focus-visible:ring-brand/60 mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-sm transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
+                        className={`text-ink focus-visible:ring-brand/60 mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
                             error ? 'border-danger' : 'border-line'
                         }`}
                     />

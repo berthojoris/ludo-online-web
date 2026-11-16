@@ -235,6 +235,30 @@ class GameResumeTest extends TestCase
         $this->assertSame(2, $state['state_version']);
     }
 
+    public function test_roll_records_the_rolled_value_in_the_persisted_match_state(): void
+    {
+        Event::fake([RoomUpdated::class, MatchAction::class]);
+
+        [$room, $host] = $this->hostRoom();
+        $this->addGuest($room);
+
+        $room->update([
+            'status' => 'started',
+            'starting_player_id' => $host->id,
+            'match_state' => MatchRules::initial(0, ['red', 'yellow']),
+        ]);
+
+        $response = $this->postJson("/rooms/{$room->code}/match/roll")->assertOk();
+
+        $state = $room->fresh()->match_state;
+        $this->assertSame([
+            'player' => 0,
+            'value' => $response->json('action.value'),
+            'state_version' => 1,
+        ], $state['last_roll']);
+        $this->assertSame($state['last_roll'], $response->json('action.match_state.last_roll'));
+    }
+
     public function test_move_succeeds_and_logs_context_when_broadcast_returns_502(): void
     {
         [$room, $host] = $this->hostRoom();

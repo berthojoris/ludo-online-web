@@ -12,7 +12,7 @@ import {
 } from '@/lib/ludo';
 import { CSSProperties } from 'react';
 import { StarIcon } from './Icons';
-import LudoPin from './LudoPin';
+import PionFigure, { PionMotion } from './PionFigure';
 
 export type BoardToken = {
     id: string;
@@ -23,6 +23,7 @@ export type BoardToken = {
     busy?: boolean;
     moving?: boolean;
     returning?: boolean;
+    step?: number;
     onClick?: () => void;
     label?: string;
 };
@@ -621,7 +622,10 @@ export default function LudoBoard({
                         </div>
                     </>
                 )}
+            </div>
 
+            {/* Tokens live outside the clipped board so tall pions on the top row keep their crowns. */}
+            <div className="pointer-events-none absolute inset-0 z-[5]">
                 {tokens.map((token) => {
                     const config = PLAYER_CONFIG[token.color];
                     const palette = config.palette;
@@ -634,42 +638,65 @@ export default function LudoBoard({
                         count: 1,
                     };
                     const [dx, dy] = groupOffset(index, count);
+                    const leftPercent = spec.isRadial
+                        ? token.point.col
+                        : (token.point.col / BOARD_SIZE) * 100;
+                    const topPercent = spec.isRadial
+                        ? token.point.row
+                        : (token.point.row / BOARD_SIZE) * 100;
+                    const depth =
+                        Math.round(topPercent * 4) + (dy > 0 ? 2 : dy < 0 ? 0 : 1);
+                    const zIndex = token.returning
+                        ? 1500 + depth
+                        : token.moving
+                          ? 1000 + depth
+                          : token.legal
+                            ? 500 + depth
+                            : 10 + depth;
                     const positionStyle = {
-                        left: `${spec.isRadial ? token.point.col : (token.point.col / BOARD_SIZE) * 100}%`,
-                        top: `${spec.isRadial ? token.point.row : (token.point.row / BOARD_SIZE) * 100}%`,
+                        left: `${leftPercent}%`,
+                        top: `${topPercent}%`,
                         width: `${spec.tokenSizePercent * 1.12}%`,
                         aspectRatio: '1 / 1',
                         transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
+                        zIndex,
                     } as CSSProperties;
 
                     const tokenStyle = {
                         '--token-light': palette.light,
                         '--token-base': palette.base,
                         '--token-dark': palette.dark,
-                        '--legal-color': palette.base,
-                        '--legal-glow': `${palette.base}59`,
                     } as CSSProperties;
 
                     const label =
                         token.label ?? `Bidak ${config.label} ${index + 1}`;
+                    const motion: PionMotion = token.returning
+                        ? 'knocked'
+                        : token.moving
+                          ? 'hop'
+                          : 'idle';
+                    const hopPhase = (Math.abs(token.step ?? 0) % 2) as 0 | 1;
+                    const figure = (
+                        <PionFigure
+                            pionImage={charConfig.pion}
+                            legal={token.legal}
+                            busy={token.busy}
+                            motion={motion}
+                            hopPhase={hopPhase}
+                            stacked={count > 1}
+                        />
+                    );
 
                     return (
                         <div
                             key={token.id}
                             className={`absolute transition-[left,top] ${
                                 token.returning
-                                    ? 'z-30 duration-[50ms] ease-linear'
-                                    : 'z-20 duration-[140ms] ease-out'
+                                    ? 'duration-[50ms] ease-linear'
+                                    : 'duration-[140ms] ease-[cubic-bezier(0.37,0,0.63,1)]'
                             }`}
                             style={positionStyle}
                         >
-                            {token.legal && (
-                                <span
-                                    className="legal-move-beacon"
-                                    style={tokenStyle}
-                                    aria-hidden="true"
-                                />
-                            )}
                             {token.onClick ? (
                                 <button
                                     type="button"
@@ -678,52 +705,28 @@ export default function LudoBoard({
                                     aria-busy={token.busy || undefined}
                                     aria-label={
                                         token.legal
-                                            ? `${label} siap digerakkan`
-                                            : label
+                                            ? `${label} (${charConfig.name}) siap digerakkan`
+                                            : `${label} (${charConfig.name})`
                                     }
-                                    className={`relative block h-full w-full transition-transform duration-150 after:absolute after:-inset-3.5 after:rounded-full after:content-[''] active:scale-95 enabled:hover:scale-110 disabled:cursor-not-allowed disabled:opacity-70 ${
+                                    className={`pion-hit relative block h-full w-full after:absolute after:-inset-2 after:rounded-full after:content-[''] disabled:cursor-not-allowed ${
                                         token.legal
-                                            ? 'animate-legal-pulse cursor-pointer'
+                                            ? 'cursor-pointer'
                                             : 'cursor-default'
                                     } ${
-                                        token.moving
-                                            ? 'animate-token-hop pointer-events-none'
-                                            : ''
-                                    } ${
-                                        token.returning
-                                            ? 'animate-token-retreat pointer-events-none'
-                                            : ''
+                                        token.moving || token.returning
+                                            ? 'pointer-events-none'
+                                            : 'pointer-events-auto'
                                     }`}
                                     style={tokenStyle}
                                 >
-                                    {token.busy && (
-                                        <span
-                                            aria-hidden="true"
-                                            className="absolute inset-0 m-auto h-3/4 w-3/4 rounded-full border-2 border-white/80 border-t-transparent motion-safe:animate-spin"
-                                        />
-                                    )}
-                                    <LudoPin
-                                        className="h-full w-full drop-shadow-[0_2px_4px_rgba(20,32,52,0.28)]"
-                                        characterImage={charConfig.image}
-                                    />
+                                    {figure}
                                 </button>
                             ) : (
                                 <div
-                                    className={`h-full w-full ${
-                                        token.legal ? 'animate-legal-pulse' : ''
-                                    } ${
-                                        token.moving ? 'animate-token-hop' : ''
-                                    } ${
-                                        token.returning
-                                            ? 'animate-token-retreat'
-                                            : ''
-                                    }`}
+                                    className="relative h-full w-full"
                                     style={tokenStyle}
                                 >
-                                    <LudoPin
-                                        className="h-full w-full drop-shadow-[0_2px_4px_rgba(20,32,52,0.28)]"
-                                        characterImage={charConfig.image}
-                                    />
+                                    {figure}
                                 </div>
                             )}
                         </div>
