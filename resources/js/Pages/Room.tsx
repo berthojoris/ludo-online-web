@@ -1821,7 +1821,7 @@ function RoomContent() {
                                         <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2">
                                             <div className="min-w-0">
                                                 <p className="text-ink text-xs font-semibold">
-                                                    Siap bermain
+                                                    Ready
                                                 </p>
                                                 <p className="text-ink-muted mt-0.5 text-[11px]">
                                                     {!currentMe?.seat_color
@@ -1834,7 +1834,7 @@ function RoomContent() {
                                             <button
                                                 type="button"
                                                 role="switch"
-                                                aria-label="Siap bermain"
+                                                aria-label="Ready"
                                                 aria-checked={Boolean(
                                                     currentMe?.is_ready,
                                                 )}
@@ -1901,13 +1901,13 @@ function RoomContent() {
                                 <div className="border-line flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border pr-1 pl-3">
                                     <span className="text-ink min-w-0 truncate text-xs font-semibold">
                                         {currentMe?.seat_color
-                                            ? 'Siap bermain'
+                                            ? 'Ready'
                                             : 'Pilih kursi'}
                                     </span>
                                     <button
                                         type="button"
                                         role="switch"
-                                        aria-label="Siap bermain"
+                                        aria-label="Ready"
                                         aria-checked={Boolean(
                                             currentMe?.is_ready,
                                         )}
