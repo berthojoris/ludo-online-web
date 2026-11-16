@@ -679,6 +679,37 @@ export default function LudoBoard({
                 )}
             </div>
 
+            <div className="pointer-events-none absolute inset-0 z-[20]">
+                {(spec.isRadial
+                    ? spec.wedges.map((wedge) => ({
+                          color: wedge.color,
+                          x: wedge.basePads.reduce((sum, pad) => sum + pad.x, 0) / wedge.basePads.length,
+                          y: Math.min(...wedge.basePads.map((pad) => pad.y)) - 10,
+                      }))
+                    : QUADRANTS.map(({ color, row, col }) => ({
+                          color,
+                          x: (col + 3) * CELL_SIZE,
+                          y: row * CELL_SIZE + 2,
+                      })))
+                    .map(({ color, x, y }) => {
+                        const bubble = chatBubbles[color];
+                        if (!bubble) return null;
+
+                        return (
+                            <div
+                                key={`${color}-${bubble.id}`}
+                                className="home-chat-bubble"
+                                style={{ left: `${Math.max(24, Math.min(76, x))}%`, top: `${Math.max(2, Math.min(66, y))}%` }}
+                            >
+                                <svg className="home-chat-bubble__cloud" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                                    <path d="M 16 84 C 6 84 3 75 4 63 C 4 51 9 43 16 42 C 15 28 22 18 32 20 C 38 7 53 5 61 17 C 72 10 84 19 84 33 C 94 34 98 44 97 57 C 99 73 93 84 83 84 C 78 93 67 95 59 89 C 50 97 38 95 32 89 C 25 94 19 91 16 84 Z" />
+                                </svg>
+                                <div className="home-chat-bubble__message" tabIndex={0}>{bubble.message}</div>
+                            </div>
+                        );
+                    })}
+            </div>
+
             {/* Tokens live outside the clipped board so tall pions on the top row keep their crowns. */}
             <div className="pointer-events-none absolute inset-0 z-[5]">
                 {tokens.map((token) => {
@@ -706,10 +737,7 @@ export default function LudoBoard({
                     const depth =
                         Math.round(topPercent * 4) +
                         (dy > 0 ? 2 : dy < 0 ? 0 : 1);
-                    const hasChatBubble = token.id === `${token.color}-0` && Boolean(chatBubbles[token.color]);
-                    const zIndex = hasChatBubble
-                        ? 3000 + depth
-                        : token.returning
+                    const zIndex = token.returning
                         ? 1500 + depth
                         : token.moving
                           ? 1000 + depth
@@ -762,11 +790,6 @@ export default function LudoBoard({
                             }`}
                             style={positionStyle}
                         >
-                            {hasChatBubble && (
-                                <div className={`pion-chat-bubble ${leftPercent < 25 ? 'pion-chat-bubble--left' : leftPercent > 75 ? 'pion-chat-bubble--right' : ''}`}>
-                                    {chatBubbles[token.color]?.message}
-                                </div>
-                            )}
                             {token.onClick ? (
                                 <button
                                     type="button"
