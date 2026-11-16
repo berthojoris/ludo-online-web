@@ -200,10 +200,23 @@ class RoomController extends Controller
                 }
             }
 
+            $takenCharacters = $seatColor === null
+                ? []
+                : self::charactersTakenByOthers($lockedRoom, $player);
+
+            if ($character !== null && in_array($character, $takenCharacters, true)) {
+                throw ValidationException::withMessages([
+                    'character' => 'Karakter ini sudah dipilih pemain lain.',
+                ]);
+            }
+
             $player->seat_color = $seatColor;
             $player->character = $seatColor === null
                 ? null
-                : ($character ?? $player->character ?? (Room::DEFAULT_CHARACTER_BY_COLOR[$seatColor] ?? 'ignivar'));
+                : ($character ?? self::firstFreeCharacter($takenCharacters, [
+                    $player->character,
+                    Room::DEFAULT_CHARACTER_BY_COLOR[$seatColor] ?? null,
+                ]));
             // Taking a seat opts the player in right away; they can still
             // switch themselves back to "not ready" from the lobby.
             $player->is_ready = $seatColor !== null;
@@ -214,6 +227,39 @@ class RoomController extends Controller
         $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
+    }
+
+    /**
+     * Characters held by the other seated players, using the same seat
+     * default the lobby payload shows when no character is stored.
+     *
+     * @return list<string>
+     */
+    private static function charactersTakenByOthers(Room $room, RoomPlayer $player): array
+    {
+        return $room->players()
+            ->where('id', '!=', $player->id)
+            ->whereNotNull('seat_color')
+            ->get()
+            ->map(fn (RoomPlayer $other) => $other->character ?? (Room::DEFAULT_CHARACTER_BY_COLOR[$other->seat_color] ?? 'ignivar'))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $takenCharacters
+     * @param  list<string|null>  $preferredCharacters
+     */
+    private static function firstFreeCharacter(array $takenCharacters, array $preferredCharacters): string
+    {
+        foreach ([...$preferredCharacters, ...Room::ALL_CHARACTERS] as $candidate) {
+            if ($candidate !== null && ! in_array($candidate, $takenCharacters, true)) {
+                return $candidate;
+            }
+        }
+
+        return Room::ALL_CHARACTERS[0];
     }
 
     public function updateName(Request $request, string $code): RedirectResponse

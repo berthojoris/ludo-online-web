@@ -30,13 +30,17 @@ export default function CharacterSelectModal({
     onClose,
     onConfirm,
 }: CharacterSelectModalProps) {
-    const resolvedDefault =
+    const preferredCharacter =
         initialCharacter &&
         CHARACTER_LIST.some((item) => item.id === initialCharacter)
             ? (initialCharacter as CharacterId)
             : seatColor
               ? DEFAULT_CHARACTER_BY_COLOR[seatColor]
               : 'ignivar';
+    const resolvedDefault: CharacterId = takenCharacters[preferredCharacter]
+        ? (CHARACTER_LIST.find((item) => !takenCharacters[item.id])?.id ??
+          preferredCharacter)
+        : preferredCharacter;
 
     const [selectedId, setSelectedId] = useState<CharacterId>(resolvedDefault);
     const overlayStyle = useModalViewport(open);
@@ -70,6 +74,7 @@ export default function CharacterSelectModal({
     const selectedChar = getCharacterConfig(selectedId, seatColor ?? 'red');
     const charPalette = PLAYER_CONFIG[selectedChar.accentColor].palette;
     const seatConfig = seatColor ? PLAYER_CONFIG[seatColor] : null;
+    const selectedTakenBy = takenCharacters[selectedId];
 
     return (
         <div
@@ -161,6 +166,7 @@ export default function CharacterSelectModal({
                                 PLAYER_CONFIG[char.accentColor].palette;
                             const isSelected = selectedId === char.id;
                             const usedBy = takenCharacters[char.id];
+                            const isTaken = Boolean(usedBy);
 
                             return (
                                 <button
@@ -168,12 +174,24 @@ export default function CharacterSelectModal({
                                     type="button"
                                     role="radio"
                                     aria-checked={isSelected}
-                                    disabled={processing}
+                                    aria-label={
+                                        isTaken
+                                            ? `${char.name}, sudah dipilih ${usedBy}`
+                                            : char.name
+                                    }
+                                    title={
+                                        isTaken
+                                            ? `Sudah dipilih ${usedBy}`
+                                            : undefined
+                                    }
+                                    disabled={processing || isTaken}
                                     onClick={() => setSelectedId(char.id)}
                                     className={`group relative flex cursor-pointer flex-col items-center rounded-2xl p-1 transition-[background-color,box-shadow,opacity] duration-150 disabled:cursor-not-allowed ${
-                                        isSelected
-                                            ? ''
-                                            : 'opacity-85 hover:opacity-100'
+                                        isTaken
+                                            ? 'opacity-55 grayscale'
+                                            : isSelected
+                                              ? ''
+                                              : 'opacity-85 hover:opacity-100'
                                     }`}
                                     style={{
                                         background: isSelected
@@ -205,11 +223,20 @@ export default function CharacterSelectModal({
                                             alt={char.name}
                                             width={96}
                                             height={120}
-                                            className="h-full w-full object-cover object-center transition-transform duration-200 group-hover:scale-105"
+                                            className={`h-full w-full object-cover object-center transition-transform duration-200 ${
+                                                isTaken
+                                                    ? ''
+                                                    : 'group-hover:scale-105'
+                                            }`}
                                         />
-                                        {usedBy && !isSelected && (
-                                            <span className="bg-ink/75 absolute inset-x-1 top-1 truncate rounded-full px-1 py-px text-center text-[8px] font-bold text-white">
-                                                {usedBy}
+                                        {isTaken && (
+                                            <span className="bg-ink/80 absolute inset-x-1 bottom-1 flex flex-col items-center rounded-lg px-1 py-0.5 text-center leading-tight text-white">
+                                                <span className="text-[9px] font-extrabold uppercase">
+                                                    Dipakai
+                                                </span>
+                                                <span className="w-full truncate text-[9px] font-semibold">
+                                                    {usedBy}
+                                                </span>
                                             </span>
                                         )}
                                     </div>
@@ -259,26 +286,6 @@ export default function CharacterSelectModal({
                                 height={190}
                                 className="relative z-10 h-full w-full object-contain p-1.5 drop-shadow-[0_10px_16px_rgba(20,32,52,0.28)]"
                             />
-                            <figure className="absolute right-1.5 bottom-1.5 z-20 m-0 flex h-[48%] flex-col items-center rounded-xl bg-white/85 px-1 pt-1 pb-0.5 shadow-[0_6px_14px_-6px_rgba(20,32,52,0.45)] backdrop-blur-sm sm:right-2 sm:bottom-2">
-                                <img
-                                    key={selectedChar.id}
-                                    src={selectedChar.pion}
-                                    alt={`Pion ${selectedChar.name}`}
-                                    width={192}
-                                    height={320}
-                                    draggable={false}
-                                    className="animate-token-pop min-h-0 w-auto flex-1 object-contain drop-shadow-[0_4px_5px_rgba(20,32,52,0.35)]"
-                                />
-                                <figcaption
-                                    className="mt-0.5 rounded-md px-1.5 text-[9px] leading-tight font-extrabold tracking-wide uppercase"
-                                    style={{
-                                        background: charPalette.soft,
-                                        color: charPalette.text,
-                                    }}
-                                >
-                                    Pion
-                                </figcaption>
-                            </figure>
                         </div>
 
                         {/* Right Info & Action */}
@@ -325,9 +332,19 @@ export default function CharacterSelectModal({
                                 </ul>
                             </div>
 
+                            {selectedTakenBy && (
+                                <p
+                                    role="status"
+                                    className="text-danger mt-3 text-xs font-bold"
+                                >
+                                    {selectedChar.name} sudah dipilih{' '}
+                                    {selectedTakenBy}. Pilih karakter lain.
+                                </p>
+                            )}
+
                             <button
                                 type="button"
-                                disabled={processing}
+                                disabled={processing || Boolean(selectedTakenBy)}
                                 aria-busy={processing}
                                 onClick={() =>
                                     onConfirm(selectedChar.id, seatColor)

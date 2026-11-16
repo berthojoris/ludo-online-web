@@ -735,7 +735,22 @@ class RoomFlowTest extends TestCase
             'character' => 'unknown_dragon',
         ])->assertSessionHasErrors('character');
 
-        foreach (Room::ALL_CHARACTERS as $character) {
+        // A character already used by another player cannot be picked again
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => 'green',
+            'character' => 'solgarde',
+        ])->assertSessionHasErrors('character');
+        $this->assertNull($room->players()->where('is_host', false)->value('seat_color'));
+
+        // Sitting on a seat whose default character is taken falls back to a free one
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => 'yellow',
+        ])->assertRedirect();
+        $guest = $room->players()->where('is_host', false)->firstOrFail();
+        $this->assertSame('yellow', $guest->seat_color);
+        $this->assertNotSame('solgarde', $guest->character);
+
+        foreach (array_diff(Room::ALL_CHARACTERS, ['solgarde']) as $character) {
             $this->post("/rooms/{$room->code}/seat", [
                 'seat_color' => 'green',
                 'character' => $character,
