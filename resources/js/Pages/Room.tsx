@@ -1,6 +1,7 @@
 import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
+import RequiredPlayerNameModal from '@/Components/Game/RequiredPlayerNameModal';
 import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
@@ -49,6 +50,7 @@ type RoomPlayerData = {
     is_ready: boolean;
     is_host: boolean;
     is_computer?: boolean;
+    name_confirmed: boolean;
 };
 
 type RoomData = {
@@ -417,7 +419,8 @@ function RoomContent() {
     const allSeated =
         players.length > 0 && players.every((p) => p.seat_color !== null);
     const allReady =
-        players.length >= 2 && allSeated && players.every((p) => p.is_ready);
+        players.length >= 2 && allSeated && players.every((p) => p.is_ready && (p.is_computer || p.name_confirmed));
+    const waitingForNames = players.some((p) => !p.is_computer && !p.name_confirmed);
 
     const takenCharacters = useMemo(() => {
         const map: Partial<Record<CharacterId, string>> = {};
@@ -434,6 +437,8 @@ function RoomContent() {
             ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
             : !allSeated
               ? 'Semua pemain harus memilih kursi terlebih dahulu.'
+              : waitingForNames
+                ? 'Menunggu semua pemain mengisi nama.'
               : !allReady
                 ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
                 : null;
@@ -1984,6 +1989,11 @@ function RoomContent() {
                     </main>
                 )}
             </div>
+
+            <RequiredPlayerNameModal
+                open={Boolean(liveRoom && currentMe?.seat_color && !currentMe.name_confirmed && liveRoom.status === 'waiting') && !characterModalOpen}
+                roomCode={liveRoom?.code ?? ''}
+            />
 
             <CharacterSelectModal
                 open={characterModalOpen}

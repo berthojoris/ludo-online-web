@@ -706,7 +706,10 @@ export default function LudoBoard({
                     const depth =
                         Math.round(topPercent * 4) +
                         (dy > 0 ? 2 : dy < 0 ? 0 : 1);
-                    const zIndex = token.returning
+                    const hasChatBubble = token.id === `${token.color}-0` && Boolean(chatBubbles[token.color]);
+                    const zIndex = hasChatBubble
+                        ? 3000 + depth
+                        : token.returning
                         ? 1500 + depth
                         : token.moving
                           ? 1000 + depth
@@ -759,8 +762,10 @@ export default function LudoBoard({
                             }`}
                             style={positionStyle}
                         >
-                            {token.id === `${token.color}-0` && chatBubbles[token.color] && (
-                                <div className="pion-chat-bubble">{chatBubbles[token.color]?.message}</div>
+                            {hasChatBubble && (
+                                <div className={`pion-chat-bubble ${leftPercent < 25 ? 'pion-chat-bubble--left' : leftPercent > 75 ? 'pion-chat-bubble--right' : ''}`}>
+                                    {chatBubbles[token.color]?.message}
+                                </div>
                             )}
                             {token.onClick ? (
                                 <button

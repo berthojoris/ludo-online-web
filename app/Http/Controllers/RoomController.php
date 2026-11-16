@@ -325,7 +325,7 @@ class RoomController extends Controller
             abort(403, 'Kamu belum bergabung ke ruang ini.');
         }
 
-        return $this->savePlayerName($room, $player, $validated['name']);
+        return $this->savePlayerName($room, $player, $validated['name'], true);
     }
 
     public function updatePlayerName(Request $request, string $code, int $player): RedirectResponse
@@ -346,7 +346,7 @@ class RoomController extends Controller
         return $this->savePlayerName($room, $target, $validated['name']);
     }
 
-    private function savePlayerName(Room $room, RoomPlayer $player, string $rawName): RedirectResponse
+    private function savePlayerName(Room $room, RoomPlayer $player, string $rawName, bool $confirmedByPlayer = false): RedirectResponse
     {
         $cleanName = trim($rawName);
         if ($cleanName === '') {
@@ -355,7 +355,16 @@ class RoomController extends Controller
             ]);
         }
 
+        if ($confirmedByPlayer && in_array(mb_strtolower($cleanName), ['host', 'tamu', 'tuan rumah'], true)) {
+            throw ValidationException::withMessages([
+                'name' => 'Masukkan nama selain nama default.',
+            ]);
+        }
+
         $player->name = $cleanName;
+        if ($confirmedByPlayer) {
+            $player->name_confirmed = true;
+        }
         $player->save();
 
         $room->refresh()->load('players');
@@ -421,6 +430,12 @@ class RoomController extends Controller
         if ($players->contains(fn (RoomPlayer $p) => $p->seat_color === null)) {
             throw ValidationException::withMessages([
                 'start' => 'Semua pemain harus memilih kursi terlebih dahulu.',
+            ]);
+        }
+
+        if ($players->contains(fn (RoomPlayer $p) => ! $p->is_computer && ! $p->name_confirmed)) {
+            throw ValidationException::withMessages([
+                'start' => 'Semua pemain harus mengisi nama sendiri sebelum permainan dimulai.',
             ]);
         }
 

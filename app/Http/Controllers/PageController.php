@@ -136,6 +136,7 @@ class PageController extends Controller
                         $idle->resume_token = Str::random(40);
                         $idle->user_id = $request->user()?->id;
                         $idle->name = RoomController::defaultPlayerName($request);
+                        $idle->name_confirmed = false;
                         $idle->character = null;
                         $idle->is_ready = false;
                         $idle->save();
@@ -274,6 +275,7 @@ class PageController extends Controller
             'character' => $player->character ?? ($player->seat_color ? (Room::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null),
             'is_ready' => $player->is_ready,
             'is_host' => $player->is_host,
+            'name_confirmed' => $player->name_confirmed,
         ];
     }
 }

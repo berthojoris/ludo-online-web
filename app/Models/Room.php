@@ -104,6 +104,7 @@ class Room extends Model
                 'is_ready' => $player->is_ready,
                 'is_host' => $player->is_host,
                 'is_computer' => $player->is_computer,
+                'name_confirmed' => $player->name_confirmed,
             ])->values()->all(),
         ];
     }
