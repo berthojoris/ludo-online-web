@@ -26,8 +26,9 @@ function isFullscreenActive(): boolean {
  * The same button (or Escape) brings the app back to its default window.
  */
 export default function FullscreenToggle({
-    className = '',
+    className,
 }: {
+    /** Replaces the default round button styling when provided. */
     className?: string;
 }) {
     const [supported, setSupported] = useState(false);
@@ -93,7 +94,10 @@ export default function FullscreenToggle({
             aria-pressed={active}
             aria-label={label}
             title={label}
-            className={`border-line text-ink-muted hover:text-ink grid h-8 w-8 place-items-center rounded-full border bg-white transition ${className}`}
+            className={
+                className ??
+                'border-line text-ink-muted hover:text-ink grid h-8 w-8 place-items-center rounded-full border bg-white transition'
+            }
         >
             {active ? (
                 <CollapseIcon className="h-4 w-4" />

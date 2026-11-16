@@ -135,6 +135,17 @@ export function TrophyIcon(props: IconProps) {
     );
 }
 
+export function PawnIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <circle cx="12" cy="6.5" r="3" />
+            <path d="M9.6 9.6 8.5 15h7l-1.1-5.4" />
+            <path d="M6.5 19.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v.5h-11v-.5Z" />
+            <path d="M8.5 15h7v2.5h-7z" />
+        </svg>
+    );
+}
+
 export function SparklesIcon(props: IconProps) {
     return (
         <svg {...base} {...props}>

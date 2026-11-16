@@ -13,8 +13,8 @@ import {
     HashIcon,
     InfoIcon,
     LinkIcon,
+    PawnIcon,
     PencilIcon,
-    SparklesIcon,
     TrophyIcon,
     UsersIcon,
 } from '@/Components/Game/Icons';
@@ -124,7 +124,7 @@ function RoomSettingsSummary({
                         </span>
                     )}
                 </div>
-                <div className="border-line bg-canvas mt-1.5 grid grid-cols-3 gap-1 rounded-xl border p-1">
+                <div className="segmented mt-1.5 grid grid-cols-3">
                     {PLAYER_COUNTS.map((count) => (
                         <button
                             key={count}
@@ -132,11 +132,7 @@ function RoomSettingsSummary({
                             disabled={!isHost || pending}
                             onClick={() => onSelectPlayerCount(count)}
                             aria-pressed={playerCount === count}
-                            className={`h-8 rounded-lg text-[11px] font-semibold transition disabled:cursor-not-allowed ${
-                                playerCount === count
-                                    ? 'text-ink bg-white shadow-sm'
-                                    : 'text-ink-muted hover:text-ink disabled:opacity-50'
-                            }`}
+                            className="segmented-item px-1 text-[11px] sm:text-xs"
                         >
                             {count} Pemain
                         </button>
@@ -163,9 +159,14 @@ function RoomSettingsSummary({
                         aria-busy={pending}
                         disabled={!isHost || pending}
                         onClick={onToggleAdvantage}
-                        className={`focus-visible:ring-primary flex h-10 min-w-13 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
+                        className="switch"
                     >
-                        {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
+                        <span className="w-6 text-right tabular-nums">
+                            {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
+                        </span>
+                        <span aria-hidden="true" className="switch-track">
+                            <span className="switch-thumb" />
+                        </span>
                     </button>
                 </div>
             )}
@@ -760,14 +761,14 @@ function RoomContent() {
                     className="pointer-events-none absolute inset-0 bg-gradient-to-b from-sky-950/15 via-white/30 to-white/65 backdrop-blur-[1.5px]"
                 />
 
-                <header className="border-white/60 relative z-20 shrink-0 border-b bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+                <header className="relative z-20 shrink-0 border-b border-white/60 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
                     <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:h-14 sm:px-6">
                         <div className="flex min-w-0 items-center gap-2">
                             <Link
                                 href={route('home')}
                                 onClick={exitGuard.blockLink}
                                 aria-label="Kembali ke beranda"
-                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition"
+                                className="btn btn-secondary btn-sm btn-icon shrink-0"
                             >
                                 <ChevronLeftIcon className="h-4 w-4" />
                             </Link>
@@ -789,14 +790,19 @@ function RoomContent() {
                                 </span>
                             </Link>
                             {liveRoom && viewMode === 'lobby' && (
-                                <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] uppercase lg:inline-flex">
-                                    Ruang #{liveRoom.code}
+                                <span className="border-line text-ink hidden items-baseline gap-1.5 rounded-lg border bg-white px-2.5 py-1 lg:inline-flex">
+                                    <span className="text-ink-muted text-[10px] font-semibold tracking-wide uppercase">
+                                        Ruang
+                                    </span>
+                                    <span className="font-mono text-xs font-bold tracking-[0.06em]">
+                                        #{liveRoom.code}
+                                    </span>
                                 </span>
                             )}
                         </div>
 
                         <div
-                            className="border-line bg-canvas inline-flex shrink-0 items-center rounded-full border p-0.5"
+                            className="segmented shrink-0"
                             role="tablist"
                             aria-label="Mode ruang"
                         >
@@ -805,11 +811,7 @@ function RoomContent() {
                                 role="tab"
                                 aria-selected={viewMode === 'lobby'}
                                 onClick={() => switchMode('lobby')}
-                                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                    viewMode === 'lobby'
-                                        ? 'text-ink bg-white shadow-sm'
-                                        : 'text-ink-muted hover:text-ink'
-                                }`}
+                                className="segmented-item min-h-8 px-2.5 sm:min-h-9 sm:px-3"
                             >
                                 Meja
                             </button>
@@ -818,11 +820,7 @@ function RoomContent() {
                                 role="tab"
                                 aria-selected={viewMode === 'join'}
                                 onClick={() => switchMode('join')}
-                                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                                    viewMode === 'join'
-                                        ? 'text-ink bg-white shadow-sm'
-                                        : 'text-ink-muted hover:text-ink'
-                                }`}
+                                className="segmented-item min-h-8 px-2.5 sm:min-h-9 sm:px-3"
                             >
                                 Gabung
                             </button>
@@ -837,7 +835,7 @@ function RoomContent() {
                                         setRulesModalOpen(true);
                                     }}
                                     aria-label="Lihat aturan main"
-                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-xs font-semibold transition"
+                                    className="btn btn-secondary btn-sm min-w-9 px-2 min-[380px]:px-2.5"
                                 >
                                     <InfoIcon className="h-3.5 w-3.5" />
                                     <span className="hidden min-[380px]:inline">
@@ -857,14 +855,14 @@ function RoomContent() {
                                     ? 'Semua siap'
                                     : `${readyCount}/${occupiedCount} Siap`}
                             </span>
-                            <FullscreenToggle />
+                            <FullscreenToggle className="btn btn-secondary btn-sm btn-icon" />
                         </div>
                     </div>
                 </header>
 
                 {joinBlocked ? (
                     <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
-                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
+                        <div className="animate-modal-enter shadow-card w-full max-w-md rounded-[24px] border border-white/85 bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-danger/10 text-danger grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5.5 w-5.5" />
@@ -892,7 +890,7 @@ function RoomContent() {
                             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
                                 <Link
                                     href={route('home')}
-                                    className="border-line text-ink hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                                    className="btn btn-secondary flex-1"
                                 >
                                     Kembali ke beranda
                                 </Link>
@@ -902,7 +900,7 @@ function RoomContent() {
                                         setActionError(null);
                                         setJoinCode('');
                                     }}
-                                    className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
+                                    className="btn btn-primary flex-1"
                                 >
                                     Masukkan kode lain
                                 </button>
@@ -911,7 +909,7 @@ function RoomContent() {
                     </main>
                 ) : viewMode === 'join' || !liveRoom ? (
                     <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl flex-1 items-center justify-center px-3 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-6">
-                        <div className="animate-modal-enter border-white/85 shadow-card w-full max-w-md rounded-[24px] border bg-white/95 p-5 backdrop-blur-md sm:p-7">
+                        <div className="animate-modal-enter shadow-card w-full max-w-md rounded-[24px] border border-white/85 bg-white/95 p-5 backdrop-blur-md sm:p-7">
                             <div className="flex items-center gap-3">
                                 <span className="bg-brand/10 text-brand-ink grid h-11 w-11 shrink-0 place-items-center rounded-2xl">
                                     <HashIcon className="h-5.5 w-5.5" />
@@ -979,7 +977,7 @@ function RoomContent() {
                                 <button
                                     type="submit"
                                     disabled={joinCode.length !== 6}
-                                    className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.75)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
+                                    className="btn btn-primary mt-5 min-h-12 w-full gap-2 rounded-[14px] text-sm"
                                 >
                                     Masuk ke ruang
                                     <ArrowRightIcon className="h-4 w-4" />
@@ -995,13 +993,13 @@ function RoomContent() {
                                     onClick={handleCreateNewRoom}
                                     disabled={pendingAction}
                                     aria-busy={pendingAction}
-                                    className="text-brand-ink font-semibold hover:underline"
+                                    className="btn btn-secondary btn-sm text-brand-ink"
                                 >
                                     {pendingAction ? (
                                         <>
                                             <span
                                                 aria-hidden="true"
-                                                className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                                className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
                                             />
                                             Membuat ruang…
                                         </>
@@ -1013,7 +1011,7 @@ function RoomContent() {
                         </div>
                     </main>
                 ) : (
-                    <main className="relative z-10 mx-auto flex min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col pt-2 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-3 sm:pb-4">
+                    <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col pt-2 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-3 sm:pb-4">
                         <div
                             className={`grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-3.5 md:my-auto md:grid-cols-[minmax(0,1fr)_316px] lg:grid-cols-[minmax(0,1fr)_344px] ${
                                 playerCount >= 5
@@ -1022,17 +1020,11 @@ function RoomContent() {
                             }`}
                         >
                             <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-2.5 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
-                                {/* Hero Room Code & Crowned Dice Banner */}
-                                <div className="border-white/85 shadow-card relative flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 overflow-hidden rounded-2xl border bg-white/92 px-2.5 py-2 backdrop-blur-md sm:px-4 sm:py-2.5">
+                                {/* Room code banner */}
+                                <div className="shadow-card relative flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 overflow-hidden rounded-2xl border border-white/85 bg-white/92 px-2.5 py-2 backdrop-blur-md sm:px-4 sm:py-2.5">
                                     <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                                        {/* Crowned Dice Emblem */}
-                                        <div className="relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 via-sky-50 to-indigo-100 shadow-inner min-[380px]:flex sm:h-12 sm:w-12">
-                                            <span
-                                                aria-hidden="true"
-                                                className="text-ludo-yellow absolute -top-1.5 z-10 drop-shadow-xs"
-                                            >
-                                                <TrophyIcon className="h-4 w-4" />
-                                            </span>
+                                        {/* A six is what lets a piece leave base, so the lobby shows one. */}
+                                        <div className="border-line bg-canvas relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border min-[380px]:flex sm:h-12 sm:w-12">
                                             <Dice
                                                 value={6}
                                                 className="h-7 w-7 sm:h-8 sm:w-8"
@@ -1041,10 +1033,15 @@ function RoomContent() {
 
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                <span className="inline-flex items-center rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-2.5 py-0.5 font-mono text-xs font-extrabold tracking-[0.14em] text-white shadow-xs sm:px-3 sm:text-sm">
-                                                    RUANG #{liveRoom.code}
+                                                <span className="border-line bg-canvas text-ink inline-flex items-baseline gap-1.5 rounded-lg border px-2 py-0.5 sm:px-2.5">
+                                                    <span className="text-ink-muted text-[10px] font-semibold tracking-wide uppercase">
+                                                        Ruang
+                                                    </span>
+                                                    <span className="font-mono text-xs font-bold tracking-[0.06em] sm:text-sm">
+                                                        #{liveRoom.code}
+                                                    </span>
                                                 </span>
-                                                <span className="border-line bg-canvas text-ink-muted inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums">
+                                                <span className="border-line bg-canvas text-ink-muted inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-semibold tabular-nums">
                                                     <UsersIcon className="h-3 w-3" />
                                                     {occupiedCount}/
                                                     {playerCount}
@@ -1069,9 +1066,9 @@ function RoomContent() {
                                                             activeSeats[0],
                                                     )
                                                 }
-                                                className="border-brand/30 bg-brand/10 text-brand-ink hover:bg-brand/15 inline-flex h-10 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-bold transition sm:h-11 sm:px-3"
+                                                className="btn btn-secondary min-h-10 px-2.5 sm:min-h-11 sm:px-3"
                                             >
-                                                <SparklesIcon className="h-3.5 w-3.5" />
+                                                <PawnIcon className="h-4 w-4" />
                                                 <span className="hidden min-[420px]:inline">
                                                     Pilih Karakter
                                                 </span>
@@ -1085,7 +1082,7 @@ function RoomContent() {
                                             onClick={() =>
                                                 copy(liveRoom.code, 'code')
                                             }
-                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 items-center gap-1 rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:px-3"
+                                            className="btn btn-quiet min-h-10 px-2.5 sm:min-h-11 sm:px-3"
                                         >
                                             {copyState === 'code' ? (
                                                 <>
@@ -1105,7 +1102,7 @@ function RoomContent() {
                                                 copy(shareLink, 'link')
                                             }
                                             aria-label="Undang teman dengan menyalin tautan ruang"
-                                            className="bg-ludo-red hover:bg-ludo-red/90 inline-flex h-10 min-w-10 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-bold text-white shadow-xs transition sm:h-11 sm:min-w-11 sm:px-3.5"
+                                            className="btn btn-secondary min-h-10 min-w-10 px-2.5 sm:min-h-11 sm:min-w-11 sm:px-3.5"
                                         >
                                             {copyState === 'link' ? (
                                                 <>
@@ -1130,7 +1127,7 @@ function RoomContent() {
                                 </div>
 
                                 {/* Joined players & display name bar */}
-                                <div className="border-white/85 shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border bg-white/92 px-2.5 py-2 backdrop-blur-md sm:gap-3 sm:px-4 sm:py-2.5">
+                                <div className="shadow-card flex min-w-0 shrink-0 items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/92 px-2.5 py-2 backdrop-blur-md sm:gap-3 sm:px-4 sm:py-2.5">
                                     <div
                                         className={`min-w-0 flex-1 ${editingName ? 'hidden sm:block' : ''}`}
                                     >
@@ -1237,7 +1234,7 @@ function RoomContent() {
                                                                     player,
                                                                 )
                                                             }
-                                                            className="border-line bg-canvas hover:border-brand/40 hover:bg-surface-muted inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition disabled:opacity-50 sm:text-xs"
+                                                            className="chip-btn sm:text-xs"
                                                         >
                                                             {pillContent}
                                                         </button>
@@ -1247,7 +1244,7 @@ function RoomContent() {
                                                 return (
                                                     <span
                                                         key={player.id}
-                                                        className="border-line bg-canvas inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:text-xs"
+                                                        className="border-line bg-canvas inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-[10px] border px-2.5 text-[11px] font-semibold sm:text-xs"
                                                     >
                                                         {pillContent}
                                                     </span>
@@ -1295,7 +1292,7 @@ function RoomContent() {
                                                         aria-busy={
                                                             pendingAction
                                                         }
-                                                        className="bg-brand hover:bg-brand-dark inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white transition disabled:opacity-50 sm:h-11"
+                                                        className="btn btn-primary min-h-10 shrink-0 px-3 sm:min-h-11"
                                                     >
                                                         {pendingAction ? (
                                                             <>
@@ -1319,7 +1316,7 @@ function RoomContent() {
                                                                 currentMe.name,
                                                             );
                                                         }}
-                                                        className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center justify-center rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11"
+                                                        className="btn btn-quiet min-h-10 shrink-0 px-2.5 sm:min-h-11"
                                                     >
                                                         Batal
                                                     </button>
@@ -1334,7 +1331,7 @@ function RoomContent() {
                                                     );
                                                     setEditingName(true);
                                                 }}
-                                                className="border-line text-ink hover:bg-surface-muted inline-flex h-10 shrink-0 items-center justify-center rounded-xl border bg-white px-2.5 text-xs font-semibold transition sm:h-11 sm:px-3.5"
+                                                className="btn btn-secondary min-h-10 shrink-0 px-2.5 sm:min-h-11 sm:px-3.5"
                                             >
                                                 Ubah nama
                                             </button>
@@ -1403,13 +1400,14 @@ function RoomContent() {
                                             occupant !== undefined &&
                                             occupant.id === currentMe?.id;
                                         const occupied = Boolean(occupant);
-                                        const seatCharacter = getCharacterConfig(
-                                            occupant?.character ??
-                                                DEFAULT_CHARACTER_BY_COLOR[
-                                                    color
-                                                ],
-                                            color,
-                                        );
+                                        const seatCharacter =
+                                            getCharacterConfig(
+                                                occupant?.character ??
+                                                    DEFAULT_CHARACTER_BY_COLOR[
+                                                        color
+                                                    ],
+                                                color,
+                                            );
 
                                         const tokenStyle = {
                                             '--token-light': palette.light,
@@ -1422,7 +1420,7 @@ function RoomContent() {
                                                 key={color}
                                                 className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-3 ${
                                                     occupied
-                                                        ? 'border-white/90 shadow-card bg-white/95 backdrop-blur-md'
+                                                        ? 'shadow-card border-white/90 bg-white/95 backdrop-blur-md'
                                                         : 'border-white/75 bg-white/82 backdrop-blur-sm hover:bg-white/95'
                                                 }`}
                                                 style={
@@ -1576,9 +1574,9 @@ function RoomContent() {
                                                                     }
                                                                     aria-label="Ganti karakter"
                                                                     title="Ganti karakter"
-                                                                    className="border-brand bg-brand hover:bg-brand-dark inline-flex h-10 items-center gap-1 rounded-xl border px-2 text-[11px] font-semibold text-white shadow-xs transition sm:h-11 sm:px-2.5"
+                                                                    className="btn btn-secondary min-h-10 w-10 px-0 sm:min-h-11 sm:w-11 lg:w-auto lg:px-3"
                                                                 >
-                                                                    <SparklesIcon className="h-3.5 w-3.5 text-white" />
+                                                                    <PawnIcon className="h-4 w-4" />
                                                                     <span className="hidden lg:inline">
                                                                         Karakter
                                                                     </span>
@@ -1593,7 +1591,7 @@ function RoomContent() {
                                                                             null,
                                                                         )
                                                                     }
-                                                                    className="border-line text-ink-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-surface-muted px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
+                                                                    className="btn btn-quiet min-h-10 shrink-0 px-2.5 sm:min-h-11"
                                                                 >
                                                                     Berdiri
                                                                 </button>
@@ -1619,7 +1617,7 @@ function RoomContent() {
                                                                 }
                                                                 aria-label={`Ganti nama ${occupant.name}`}
                                                                 title={`Ganti nama ${occupant.name}`}
-                                                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-white transition disabled:opacity-50 sm:h-11 sm:w-11"
+                                                                className="btn btn-secondary btn-icon min-h-10 w-10 shrink-0 sm:min-h-11 sm:w-11"
                                                             >
                                                                 {renamingPlayerId ===
                                                                 occupant.id ? (
@@ -1645,9 +1643,19 @@ function RoomContent() {
                                                                     color,
                                                                 )
                                                             }
-                                                            className="border-brand bg-brand hover:bg-brand-dark inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-bold text-white shadow-xs transition min-[360px]:text-xs sm:h-11 sm:px-3"
+                                                            className="btn btn-seat min-h-10 min-w-0 flex-1 gap-1 px-2 sm:min-h-11 sm:px-3"
+                                                            style={
+                                                                {
+                                                                    '--seat-base':
+                                                                        palette.base,
+                                                                    '--seat-soft':
+                                                                        palette.soft,
+                                                                    '--seat-text':
+                                                                        palette.text,
+                                                                } as CSSProperties
+                                                            }
                                                         >
-                                                            <SparklesIcon className="h-3.5 w-3.5 shrink-0" />
+                                                            <PawnIcon className="h-4 w-4 shrink-0" />
                                                             <span className="truncate">
                                                                 Duduk & Pilih
                                                             </span>
@@ -1661,7 +1669,7 @@ function RoomContent() {
                                                                 )
                                                             }
                                                             aria-label={`Undang ke kursi ${config.label}`}
-                                                            className="bg-ludo-red hover:bg-ludo-red/90 inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-semibold text-white shadow-xs transition sm:h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
+                                                            className="btn btn-secondary min-h-10 w-10 shrink-0 px-0 sm:min-h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
                                                         >
                                                             <LinkIcon className="h-3.5 w-3.5" />
                                                             <span className="hidden sm:inline">
@@ -1677,7 +1685,7 @@ function RoomContent() {
                             </section>
 
                             <aside className="hidden min-h-0 flex-col md:flex">
-                                <section className="border-white/85 shadow-card flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[22px] border bg-white/94 p-4 backdrop-blur-md">
+                                <section className="shadow-card flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[22px] border border-white/85 bg-white/94 p-4 backdrop-blur-md">
                                     <div className="mb-3 flex items-center justify-between gap-2">
                                         <h1 className="text-ink text-base font-bold tracking-tight">
                                             Pemain ({occupiedCount}/
@@ -1688,7 +1696,7 @@ function RoomContent() {
                                                 type="button"
                                                 disabled={pendingAction}
                                                 onClick={handleCreateNewRoom}
-                                                className="bg-surface-muted text-ink-muted hover:text-ink rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition"
+                                                className="btn btn-quiet btn-sm text-[11px]"
                                             >
                                                 Ruang baru
                                             </button>
@@ -1817,10 +1825,12 @@ function RoomContent() {
                                             aria-pressed={Boolean(
                                                 currentMe?.is_ready,
                                             )}
-                                            className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-55 ${
-                                                currentMe?.is_ready
-                                                    ? 'border-success/25 bg-success/10 text-success-ink border'
-                                                    : 'border-line text-ink hover:bg-surface-muted border bg-white'
+                                            className={`btn ${
+                                                !currentMe?.seat_color
+                                                    ? 'btn-secondary'
+                                                    : currentMe.is_ready
+                                                      ? 'btn-success'
+                                                      : 'btn-primary'
                                             }`}
                                         >
                                             {!currentMe?.seat_color ? (
@@ -1843,7 +1853,7 @@ function RoomContent() {
                                                 }
                                                 onClick={handleStartMatch}
                                                 aria-busy={pendingAction}
-                                                className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted inline-flex h-11 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white shadow-[0_10px_24px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none"
+                                                className="btn btn-primary"
                                             >
                                                 <DiceIcon
                                                     className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
@@ -1869,7 +1879,7 @@ function RoomContent() {
                             </aside>
                         </div>
 
-                        <div className="border-white/85 shadow-card mt-2 min-w-0 shrink-0 rounded-2xl border bg-white/95 p-2 backdrop-blur-md md:hidden">
+                        <div className="shadow-card mt-2 min-w-0 shrink-0 rounded-2xl border border-white/85 bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex min-w-0 items-center gap-2">
                                 <button
                                     type="button"
@@ -1878,10 +1888,12 @@ function RoomContent() {
                                     }
                                     onClick={handleToggleReady}
                                     aria-pressed={Boolean(currentMe?.is_ready)}
-                                    className={`inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-55 ${
-                                        currentMe?.is_ready
-                                            ? 'border-success/25 bg-success/10 text-success-ink border'
-                                            : 'border-line text-ink hover:bg-surface-muted border bg-white'
+                                    className={`btn flex-1 px-3 ${
+                                        !currentMe?.seat_color
+                                            ? 'btn-secondary'
+                                            : currentMe.is_ready
+                                              ? 'btn-success'
+                                              : 'btn-primary'
                                     }`}
                                 >
                                     {!currentMe?.seat_color ? (
@@ -1902,7 +1914,7 @@ function RoomContent() {
                                         disabled={!allReady || pendingAction}
                                         onClick={handleStartMatch}
                                         aria-busy={pendingAction}
-                                        className="bg-brand hover:bg-brand-dark disabled:bg-surface-muted disabled:text-ink-muted inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed"
+                                        className="btn btn-primary flex-1 px-3"
                                     >
                                         <DiceIcon
                                             className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
@@ -1969,7 +1981,7 @@ function RoomContent() {
                                 type="button"
                                 onClick={() => setRulesModalOpen(false)}
                                 aria-label="Tutup aturan"
-                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 place-items-center rounded-full border bg-white transition"
+                                className="btn btn-quiet btn-sm btn-icon"
                             >
                                 <CloseIcon className="h-4 w-4" />
                             </button>
@@ -1992,7 +2004,7 @@ function RoomContent() {
                                     setRulesModalOpen(false);
                                     handleCreateNewRoom();
                                 }}
-                                className="border-line text-ink hover:bg-surface-muted mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                                className="btn btn-secondary mt-3 w-full"
                             >
                                 Buat ruang baru
                             </button>
@@ -2044,7 +2056,7 @@ function RoomContent() {
                                     setHostNameError(null);
                                 }}
                                 aria-label="Tutup ganti nama pemain"
-                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition disabled:opacity-50"
+                                className="btn btn-quiet btn-sm btn-icon shrink-0"
                             >
                                 <CloseIcon className="h-4 w-4" />
                             </button>
@@ -2092,7 +2104,7 @@ function RoomContent() {
                                     setHostEditingPlayer(null);
                                     setHostNameError(null);
                                 }}
-                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-11 flex-1 items-center justify-center rounded-xl border bg-white px-4 text-xs font-semibold transition disabled:opacity-50"
+                                className="btn btn-secondary flex-1 px-4"
                             >
                                 Batal
                             </button>
@@ -2103,7 +2115,7 @@ function RoomContent() {
                                     renamingPlayerId !== null
                                 }
                                 aria-busy={renamingPlayerId !== null}
-                                className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition disabled:opacity-50"
+                                className="btn btn-primary flex-1 px-4"
                             >
                                 {renamingPlayerId !== null ? (
                                     <>

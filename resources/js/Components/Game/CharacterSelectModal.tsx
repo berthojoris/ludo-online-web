@@ -1,11 +1,4 @@
-import {
-    ArrowRightIcon,
-    CheckIcon,
-    CloseIcon,
-    ShieldIcon,
-    SparklesIcon,
-    StarIcon,
-} from '@/Components/Game/Icons';
+import { CheckIcon, CloseIcon } from '@/Components/Game/Icons';
 import {
     ARENA_BACKGROUND_IMAGE,
     CHARACTER_LIST,
@@ -72,10 +65,7 @@ export default function CharacterSelectModal({
         return null;
     }
 
-    const selectedChar = getCharacterConfig(
-        selectedId,
-        seatColor ?? 'red',
-    );
+    const selectedChar = getCharacterConfig(selectedId, seatColor ?? 'red');
     const charPalette = PLAYER_CONFIG[selectedChar.accentColor].palette;
     const seatConfig = seatColor ? PLAYER_CONFIG[seatColor] : null;
 
@@ -92,7 +82,7 @@ export default function CharacterSelectModal({
                 }
             }}
         >
-            <div className="animate-modal-enter border-white/80 relative flex max-h-[calc(100dvh-20px)] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border-2 bg-gradient-to-b from-[#f4f8ff] to-white shadow-[0_28px_70px_-18px_rgba(18,30,52,0.48)]">
+            <div className="animate-modal-enter relative flex max-h-[calc(100dvh-20px)] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border-2 border-white/80 bg-gradient-to-b from-[#f4f8ff] to-white shadow-[0_28px_70px_-18px_rgba(18,30,52,0.48)]">
                 {/* Header */}
                 <div className="border-line/70 flex shrink-0 items-center justify-between gap-3 border-b bg-white/90 px-4 py-3 sm:px-6 sm:py-4">
                     <div className="flex min-w-0 items-center gap-3">
@@ -149,7 +139,7 @@ export default function CharacterSelectModal({
                         disabled={processing}
                         onClick={onClose}
                         aria-label="Tutup pilih karakter"
-                        className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full border bg-white transition disabled:opacity-50"
+                        className="btn btn-quiet btn-sm btn-icon shrink-0"
                     >
                         <CloseIcon className="h-4 w-4" />
                     </button>
@@ -177,9 +167,9 @@ export default function CharacterSelectModal({
                                     aria-checked={isSelected}
                                     disabled={processing}
                                     onClick={() => setSelectedId(char.id)}
-                                    className={`group relative flex flex-col items-center rounded-2xl p-1 transition duration-150 focus:outline-none ${
+                                    className={`group relative flex cursor-pointer flex-col items-center rounded-2xl p-1 transition-[background-color,box-shadow,opacity] duration-150 disabled:cursor-not-allowed ${
                                         isSelected
-                                            ? 'scale-[1.03]'
+                                            ? ''
                                             : 'opacity-85 hover:opacity-100'
                                     }`}
                                     style={{
@@ -187,8 +177,8 @@ export default function CharacterSelectModal({
                                             ? palette.soft
                                             : '#ffffff',
                                         boxShadow: isSelected
-                                            ? `0 0 0 2.5px ${palette.base}, 0 8px 18px -6px ${palette.base}66`
-                                            : 'inset 0 0 0 1px #e4e8ee',
+                                            ? `0 0 0 2px ${palette.base}, inset 0 -3px 0 ${palette.base}55`
+                                            : 'inset 0 0 0 1px #e4e8ee, inset 0 -2px 0 rgb(32 43 58 / 8%)',
                                     }}
                                 >
                                     {isSelected && (
@@ -222,8 +212,11 @@ export default function CharacterSelectModal({
                                     </div>
 
                                     <span
-                                        className="mt-1 w-full truncate rounded-full px-1.5 py-0.5 text-center text-[10px] font-extrabold text-white"
-                                        style={{ background: palette.base }}
+                                        className="mt-1 w-full truncate rounded-md px-1.5 py-0.5 text-center text-[10px] font-extrabold"
+                                        style={{
+                                            background: palette.soft,
+                                            color: palette.text,
+                                        }}
                                     >
                                         {char.name}
                                     </span>
@@ -273,9 +266,11 @@ export default function CharacterSelectModal({
                                         {selectedChar.name}
                                     </h3>
                                     <span
-                                        className="rounded-full px-2.5 py-0.5 text-xs font-extrabold text-white shadow-xs"
+                                        className="rounded-lg border px-2.5 py-0.5 text-xs font-extrabold"
                                         style={{
-                                            background: charPalette.base,
+                                            background: charPalette.soft,
+                                            borderColor: `${charPalette.base}40`,
+                                            color: charPalette.text,
                                         }}
                                     >
                                         {selectedChar.element}
@@ -286,39 +281,25 @@ export default function CharacterSelectModal({
                                     {selectedChar.description}
                                 </p>
 
-                                {/* 3 Trait Pills */}
-                                <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                    <span
-                                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                                        style={{
-                                            background: '#fde8ea',
-                                            color: '#a81f2b',
-                                        }}
-                                    >
-                                        <SparklesIcon className="h-3.5 w-3.5" />
-                                        {selectedChar.traits[0]}
-                                    </span>
-                                    <span
-                                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                                        style={{
-                                            background: '#fef6dc',
-                                            color: '#8a6400',
-                                        }}
-                                    >
-                                        <StarIcon className="h-3.5 w-3.5" />
-                                        {selectedChar.traits[1]}
-                                    </span>
-                                    <span
-                                        className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                                        style={{
-                                            background: '#e8f1fe',
-                                            color: '#1d56ac',
-                                        }}
-                                    >
-                                        <ShieldIcon className="h-3.5 w-3.5" />
-                                        {selectedChar.traits[2]}
-                                    </span>
-                                </div>
+                                {/* Traits use the character's own palette so each hero reads as one identity. */}
+                                <ul
+                                    className="mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2"
+                                    aria-label={`Sifat ${selectedChar.name}`}
+                                >
+                                    {selectedChar.traits.map((trait) => (
+                                        <li
+                                            key={trait}
+                                            className="rounded-lg border px-2.5 py-1 text-[11px] font-bold"
+                                            style={{
+                                                background: charPalette.soft,
+                                                borderColor: `${charPalette.base}40`,
+                                                color: charPalette.text,
+                                            }}
+                                        >
+                                            {trait}
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
 
                             <button
@@ -328,11 +309,7 @@ export default function CharacterSelectModal({
                                 onClick={() =>
                                     onConfirm(selectedChar.id, seatColor)
                                 }
-                                className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-extrabold text-white shadow-md transition active:scale-[0.99] enabled:hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60 sm:h-12"
-                                style={{
-                                    background: `linear-gradient(135deg, ${charPalette.base}, ${charPalette.dark})`,
-                                    boxShadow: `0 12px 24px -10px ${charPalette.dark}cc`,
-                                }}
+                                className="btn btn-primary mt-4 w-full gap-2 px-5 text-sm font-bold sm:min-h-12"
                             >
                                 {processing ? (
                                     <>
@@ -343,10 +320,7 @@ export default function CharacterSelectModal({
                                         Menyimpan karakter…
                                     </>
                                 ) : (
-                                    <>
-                                        <span>Gunakan Karakter Ini</span>
-                                        <ArrowRightIcon className="h-4 w-4" />
-                                    </>
+                                    <span>Gunakan Karakter Ini</span>
                                 )}
                             </button>
                         </div>

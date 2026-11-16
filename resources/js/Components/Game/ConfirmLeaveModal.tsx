@@ -113,7 +113,7 @@ export default function ConfirmLeaveModal({
                         type="button"
                         onClick={onCancel}
                         aria-label="Tutup konfirmasi"
-                        className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition"
+                        className="btn btn-quiet btn-sm btn-icon shrink-0"
                     >
                         <CloseIcon className="h-4 w-4" />
                     </button>
@@ -124,14 +124,14 @@ export default function ConfirmLeaveModal({
                         ref={cancelRef}
                         type="button"
                         onClick={onCancel}
-                        className="border-line text-ink hover:bg-surface-muted inline-flex h-10 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
+                        className="btn btn-secondary flex-1"
                     >
                         {cancelLabel}
                     </button>
                     <button
                         type="button"
                         onClick={onConfirm}
-                        className="bg-danger hover:bg-danger/90 inline-flex h-10 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
+                        className="btn btn-danger flex-1"
                     >
                         {confirmLabel}
                     </button>
