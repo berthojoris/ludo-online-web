@@ -16,7 +16,7 @@ class RoomFlowTest extends TestCase
     public function test_host_advantage_defaults_off_and_only_host_can_change_it_before_start(): void
     {
         Event::fake([RoomUpdated::class]);
-        $this->get('/room')->assertOk();
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
         $room = Room::firstOrFail();
         $hostToken = session('ludo_player_token');
         $this->assertFalse($room->host_advantage);
@@ -45,7 +45,7 @@ class RoomFlowTest extends TestCase
 
     public function test_existing_default_host_name_is_displayed_as_host(): void
     {
-        $this->get('/room')->assertOk();
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
         $room = Room::firstOrFail();
         $room->players()->update(['name' => 'Tuan Rumah']);
 
@@ -60,7 +60,7 @@ class RoomFlowTest extends TestCase
     {
         Event::fake([RoomUpdated::class]);
 
-        $this->get('/room')->assertOk();
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
         $oldRoom = Room::firstOrFail();
         $hostToken = session('ludo_player_token');
         $this->post("/rooms/{$oldRoom->code}/name", ['name' => 'Host Lama'])->assertRedirect();
@@ -73,7 +73,7 @@ class RoomFlowTest extends TestCase
         $this->post("/rooms/{$oldRoom->code}/ready")->assertRedirect();
 
         $this->withSession(['ludo_player_token' => $hostToken, 'ludo_player_name' => 'Host Lama']);
-        $this->post(route('rooms.store'), ['max_players' => 3])->assertRedirect();
+        $this->post(route('rooms.store'), ['max_players' => 3, 'password' => config('ludo.room_password')])->assertRedirect();
         $newRoom = Room::latest('id')->firstOrFail();
         $this->assertNotSame($oldRoom->code, $newRoom->code);
         $this->assertNull(session('ludo_player_name'));
@@ -106,7 +106,7 @@ class RoomFlowTest extends TestCase
 
         foreach ([3, 4] as $count) {
             $this->flushSession();
-            $this->get('/room')->assertOk();
+            $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
             $room = Room::latest('id')->firstOrFail();
             $hostToken = session('ludo_player_token');
             $this->patch("/rooms/{$room->code}/settings", ['max_players' => $count]);
@@ -119,7 +119,6 @@ class RoomFlowTest extends TestCase
                 $this->get("/room?code={$room->code}")->assertOk();
                 $tokens[] = session('ludo_player_token');
                 $this->post("/rooms/{$room->code}/seat", ['seat_color' => $color])->assertRedirect();
-                $this->post("/rooms/{$room->code}/ready")->assertRedirect();
             }
 
             $this->withSession(['ludo_player_token' => $hostToken]);
@@ -160,7 +159,8 @@ class RoomFlowTest extends TestCase
         Event::fake([RoomUpdated::class]);
 
         // Host opens /room and creates a persistent room
-        $this->get('/room')
+        $this->withSession(['ludo_room_access' => true])
+            ->get('/room')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Room')
@@ -198,15 +198,21 @@ class RoomFlowTest extends TestCase
         $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'red'])
             ->assertSessionHasErrors('seat_color');
 
-        // Guest sits in 'yellow' and marks ready
+        // Guest sits in 'yellow'; taking a seat marks them ready automatically.
         $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow'])
-            ->assertRedirect();
-        $this->post("/rooms/{$room->code}/ready")
             ->assertRedirect();
 
         $guest = $room->players()->where('is_host', false)->firstOrFail();
         $this->assertSame('yellow', $guest->seat_color);
         $this->assertTrue($guest->is_ready);
+
+        // The guest can still opt back out of ready and back in.
+        $this->post("/rooms/{$room->code}/ready", ['is_ready' => false])
+            ->assertRedirect();
+        $this->assertFalse($guest->fresh()->is_ready);
+        $this->post("/rooms/{$room->code}/ready", ['is_ready' => true])
+            ->assertRedirect();
+        $this->assertTrue($guest->fresh()->is_ready);
 
         // Non-host cannot start the match
         $this->post("/rooms/{$room->code}/start")
@@ -217,7 +223,7 @@ class RoomFlowTest extends TestCase
     {
         Event::fake([RoomUpdated::class]);
 
-        $this->get('/room')->assertOk();
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
         $room = Room::firstOrFail();
         $hostToken = session('ludo_player_token');
 
@@ -227,11 +233,10 @@ class RoomFlowTest extends TestCase
         $this->post("/rooms/{$room->code}/start")
             ->assertSessionHasErrors('start');
 
-        // Guest joins, sits in yellow, marks ready
+        // Guest joins and takes a seat, which marks them ready automatically
         $this->flushSession();
         $this->get("/room?code={$room->code}")->assertOk();
         $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow'])->assertRedirect();
-        $this->post("/rooms/{$room->code}/ready")->assertRedirect();
 
         // Switch back to host session
         $this->withSession([
@@ -294,5 +299,111 @@ class RoomFlowTest extends TestCase
 
         $this->assertSame('ended', $room->fresh()->status);
         Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'end');
+    }
+
+    public function test_only_the_host_can_end_the_match(): void
+    {
+        Event::fake([RoomUpdated::class, MatchAction::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $hostToken = session('ludo_player_token');
+
+        // Guest joins from another device/session while the room is still waiting
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+
+        $room->update([
+            'status' => 'started',
+            'started_at' => now(),
+            'match_state' => MatchRules::initial(0, ['red', 'yellow']),
+        ]);
+
+        $this->post("/rooms/{$room->code}/end")->assertForbidden();
+        $this->assertSame('started', $room->fresh()->status);
+        Event::assertNotDispatched(MatchAction::class);
+
+        // Host ends the match
+        $this->withSession(['ludo_player_token' => $hostToken]);
+        $this->post("/rooms/{$room->code}/end")->assertRedirect(route('home'));
+
+        $this->assertSame('ended', $room->fresh()->status);
+        Event::assertDispatched(MatchAction::class, fn (MatchAction $event) => $event->code === $room->code && $event->action['type'] === 'end');
+    }
+
+    public function test_room_creation_requires_the_static_access_password(): void
+    {
+        $this->post('/rooms', ['max_players' => 2])
+            ->assertSessionHasErrors('password');
+        $this->assertDatabaseCount('rooms', 0);
+
+        $this->post('/rooms', ['max_players' => 2, 'password' => 'salah'])
+            ->assertSessionHasErrors('password');
+        $this->assertDatabaseCount('rooms', 0);
+
+        $this->post('/rooms', ['max_players' => 2, 'password' => 'malaquena'])
+            ->assertRedirect();
+
+        $room = Room::firstOrFail();
+        $this->assertSame(2, $room->max_players);
+        $this->assertTrue(session('ludo_room_access'));
+
+        // Once unlocked, the same session can create another room without the modal.
+        $this->post('/rooms', ['max_players' => 4, 'password' => 'malaquena'])
+            ->assertRedirect();
+        $this->assertDatabaseCount('rooms', 2);
+    }
+
+    public function test_opening_fourth_roll_guarantees_six_after_three_misses_then_returns_to_random(): void
+    {
+        Event::fake([RoomUpdated::class, MatchAction::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $hostToken = session('ludo_player_token');
+        $host = $room->players()->firstOrFail();
+
+        $this->flushSession();
+        $this->get("/room?code={$room->code}")->assertOk();
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow'])->assertRedirect();
+        $this->post("/rooms/{$room->code}/ready")->assertRedirect();
+
+        $state = MatchRules::initial(0, ['red', 'yellow']);
+        $state['stats'][0]['rolls'] = 3;
+        $state['had_six'] = [false, false];
+
+        $room->update([
+            'status' => 'started',
+            'starting_player_id' => $host->id,
+            'started_at' => now(),
+            'match_state' => $state,
+        ]);
+
+        // 4th roll after 3 misses at game start must be 6.
+        $this->withSession(['ludo_player_token' => $hostToken]);
+        $this->postJson("/rooms/{$room->code}/match/roll")
+            ->assertOk()
+            ->assertJsonPath('action.value', 6);
+
+        $freshState = $room->fresh()->match_state;
+        $this->assertSame(4, $freshState['stats'][0]['rolls']);
+        $this->assertTrue($freshState['had_six'][0]);
+        $this->assertFalse(MatchRules::shouldForceOpeningSix($freshState, 0));
+
+        // After the 4th roll (or once a 6 has been rolled), subsequent rolls are random again
+        // even if all tokens return to base.
+        $alreadyHadSixState = MatchRules::initial(0, ['red', 'yellow']);
+        $alreadyHadSixState['stats'][0]['rolls'] = 3;
+        $alreadyHadSixState['had_six'][0] = true;
+        $this->assertFalse(MatchRules::shouldForceOpeningSix($alreadyHadSixState, 0));
+
+        $afterFourthState = MatchRules::initial(0, ['red', 'yellow']);
+        $afterFourthState['stats'][0]['rolls'] = 4;
+        $afterFourthState['had_six'][0] = true;
+        $this->assertFalse(MatchRules::shouldForceOpeningSix($afterFourthState, 0));
+
+        // Works with host_advantage enabled too: 4th roll after 3 misses still guarantees 6.
+        $room->update(['host_advantage' => true]);
+        $this->assertSame(6, MatchRules::rollDice($state, 0, true));
     }
 }

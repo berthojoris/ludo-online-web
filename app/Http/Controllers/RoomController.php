@@ -56,6 +56,17 @@ class RoomController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $request->validate([
+            'password' => ['required', 'string'],
+        ]);
+
+        if (! hash_equals((string) config('ludo.room_password'), (string) $request->input('password'))) {
+            throw ValidationException::withMessages([
+                'password' => 'Kata sandi salah. Periksa kembali lalu coba lagi.',
+            ]);
+        }
+
+        $request->session()->put('ludo_room_access', true);
         $request->session()->forget('ludo_player_name');
         $token = self::playerToken($request);
         $maxPlayers = (int) $request->input('max_players', 4);
@@ -183,9 +194,9 @@ class RoomController extends Controller
             }
 
             $player->seat_color = $seatColor;
-            if ($seatColor === null) {
-                $player->is_ready = false;
-            }
+            // Taking a seat opts the player in right away; they can still
+            // switch themselves back to "not ready" from the lobby.
+            $player->is_ready = $seatColor !== null;
             $player->save();
         });
 
@@ -319,18 +330,12 @@ class RoomController extends Controller
             $index = $players->search(fn ($item) => $item->id === $player->id);
             $state = $room->match_state;
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
-            $value = random_int(1, 6);
-            if ($room->host_advantage && $player->is_host) {
-                $preferred = MatchRules::captureRolls($state, $index);
-                if (! $preferred && count(array_filter($state['tokens'][$index], fn ($position) => $position !== -1)) === 0) {
-                    $preferred = [6];
-                }
-                if ($preferred && random_int(1, 2) === 1) {
-                    $value = $preferred[array_rand($preferred)];
-                } elseif ($preferred) {
-                    $other = array_values(array_diff(range(1, 6), $preferred));
-                    $value = $other ? $other[array_rand($other)] : $value;
-                }
+            $value = MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
+            if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
+                $state['had_six'] = array_fill(0, count($state['tokens']), false);
+            }
+            if ($value === 6 || count(array_filter($state['tokens'][$index], fn ($position) => $position !== -1)) > 0) {
+                $state['had_six'][$index] = true;
             }
             $state['stats'][$index]['rolls'] = ($state['stats'][$index]['rolls'] ?? 0) + 1;
             if (MatchRules::moves($state, $index, $value)) {
@@ -423,6 +428,8 @@ class RoomController extends Controller
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
+
+        abort_unless($player->is_host, 403, 'Hanya host yang dapat mengakhiri permainan.');
 
         if ($room->status !== 'ended') {
             $room->status = 'ended';

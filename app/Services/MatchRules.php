@@ -17,8 +17,45 @@ class MatchRules
             'dice' => null,
             'winner' => null,
             'stats' => array_fill(0, $count, ['rolls' => 0, 'captures' => 0]),
+            'had_six' => array_fill(0, $count, false),
             'total_moves' => 0,
         ];
+    }
+
+    /**
+     * Force a 6 on the player's 4th opening roll if their first 3 rolls produced no 6.
+     */
+    public static function shouldForceOpeningSix(array $state, int $player): bool
+    {
+        $rolls = (int) ($state['stats'][$player]['rolls'] ?? 0);
+        $hasTokenOut = count(array_filter($state['tokens'][$player] ?? [], fn ($position) => $position !== -1)) > 0;
+        $hadSix = (bool) ($state['had_six'][$player] ?? $hasTokenOut);
+
+        return $rolls === 3 && ! $hadSix && ! $hasTokenOut;
+    }
+
+    public static function rollDice(array $state, int $player, bool $hostAdvantage = false): int
+    {
+        if (self::shouldForceOpeningSix($state, $player)) {
+            return 6;
+        }
+
+        $value = random_int(1, 6);
+
+        if ($hostAdvantage) {
+            $preferred = self::captureRolls($state, $player);
+            if (! $preferred && count(array_filter($state['tokens'][$player] ?? [], fn ($position) => $position !== -1)) === 0) {
+                $preferred = [6];
+            }
+            if ($preferred && random_int(1, 2) === 1) {
+                $value = $preferred[array_rand($preferred)];
+            } elseif ($preferred) {
+                $other = array_values(array_diff(range(1, 6), $preferred));
+                $value = $other ? $other[array_rand($other)] : $value;
+            }
+        }
+
+        return $value;
     }
 
     public static function moves(array $state, int $player, int $roll): array

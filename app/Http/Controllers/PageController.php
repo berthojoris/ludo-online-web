@@ -14,9 +14,11 @@ use Inertia\Response;
 
 class PageController extends Controller
 {
-    public function home(): Response
+    public function home(Request $request): Response
     {
-        return Inertia::render('Home');
+        return Inertia::render('Home', [
+            'createRoomOpen' => (bool) $request->session()->get('create_room_required', false),
+        ]);
     }
 
     public function howItWorks(): Response
@@ -66,12 +68,15 @@ class PageController extends Controller
 
     public function room(Request $request): Response|RedirectResponse
     {
+        $canCreateRoom = (bool) $request->session()->get('ludo_room_access', false);
+
         if ($request->boolean('join') && ! $request->filled('code')) {
             return Inertia::render('Room', [
                 'mode' => 'join',
                 'room' => null,
                 'me' => null,
                 'roomError' => null,
+                'canCreateRoom' => $canCreateRoom,
             ]);
         }
 
@@ -87,6 +92,7 @@ class PageController extends Controller
                     'room' => null,
                     'me' => null,
                     'roomError' => 'Kode ruang tidak ditemukan.',
+                    'canCreateRoom' => $canCreateRoom,
                 ]);
             }
 
@@ -133,6 +139,7 @@ class PageController extends Controller
                     'room' => null,
                     'me' => null,
                     'roomError' => $result['error'],
+                    'canCreateRoom' => $canCreateRoom,
                 ]);
             }
 
@@ -150,6 +157,7 @@ class PageController extends Controller
                 'room' => $freshRoom?->toLobbyPayload(),
                 'me' => $this->playerPayload($me),
                 'roomError' => null,
+                'canCreateRoom' => $canCreateRoom,
             ]);
         }
 
@@ -178,6 +186,10 @@ class PageController extends Controller
         $token = RoomController::playerToken($request);
 
         if (! $room) {
+            if (! $canCreateRoom) {
+                return redirect()->route('home')->with('create_room_required', true);
+            }
+
             $request->session()->forget('ludo_player_name');
             $room = DB::transaction(function () use ($request, $token) {
                 $created = Room::create([
@@ -215,6 +227,7 @@ class PageController extends Controller
             'room' => $freshRoom?->toLobbyPayload(),
             'me' => $me ? $this->playerPayload($me) : null,
             'roomError' => null,
+            'canCreateRoom' => true,
         ]);
     }
 

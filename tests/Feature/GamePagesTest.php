@@ -9,6 +9,7 @@ use Tests\TestCase;
 class GamePagesTest extends TestCase
 {
     use RefreshDatabase;
+
     public function test_home_page_renders_the_game_home(): void
     {
         $this->get('/')
@@ -34,8 +35,16 @@ class GamePagesTest extends TestCase
 
     public function test_room_lobby_renders(): void
     {
-        $this->get('/room')
+        $this->withSession(['ludo_room_access' => true])
+            ->get('/room')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Room'));
+    }
+
+    public function test_room_page_sends_visitors_home_when_room_creation_is_locked(): void
+    {
+        $this->get('/room')->assertRedirect(route('home'));
+
+        $this->assertDatabaseCount('rooms', 0);
     }
 }

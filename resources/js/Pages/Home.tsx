@@ -1,3 +1,4 @@
+import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
 import Dice from '@/Components/Game/Dice';
 import HowItWorksModal from '@/Components/Game/HowItWorksModal';
 import { InfoIcon } from '@/Components/Game/Icons';
@@ -5,7 +6,7 @@ import Logo from '@/Components/Game/Logo';
 import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
 import { PlayerColor, tokenPoint } from '@/lib/ludo';
 import { User } from '@/types';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PREVIEW_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
@@ -60,23 +61,72 @@ function usePreviewBoardSize() {
 }
 
 export default function Home() {
-    const { auth, howItWorksOpen: initialHowItWorksOpen } = usePage()
-        .props as unknown as {
+    const {
+        auth,
+        howItWorksOpen: initialHowItWorksOpen,
+        createRoomOpen: initialCreateRoomOpen,
+    } = usePage().props as unknown as {
         auth?: { user: User | null };
         howItWorksOpen?: boolean;
+        createRoomOpen?: boolean;
     };
     const user = auth?.user ?? null;
-    const createRoom = useForm({ max_players: 4 });
     const tokens = previewTokens();
     const triggerRef = useRef<HTMLAnchorElement>(null);
     const [boardAreaRef, boardSize] = usePreviewBoardSize();
     const [howItWorksOpen, setHowItWorksOpen] = useState(
         Boolean(initialHowItWorksOpen),
     );
+    const [createRoomOpen, setCreateRoomOpen] = useState(
+        Boolean(initialCreateRoomOpen),
+    );
+    const [creatingRoom, setCreatingRoom] = useState(false);
+    const [createRoomError, setCreateRoomError] = useState<string | null>(null);
 
     useEffect(() => {
         setHowItWorksOpen(Boolean(initialHowItWorksOpen));
     }, [initialHowItWorksOpen]);
+
+    useEffect(() => {
+        if (initialCreateRoomOpen) {
+            setCreateRoomOpen(true);
+        }
+    }, [initialCreateRoomOpen]);
+
+    const openCreateRoom = useCallback(() => {
+        setCreateRoomError(null);
+        setCreateRoomOpen(true);
+    }, []);
+
+    const closeCreateRoom = useCallback(() => {
+        if (creatingRoom) {
+            return;
+        }
+
+        setCreateRoomOpen(false);
+        setCreateRoomError(null);
+    }, [creatingRoom]);
+
+    const submitCreateRoom = useCallback((password: string) => {
+        setCreatingRoom(true);
+        setCreateRoomError(null);
+
+        router.post(
+            route('rooms.store'),
+            { max_players: 4, password },
+            {
+                onError: (errors) => {
+                    setCreateRoomError(
+                        errors.password ??
+                            Object.values(errors)[0] ??
+                            'Kata sandi salah. Periksa kembali lalu coba lagi.',
+                    );
+                },
+                onSuccess: () => setCreateRoomOpen(false),
+                onFinish: () => setCreatingRoom(false),
+            },
+        );
+    }, []);
 
     const openHowItWorks = useCallback(() => {
         setHowItWorksOpen(true);
@@ -203,14 +253,14 @@ export default function Home() {
                         <div className="mt-[clamp(8px,1.8dvh,32px)] flex w-full max-w-md gap-2 sm:max-w-lg sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
                             <button
                                 type="button"
-                                onClick={() =>
-                                    createRoom.post(route('rooms.store'))
-                                }
-                                disabled={createRoom.processing}
-                                aria-busy={createRoom.processing}
+                                onClick={openCreateRoom}
+                                disabled={creatingRoom}
+                                aria-busy={creatingRoom}
+                                aria-haspopup="dialog"
+                                aria-expanded={createRoomOpen}
                                 className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
                             >
-                                {createRoom.processing ? (
+                                {creatingRoom ? (
                                     <>
                                         <span
                                             aria-hidden="true"
@@ -327,6 +377,14 @@ export default function Home() {
                 open={howItWorksOpen}
                 onClose={closeHowItWorks}
                 onStart={startPlaying}
+            />
+
+            <CreateRoomPasswordModal
+                open={createRoomOpen}
+                processing={creatingRoom}
+                error={createRoomError}
+                onCancel={closeCreateRoom}
+                onSubmit={submitCreateRoom}
             />
         </>
     );

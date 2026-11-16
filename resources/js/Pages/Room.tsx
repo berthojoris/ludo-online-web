@@ -1,4 +1,5 @@
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
+import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
 import {
     ArrowRightIcon,
     CheckIcon,
@@ -47,6 +48,7 @@ type RoomPageProps = {
     room?: RoomData | null;
     me?: RoomPlayerData | null;
     roomError?: string | null;
+    canCreateRoom?: boolean;
 };
 
 const SEATS_BY_COUNT: Record<PlayerCount, PlayerColor[]> = {
@@ -116,29 +118,31 @@ function RoomSettingsSummary({
                 </div>
             </div>
 
-            <div className="border-line mt-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
-                <div className="min-w-0">
-                    <p className="text-ink text-xs font-semibold">
-                        Keuntungan host
-                    </p>
-                    <p className="text-ink-muted mt-1 text-xs">
-                        Peluang 50% untuk keluar markas atau menangkap saat
-                        tersedia.
-                    </p>
+            {isHost && (
+                <div className="border-line mt-4 flex items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
+                    <div className="min-w-0">
+                        <p className="text-ink text-xs font-semibold">
+                            Keuntungan host
+                        </p>
+                        <p className="text-ink-muted mt-1 text-xs">
+                            Peluang 50% untuk keluar markas atau menangkap saat
+                            tersedia.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-label="Keuntungan host"
+                        aria-checked={hostAdvantage}
+                        aria-busy={pending}
+                        disabled={!isHost || pending}
+                        onClick={onToggleAdvantage}
+                        className={`focus-visible:ring-primary flex h-11 min-w-14 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
+                    >
+                        {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
+                    </button>
                 </div>
-                <button
-                    type="button"
-                    role="switch"
-                    aria-label="Keuntungan host"
-                    aria-checked={hostAdvantage}
-                    aria-busy={pending}
-                    disabled={!isHost || pending}
-                    onClick={onToggleAdvantage}
-                    className={`focus-visible:ring-primary flex h-11 min-w-14 items-center justify-center rounded-full text-xs font-semibold focus-visible:ring-2 disabled:opacity-60 ${hostAdvantage ? 'bg-blue-600 text-white' : 'bg-surface-muted text-ink-muted'}`}
-                >
-                    {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
-                </button>
-            </div>
+            )}
             <dl className="divide-line border-line mt-4 divide-y rounded-2xl border px-3.5">
                 {ROOM_RULES.map((item) => (
                     <div
@@ -199,6 +203,7 @@ function RoomContent() {
         room: serverRoom,
         me: serverMe,
         roomError,
+        canCreateRoom = false,
     } = page.props as unknown as RoomPageProps;
 
     const [liveRoom, setLiveRoom] = useState<RoomData | null>(
@@ -210,6 +215,10 @@ function RoomContent() {
     const [joinCode, setJoinCode] = useState(serverRoom?.code ?? '');
     const [copyState, setCopyState] = useState<CopyState>('idle');
     const [rulesModalOpen, setRulesModalOpen] = useState(false);
+    const [createPasswordOpen, setCreatePasswordOpen] = useState(false);
+    const [createPasswordError, setCreatePasswordError] = useState<
+        string | null
+    >(null);
     const [pendingAction, setPendingAction] = useState(false);
     const [actionError, setActionError] = useState<string | null>(
         roomError ?? null,
@@ -486,21 +495,48 @@ function RoomContent() {
         );
     };
 
+    const postRoomCreation = (password?: string) => {
+        setActionError(null);
+        setCreatePasswordError(null);
+        setPendingAction(true);
+        router.post(
+            route('rooms.store'),
+            {
+                max_players: playerCount,
+                ...(password === undefined ? {} : { password }),
+            },
+            {
+                onError: (errors) => {
+                    const first =
+                        errors.password ??
+                        Object.values(errors)[0] ??
+                        'Kata sandi salah. Periksa kembali lalu coba lagi.';
+                    setActionError(first);
+
+                    if (password !== undefined) {
+                        setCreatePasswordError(first);
+                    }
+                },
+                onSuccess: () => setCreatePasswordOpen(false),
+                onFinish: () => setPendingAction(false),
+            },
+        );
+    };
+
     const handleCreateNewRoom = () => {
         if (pendingAction) {
             return;
         }
         cue();
         setActionError(null);
-        setPendingAction(true);
-        router.post(
-            route('rooms.store'),
-            { max_players: playerCount },
-            {
-                onError: handleFirstError,
-                onFinish: () => setPendingAction(false),
-            },
-        );
+        setCreatePasswordError(null);
+
+        if (!canCreateRoom) {
+            setCreatePasswordOpen(true);
+            return;
+        }
+
+        postRoomCreation();
     };
 
     const handleJoin = (event: FormEvent<HTMLFormElement>) => {
@@ -518,6 +554,12 @@ function RoomContent() {
     const switchMode = (next: ViewMode) => {
         cue();
         if (next === 'lobby' && !liveRoom) {
+            if (!canCreateRoom) {
+                setActionError(null);
+                setCreatePasswordError(null);
+                setCreatePasswordOpen(true);
+                return;
+            }
             router.get(route('room'));
             return;
         }
@@ -1373,6 +1415,22 @@ function RoomContent() {
                     </div>
                 </div>
             )}
+
+            <CreateRoomPasswordModal
+                open={createPasswordOpen}
+                processing={pendingAction}
+                error={createPasswordError}
+                onCancel={() => {
+                    if (!pendingAction) {
+                        setCreatePasswordOpen(false);
+                        setCreatePasswordError(null);
+                    }
+                }}
+                onSubmit={(password) => {
+                    cue();
+                    postRoomCreation(password);
+                }}
+            />
 
             <ConfirmLeaveModal
                 open={exitGuard.open}

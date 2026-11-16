@@ -88,6 +88,7 @@ type GameState = {
     log: LogEntry[];
     logId: number;
     rolls: Record<PlayerId, number>;
+    hadSix: Record<PlayerId, boolean>;
     captures: Record<PlayerId, number>;
     totalMoves: number;
     startedAt: number | null;
@@ -104,6 +105,7 @@ type Action =
               dice: number | null;
               winner: number | null;
               stats?: { rolls: number; captures: number }[];
+              had_six?: boolean[];
               total_moves?: number;
               started_at?: string | null;
           };
@@ -147,6 +149,7 @@ const initialState: GameState = {
     ],
     logId: 1,
     rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
+    hadSix: { blue: false, green: false, red: false, yellow: false },
     captures: { blue: 0, green: 0, red: 0, yellow: 0 },
     totalMoves: 0,
     startedAt: null,
@@ -159,6 +162,22 @@ function otherPlayer(player: PlayerId): PlayerId {
 
 function randomDie(): number {
     return 1 + Math.floor(Math.random() * 6);
+}
+
+function shouldForceOpeningSix(state: GameState, player: PlayerId): boolean {
+    const hasTokenOut = state.tokens[player].some(
+        (position) => position !== BASE_POSITION,
+    );
+
+    return state.rolls[player] === 3 && !state.hadSix[player] && !hasTokenOut;
+}
+
+function rollDieForTurn(state: GameState): number {
+    if (shouldForceOpeningSix(state, state.turn)) {
+        return 6;
+    }
+
+    return randomDie();
 }
 
 function randomPlayer(): PlayerId {
@@ -202,6 +221,7 @@ function createInitialState(
         ],
         logId: 1,
         rolls: { blue: 0, green: 0, red: 0, yellow: 0 },
+        hadSix: { blue: false, green: false, red: false, yellow: false },
         captures: { blue: 0, green: 0, red: 0, yellow: 0 },
         totalMoves: 0,
         startedAt: now,
@@ -289,11 +309,17 @@ function reducer(state: GameState, action: Action): GameState {
         const turn = order[action.match.turn];
         const tokens = { ...initialState.tokens };
         const rolls = { ...initialState.rolls };
+        const hadSix = { ...initialState.hadSix };
         const captures = { ...initialState.captures };
         order.forEach((color, index) => {
             tokens[color] = action.match.tokens[index];
             rolls[color] = action.match.stats?.[index]?.rolls ?? 0;
             captures[color] = action.match.stats?.[index]?.captures ?? 0;
+            hadSix[color] =
+                action.match.had_six?.[index] ??
+                action.match.tokens[index].some(
+                    (position) => position !== BASE_POSITION,
+                );
         });
         const winner =
             action.match.winner === null ? null : order[action.match.winner];
@@ -315,6 +341,7 @@ function reducer(state: GameState, action: Action): GameState {
             phase: winner ? 'gameover' : dice === null ? 'idle' : 'choosing',
             legalMoves: moves,
             rolls,
+            hadSix,
             captures,
             totalMoves: action.match.total_moves ?? state.totalMoves,
             startedAt: Number.isNaN(restoredAt) ? state.startedAt : restoredAt,
@@ -365,6 +392,10 @@ function reducer(state: GameState, action: Action): GameState {
             rolls: {
                 ...state.rolls,
                 [state.turn]: state.rolls[state.turn] + 1,
+            },
+            hadSix: {
+                ...state.hadSix,
+                [state.turn]: state.hadSix[state.turn] || action.value === 6,
             },
             message:
                 state.turn === state.human
@@ -614,6 +645,7 @@ export default function Play() {
                 dice: number | null;
                 winner: number | null;
                 stats?: { rolls: number; captures: number }[];
+                had_six?: boolean[];
                 total_moves?: number;
             } | null;
             players: {
@@ -628,6 +660,7 @@ export default function Play() {
             id: number;
             name: string;
             seat_color: PlayerColor | null;
+            is_host: boolean;
         } | null;
         roomNotice?: string | null;
     };
@@ -810,11 +843,11 @@ export default function Play() {
         }
 
         const timeout = window.setTimeout(() => {
-            dispatch({ type: 'ROLL_START', value: randomDie() });
+            dispatch({ type: 'ROLL_START', value: rollDieForTurn(state) });
         }, 900);
 
         return () => window.clearTimeout(timeout);
-    }, [room, state.turn, state.phase, state.winner, state.human]);
+    }, [room, state]);
 
     const animateMove = useCallback(
         async (tokenIndex: number, fromRemote = false) => {
@@ -1294,7 +1327,7 @@ export default function Play() {
         void unlockAudio();
 
         if (!room) {
-            dispatch({ type: 'ROLL_START', value: randomDie() });
+            dispatch({ type: 'ROLL_START', value: rollDieForTurn(state) });
             return;
         }
 
@@ -1349,7 +1382,7 @@ export default function Play() {
     };
 
     const handleConfirmEndGame = () => {
-        if (!room || endingGame) {
+        if (!room || !me?.is_host || endingGame) {
             return;
         }
         cue(playUiSound);
@@ -1484,7 +1517,7 @@ export default function Play() {
                                     {state.names[state.human]}
                                 </span>
                             )}
-                            {room && me && screen === 'game' && (
+                            {room && me?.is_host && screen === 'game' && (
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -2032,7 +2065,7 @@ export default function Play() {
                 />
             )}
 
-            {endGameModalOpen && room && (
+            {endGameModalOpen && room && me?.is_host && (
                 <div
                     className="bg-ink/40 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-[3px]"
                     role="dialog"

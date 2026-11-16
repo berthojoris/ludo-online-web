@@ -21,7 +21,7 @@ class GameResumeTest extends TestCase
     {
         Event::fake([RoomUpdated::class]);
 
-        $this->get('/room')->assertOk();
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
 
         $room = Room::firstOrFail();
         $host = $room->players()->firstOrFail();
