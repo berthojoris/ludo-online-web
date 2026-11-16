@@ -1576,9 +1576,9 @@ function RoomContent() {
                                                                     }
                                                                     aria-label="Ganti karakter"
                                                                     title="Ganti karakter"
-                                                                    className="border-line text-ink hover:bg-surface-muted inline-flex h-10 items-center gap-1 rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
+                                                                    className="border-brand bg-brand hover:bg-brand-dark inline-flex h-10 items-center gap-1 rounded-xl border px-2 text-[11px] font-semibold text-white shadow-xs transition sm:h-11 sm:px-2.5"
                                                                 >
-                                                                    <SparklesIcon className="text-brand h-3.5 w-3.5" />
+                                                                    <SparklesIcon className="h-3.5 w-3.5 text-white" />
                                                                     <span className="hidden lg:inline">
                                                                         Karakter
                                                                     </span>
@@ -1593,7 +1593,7 @@ function RoomContent() {
                                                                             null,
                                                                         )
                                                                     }
-                                                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-white px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
+                                                                    className="border-line text-ink-muted hover:text-ink inline-flex h-10 shrink-0 items-center rounded-xl border bg-surface-muted px-2 text-[11px] font-semibold transition sm:h-11 sm:px-2.5"
                                                                 >
                                                                     Berdiri
                                                                 </button>
@@ -1645,17 +1645,9 @@ function RoomContent() {
                                                                     color,
                                                                 )
                                                             }
-                                                            className="border-line text-ink hover:bg-surface-muted inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border bg-white px-2 text-[11px] font-bold transition min-[360px]:text-xs sm:h-11 sm:px-3"
-                                                            style={{
-                                                                borderColor: `${palette.base}55`,
-                                                            }}
+                                                            className="border-brand bg-brand hover:bg-brand-dark inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-bold text-white shadow-xs transition min-[360px]:text-xs sm:h-11 sm:px-3"
                                                         >
-                                                            <SparklesIcon
-                                                                className="h-3.5 w-3.5 shrink-0"
-                                                                style={{
-                                                                    color: palette.base,
-                                                                }}
-                                                            />
+                                                            <SparklesIcon className="h-3.5 w-3.5 shrink-0" />
                                                             <span className="truncate">
                                                                 Duduk & Pilih
                                                             </span>
@@ -1669,7 +1661,7 @@ function RoomContent() {
                                                                 )
                                                             }
                                                             aria-label={`Undang ke kursi ${config.label}`}
-                                                            className="text-brand-ink hover:bg-brand/10 inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-semibold transition sm:h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
+                                                            className="bg-ludo-red hover:bg-ludo-red/90 inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1 rounded-xl text-xs font-semibold text-white shadow-xs transition sm:h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
                                                         >
                                                             <LinkIcon className="h-3.5 w-3.5" />
                                                             <span className="hidden sm:inline">
