@@ -100,7 +100,7 @@ export default function CharacterSelectModal({
                             <div className="flex flex-wrap items-center gap-2">
                                 <h2
                                     id="character-select-title"
-                                    className="text-ink truncate text-base font-extrabold tracking-tight sm:text-lg"
+                                    className="text-ink min-w-0 truncate text-base font-extrabold tracking-tight sm:text-lg"
                                 >
                                     Pilih Karakter Kamu
                                 </h2>

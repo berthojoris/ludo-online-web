@@ -1815,35 +1815,49 @@ function RoomContent() {
                                     />
 
                                     <div className="border-line/80 mt-auto flex flex-col gap-2 border-t pt-3.5">
-                                        <button
-                                            type="button"
-                                            disabled={
-                                                !currentMe?.seat_color ||
-                                                pendingAction
-                                            }
-                                            onClick={handleToggleReady}
-                                            aria-pressed={Boolean(
-                                                currentMe?.is_ready,
-                                            )}
-                                            className={`btn ${
-                                                !currentMe?.seat_color
-                                                    ? 'btn-secondary'
-                                                    : currentMe.is_ready
-                                                      ? 'btn-success'
-                                                      : 'btn-primary'
-                                            }`}
-                                        >
-                                            {!currentMe?.seat_color ? (
-                                                'Pilih kursi dulu'
-                                            ) : currentMe.is_ready ? (
-                                                <>
-                                                    <CheckIcon className="h-4 w-4" />
+                                        <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2">
+                                            <div className="min-w-0">
+                                                <p className="text-ink text-xs font-semibold">
                                                     Siap bermain
-                                                </>
-                                            ) : (
-                                                'Tandai siap'
-                                            )}
-                                        </button>
+                                                </p>
+                                                <p className="text-ink-muted mt-0.5 text-[11px]">
+                                                    {!currentMe?.seat_color
+                                                        ? 'Pilih kursi dulu untuk menandai siap.'
+                                                        : currentMe.is_ready
+                                                          ? 'Kamu sudah siap bermain.'
+                                                          : 'Aktifkan saat kamu siap bermain.'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-label="Siap bermain"
+                                                aria-checked={Boolean(
+                                                    currentMe?.is_ready,
+                                                )}
+                                                aria-busy={pendingAction}
+                                                disabled={
+                                                    !currentMe?.seat_color ||
+                                                    pendingAction
+                                                }
+                                                onClick={handleToggleReady}
+                                                className="switch"
+                                            >
+                                                <span className="w-6 text-right tabular-nums">
+                                                    {pendingAction
+                                                        ? '…'
+                                                        : currentMe?.is_ready
+                                                          ? 'ON'
+                                                          : 'OFF'}
+                                                </span>
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="switch-track"
+                                                >
+                                                    <span className="switch-thumb" />
+                                                </span>
+                                            </button>
+                                        </div>
 
                                         {isHost ? (
                                             <button
@@ -1881,32 +1895,42 @@ function RoomContent() {
 
                         <div className="shadow-card mt-2 min-w-0 shrink-0 rounded-2xl border border-white/85 bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex min-w-0 items-center gap-2">
-                                <button
-                                    type="button"
-                                    disabled={
-                                        !currentMe?.seat_color || pendingAction
-                                    }
-                                    onClick={handleToggleReady}
-                                    aria-pressed={Boolean(currentMe?.is_ready)}
-                                    className={`btn flex-1 px-3 ${
-                                        !currentMe?.seat_color
-                                            ? 'btn-secondary'
-                                            : currentMe.is_ready
-                                              ? 'btn-success'
-                                              : 'btn-primary'
-                                    }`}
-                                >
-                                    {!currentMe?.seat_color ? (
-                                        'Pilih kursi'
-                                    ) : currentMe.is_ready ? (
-                                        <>
-                                            <CheckIcon className="h-4 w-4" />
-                                            Siap
-                                        </>
-                                    ) : (
-                                        'Tandai siap'
-                                    )}
-                                </button>
+                                <div className="border-line flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border pr-1 pl-3">
+                                    <span className="text-ink min-w-0 truncate text-xs font-semibold">
+                                        {currentMe?.seat_color
+                                            ? 'Siap bermain'
+                                            : 'Pilih kursi'}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-label="Siap bermain"
+                                        aria-checked={Boolean(
+                                            currentMe?.is_ready,
+                                        )}
+                                        aria-busy={pendingAction}
+                                        disabled={
+                                            !currentMe?.seat_color ||
+                                            pendingAction
+                                        }
+                                        onClick={handleToggleReady}
+                                        className="switch"
+                                    >
+                                        <span className="w-6 text-right tabular-nums">
+                                            {pendingAction
+                                                ? '…'
+                                                : currentMe?.is_ready
+                                                  ? 'ON'
+                                                  : 'OFF'}
+                                        </span>
+                                        <span
+                                            aria-hidden="true"
+                                            className="switch-track"
+                                        >
+                                            <span className="switch-thumb" />
+                                        </span>
+                                    </button>
+                                </div>
 
                                 {isHost ? (
                                     <button
