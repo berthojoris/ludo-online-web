@@ -21,6 +21,7 @@ export type CharacterConfig = {
     name: string;
     element: string;
     image: string;
+    killAnimation: string;
     pion: string;
     sfx: string;
     accentColor: PlayerColor;
@@ -57,6 +58,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Ignivar',
         element: 'Api',
         image: '/assets/char_ignivar.webp',
+        killAnimation: '/assets/kill/kill_ignivar.webp',
         pion: '/assets/pion/pion_ignivar.webp',
         sfx: '/assets/sfx/ignivar.mp3',
         accentColor: 'red',
@@ -70,6 +72,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Frostclaw',
         element: 'Es',
         image: '/assets/char_frost_claw.webp',
+        killAnimation: '/assets/kill/kill_frost_claw.webp',
         pion: '/assets/pion/pion_frost_claw.webp',
         sfx: '/assets/sfx/frost_claw.mp3',
         accentColor: 'blue',
@@ -83,6 +86,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Solgarde',
         element: 'Cahaya',
         image: '/assets/char_solgarde.webp',
+        killAnimation: '/assets/kill/kill_solgarde.webp',
         pion: '/assets/pion/pion_solgarde.webp',
         sfx: '/assets/sfx/solgarde.mp3',
         accentColor: 'yellow',
@@ -96,6 +100,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Verdantor',
         element: 'Alam',
         image: '/assets/char_verdantor.webp',
+        killAnimation: '/assets/kill/kill_verdantor.webp',
         pion: '/assets/pion/pion_verdantor.webp',
         sfx: '/assets/sfx/verdantor.mp3',
         accentColor: 'green',
@@ -109,6 +114,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Umrax',
         element: 'Bayangan',
         image: '/assets/char_umrax.webp',
+        killAnimation: '/assets/kill/kill_umrax.webp',
         pion: '/assets/pion/pion_umrax.webp',
         sfx: '/assets/sfx/umrax.mp3',
         accentColor: 'purple',
@@ -122,6 +128,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Aqualon',
         element: 'Samudra',
         image: '/assets/char_aqualon.webp',
+        killAnimation: '/assets/kill/kill_aqualon.webp',
         pion: '/assets/pion/pion_aqualon.webp',
         sfx: '/assets/sfx/aqualon.mp3',
         accentColor: 'teal',
@@ -135,6 +142,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         name: 'Zephyira',
         element: 'Angin',
         image: '/assets/char_zephyira.webp',
+        killAnimation: '/assets/kill/kill_zephyira.webp',
         pion: '/assets/pion/pion_zephyira.webp',
         sfx: '/assets/sfx/zephyira.mp3',
         accentColor: 'orange',

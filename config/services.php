@@ -38,6 +38,7 @@ return [
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
         'audio_model' => env('OPENROUTER_AUDIO_MODEL', 'bytedance-seed/seed-audio-1-0'),
+        'image_model' => env('OPENROUTER_IMAGE_MODEL', 'openai/gpt-image-2.6-sunburst'),
         'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
     ],
 

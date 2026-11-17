@@ -40,6 +40,11 @@ export default function CharacterSkillBurst({
     );
     const character = getCharacterConfig(burst.character, burst.color);
     const glow = PLAYER_CONFIG[character.accentColor].palette;
+    const [artSrc, setArtSrc] = useState(character.killAnimation);
+
+    useEffect(() => {
+        setArtSrc(character.killAnimation);
+    }, [character.killAnimation]);
 
     useEffect(() => {
         if (!onEnd) {
@@ -76,12 +81,17 @@ export default function CharacterSkillBurst({
             <div className="skill-burst-giant">
                 <span className="skill-burst-aura" />
                 <img
-                    src={character.image}
+                    src={artSrc}
                     alt=""
                     width={1254}
                     height={1254}
                     draggable={false}
                     decoding="async"
+                    onError={() => {
+                        if (artSrc !== character.image) {
+                            setArtSrc(character.image);
+                        }
+                    }}
                     className="skill-burst-art"
                 />
             </div>

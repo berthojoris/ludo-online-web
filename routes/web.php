@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BackgroundMusicController;
+use App\Http\Controllers\CharacterKillAnimationController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
@@ -44,6 +45,16 @@ Route::prefix('api/sound-effects')->name('sound-effects.')->group(function () {
     Route::post('/background-music/generate', [BackgroundMusicController::class, 'generate'])
         ->middleware('throttle:3,1')
         ->name('background-music.generate');
+});
+
+Route::prefix('api/kill-animations')->name('kill-animations.')->group(function () {
+    Route::get('/characters', [CharacterKillAnimationController::class, 'index'])->name('characters.index');
+    Route::post('/characters/generate', [CharacterKillAnimationController::class, 'generateAll'])
+        ->middleware('throttle:6,1')
+        ->name('characters.generate-all');
+    Route::post('/characters/{character}/generate', [CharacterKillAnimationController::class, 'generateOne'])
+        ->middleware('throttle:15,1')
+        ->name('characters.generate');
 });
 
 Route::get('/dashboard', function () {

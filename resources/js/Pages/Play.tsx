@@ -2150,6 +2150,7 @@ export default function Play() {
             activeCharacters.flatMap((character) => [
                 character.pion,
                 character.image,
+                character.killAnimation,
             ]),
         );
         preloadCharacterSounds(
