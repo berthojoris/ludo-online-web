@@ -198,7 +198,7 @@ class RoomController extends Controller
             $players->push(RoomPlayer::create([
                 'room_id' => $room->id,
                 'player_token' => Str::random(40),
-                'name' => 'Computer',
+                'name' => Room::characterName($character),
                 'seat_color' => $seat,
                 'character' => $character,
                 'is_ready' => true,

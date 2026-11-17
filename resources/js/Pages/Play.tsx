@@ -871,6 +871,7 @@ function reducer(state: GameState, action: Action): GameState {
         return {
             ...state,
             ...logged,
+            version: nextVersion,
             tokens: nextTokens,
             legalMoves: [],
             phase: 'idle',

@@ -37,6 +37,16 @@ class Room extends Model
         'teal' => 'aqualon',
     ];
 
+    public const CHARACTER_NAMES = [
+        'ignivar' => 'Ignivar',
+        'frost_claw' => 'Frostclaw',
+        'solgarde' => 'Solgarde',
+        'verdantor' => 'Verdantor',
+        'umrax' => 'Umrax',
+        'aqualon' => 'Aqualon',
+        'zephyira' => 'Zephyira',
+    ];
+
     public const SEATS_BY_COUNT = [
         2 => ['red', 'yellow'],
         3 => ['red', 'green', 'yellow'],
@@ -81,6 +91,11 @@ class Room extends Model
         return self::SEATS_BY_COUNT[$this->max_players] ?? self::SEATS_BY_COUNT[4];
     }
 
+    public static function characterName(?string $character): string
+    {
+        return self::CHARACTER_NAMES[$character ?? ''] ?? 'Computer';
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -96,16 +111,23 @@ class Room extends Model
             'starting_player_id' => $this->starting_player_id,
             'started_at' => $this->started_at?->toIso8601String(),
             'match_state' => $this->match_state,
-            'players' => $this->players->map(fn (RoomPlayer $player) => [
-                'id' => $player->id,
-                'name' => $player->name,
-                'seat_color' => $player->seat_color,
-                'character' => $player->character ?? ($player->seat_color ? (self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null),
-                'is_ready' => $player->is_ready,
-                'is_host' => $player->is_host,
-                'is_computer' => $player->is_computer,
-                'name_confirmed' => $player->name_confirmed,
-            ])->values()->all(),
+            'players' => $this->players->map(function (RoomPlayer $player) {
+                $character = $player->character ?? ($player->seat_color ? (self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null);
+                $name = $player->is_computer && $player->name === 'Computer'
+                    ? self::characterName($character)
+                    : $player->name;
+
+                return [
+                    'id' => $player->id,
+                    'name' => $name,
+                    'seat_color' => $player->seat_color,
+                    'character' => $character,
+                    'is_ready' => $player->is_ready,
+                    'is_host' => $player->is_host,
+                    'is_computer' => $player->is_computer,
+                    'name_confirmed' => $player->name_confirmed,
+                ];
+            })->values()->all(),
         ];
     }
 }
