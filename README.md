@@ -1,22 +1,22 @@
 # Ludo Arena
 
 [![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)](https://laravel.com)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Reverb](https://img.shields.io/badge/Reverb-1.13-7C3AED)](https://laravel.com/docs/reverb)
+[![Reverb](https://img.shields.io/badge/Reverb-1-7C3AED)](https://laravel.com/docs/reverb)
 
-Ludo Arena is a mobile-first, installable multiplayer Ludo PWA. It targets 2-4 players, quick matchmaking, private invite-code rooms, server-authoritative rules, premium board animation, optional sound effects and haptics, reconnection, and a clean light visual system.
+Ludo Arena is a mobile-first multiplayer Ludo web app. It supports 2-7 players per room, private invite-code rooms, computer opponents, 7 playable characters with generated sound effects and kill animations, server-authoritative rules, in-match chat, background music, reconnection, and a clean light visual system.
 
 **No voice chat, no WebRTC audio, and no microphone permissions.**
 
-> **Status: pre-alpha foundation.** The Laravel, Inertia, React, Reverb, and authentication foundation is in place. The responsive Home screen, CSS board, local practice match, and room lobby preview are implemented. The server-authoritative rules engine, match schema, and online matchmaking are not implemented yet.
+> **Status: playable alpha.** The full loop works end to end: create or join a room, pick a home base color and character, ready up, start a server-authoritative match, roll and move with realtime sync over Reverb, chat, win, and reconnect after a refresh or session expiry. Quick matchmaking, turn timers, and the installable PWA layer are not implemented yet.
 
 ## Contents
 
 - [Overview](#overview)
 - [Current status](#current-status)
 - [Tech stack](#tech-stack)
-- [MVP scope](#mvp-scope)
+- [Implemented scope](#implemented-scope)
 - [Game rules](#game-rules)
 - [Architecture](#architecture)
 - [Realtime](#realtime)
@@ -35,156 +35,156 @@ Ludo Arena is a mobile-first, installable multiplayer Ludo PWA. It targets 2-4 p
 
 ## Overview
 
-Ludo Arena is designed around a large 15x15 board, two or four player cards, a prominent dice action, and a restrained light interface. The board is the hero. Game objects stay colorful while the surrounding surfaces remain quiet and readable.
+Ludo Arena is designed around a large board (the classic 15x15 grid for up to 4 players, a wider multi-arm track for 5-7 players), player cards, a prominent dice action, and a restrained light interface. The board is the hero. Game objects stay colorful while the surrounding surfaces remain quiet and readable.
 
 The game is server-authoritative:
 
-- The server generates dice values with a CSPRNG.
-- The server validates every legal move, capture, safe square, and finish.
-- The server owns turn deadlines and match results.
-- Clients send commands with idempotency keys and expected state versions.
-- Realtime events are versioned, deduplicated, and recoverable through a snapshot API.
+- The server generates dice values with a CSPRNG (`random_int`).
+- The server validates every legal move, capture, safe square, and finish inside a database transaction with a row lock on the room.
+- Every accepted action carries a UUID `action_id` and an incrementing `state_version`.
+- The authoritative match snapshot lives in `rooms.match_state`; every page load of `/play?room=CODE` restores the board from it.
+- Clients send commands and apply versioned realtime events; on any gap or reconnect they reload the snapshot.
 
-The initial product languages are Indonesian and English. The interface must remain usable with reduced motion, keyboard input, screen readers, and color-blind-safe status cues.
+The initial product language is Indonesian, with English planned. The interface must remain usable with reduced motion, keyboard input, screen readers, and color-blind-safe status cues.
 
 ## Current status
 
 | Area | Status |
 |---|---|
-| Laravel + Inertia + React + TypeScript | Working |
+| Laravel 13 + Inertia 3 + React 19 + TypeScript 5 | Working |
 | Breeze authentication routes | Working |
 | Tailwind CSS 4 and Vite 8 build | Working |
-| Laravel Reverb and Echo transport | Installed, configured, and verified locally |
-| `php artisan test` | Passing |
-| TypeScript check | Passing |
-| Home, practice board, and room lobby UI | Working |
-| Game rules engine | Not started; the practice board runs a local demo loop |
-| Match, player, and action schema | Not started |
-| Board renderer | React/CSS board working; PixiJS/GSAP not started |
+| Home, room lobby, and match board UI | Working |
+| Server-authoritative match engine (roll, move, capture, finish) | Working; state snapshot on `rooms.match_state` |
+| 2-7 player rooms with 7 seat colors and 7 characters | Working |
+| Computer opponents with server-side autoplay | Working |
+| Optional host advantage (biased dice) | Working |
+| In-match chat with history | Working |
+| Laravel Reverb realtime transport | Working; `room.updated` and `match.action` events on `room.{CODE}` |
+| Reconnect, resume, and exit guard | Working; resume cookie, snapshot restore, `419` reload recovery |
+| Character sound effects, BGM, and kill animations via OpenRouter generation | Working; assets stored under `public/assets` |
+| Match result modal, winner quadrant stage, capture SFX and animations | Working |
+| Quick matchmaking | Not started |
+| Turn deadlines / 15-second timers | Not started |
+| Outbox pattern and separate `matches` schema | Not started; single-snapshot design today |
+| Board renderer | React/CSS/SVG board with CSS animation working; PixiJS/GSAP not started |
 | PWA manifest and service worker | Not started |
-| Match channel authorization | Waiting for match schema |
+| Match channel authorization | Open question; match events currently ride the public `room.{CODE}` channel |
+| `php artisan test` | Feature suite present (pages, room flow, resume) — passing |
+| TypeScript check | Passing |
 | Database | SQLite locally, MySQL is the target |
 | Queue and cache | Database locally, Redis is the production target |
-
-The realtime transport is ready, but no gameplay event is broadcast yet. The `user.{userId}` private channel is authorized. The `match.{matchId}` channel will be enabled after `matches` and `match_players` exist.
 
 ## Tech stack
 
 | Layer | Stack |
 |---|---|
-| Backend | PHP 8.3, Laravel 13, Inertia 2, Laravel Breeze, Sanctum, Ziggy |
-| Frontend | React 18, TypeScript 5, Vite 8, Tailwind CSS 4 |
-| Realtime | Laravel Reverb 1.13, Laravel Echo, `@laravel/echo-react`, `pusher-js` |
+| Backend | PHP 8.3, Laravel 13, Inertia 3, Laravel Breeze, Sanctum, Ziggy 2 |
+| Frontend | React 19, TypeScript 5, Vite 8, Tailwind CSS 4, Headless UI |
+| Realtime | Laravel Reverb 1.x, Laravel Echo, `@laravel/echo-react`, `pusher-js` |
+| Asset generation | OpenRouter audio and image models for character SFX, BGM, and kill animations |
 | Planned game rendering | PixiJS and GSAP |
 | Planned data services | MySQL 8, Redis, Horizon |
 | Testing | Pest/PHPUnit, with Vitest and Playwright planned |
 
-## MVP scope
+## Implemented scope
 
-Planned P0 capabilities:
+Working today:
 
-- Guest entry and authenticated accounts.
-- Home screen with Play Online, Create Room, and Join Room.
-- Private rooms with expiring invite codes and 2-4 seats.
+- Password-gated room creation (server-verified), join by 6-character invite code, and guest entry without an account.
+- Room lobby with host controls: capacity 2-7 players, host advantage toggle, fill seats with computer opponents.
+- Home base color selection before character selection, unique per room, with 7 characters (Ignivar, Frostclaw, Solgarde, Verdantor, Umrax, Aqualon, Zephyira).
+- Player name confirmation flow; the host can rename other players.
+- Ready check and host-started matches with a random starting player.
+- Server-authoritative roll and move commands under `lockForUpdate`, with `state_version` guards for computer turns.
+- Classic 4-arm board (52 cells, 8 safe squares) and dynamic 5-7 arm boards (11-cell sectors, per-arm safe squares).
+- Captures, extra turns, exact finish, forced opening six, full placements, and match finalization when one player remains.
+- In-match chat with server-persisted history (`room_messages`) and throttled posting.
+- Reconnection: resume token cookie (30 days), last-room memory, user fallback, and a board exit guard (refresh, back, and close confirmation).
+- Match presentation: dice matched to the active turn color, token settle animation, capture SFX and kill animations, winner quadrant stage, background music.
+
+Not yet implemented:
+
 - Quick matchmaking by mode, ruleset, and region.
-- Ready and start flow with host controls.
-- Server-side CSPRNG dice.
-- Legal movement, base release, safe cells, capture, extra turns, and exact finish.
-- 15-second action timers with timeout policy.
-- Versioned realtime events and snapshot recovery.
-- Reconnect, browser background resume, and stale-action protection.
-- Premium dice, hop, capture, return-to-base, finish, and victory animation.
-- Toggleable sound effects and feature-detected haptics.
-- Installable PWA with safe-area support and offline status.
-- Match results finalized idempotently on the server.
-- Accessible controls, reduced motion, and Indonesian/English localization.
+- Turn timers with timeout and forfeiture policy.
+- PWA manifest, service worker, and offline banner.
+- PixiJS/GSAP rendering and haptics.
+- Separate `matches` / `match_actions` tables and the outbox publisher described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Explicit non-goals for the MVP:
+Explicit non-goals:
 
 - Live voice chat, WebRTC audio, and microphone access.
 - Real-money betting, cash-redeemable tokens, gambling, and NFTs.
 - Offline multiplayer or offline move replay.
-- Spectator mode, clans, tournaments, and AI opponents.
+- Spectator mode, clans, and tournaments.
 - Cross-device account synchronization while offline.
 
 ## Game rules
 
-The default ruleset is versioned per match. Current decisions:
+The ruleset lives in `app/Services/MatchRules.php` and is applied server-side only. Current decisions:
 
-- 2-4 players, 4 tokens per player.
-- A roll of 6 releases a token from base.
-- A roll of 6 grants another turn.
-- Three consecutive sixes forfeit the current turn. The third six cannot be moved.
-- Capturing an enemy token grants one extra roll.
-- Eight safe squares: four starting cells and four star/shield cells.
-- Tokens of the same color may share a cell. There are no blockades in the MVP.
+- 2-7 players, 4 tokens per player.
+- A roll of 6 releases a token from base and grants another turn.
+- Capturing an enemy token grants one extra roll; finishing a token grants another turn.
 - An exact roll is required to finish.
-- A single legal move is executed automatically.
-- Each action has a 15-second server deadline.
-- Three consecutive timeouts mark the player as forfeited.
-- Two-player quick match seats players in opposite quadrants. Private rooms may choose seats freely.
-- No legal move advances the turn, subject to extra-turn rules.
-- Resignation and forfeiture must follow one consistent terminal policy across all modes. A forfeited player cannot submit further roll or move commands.
+- Tokens of the same color may share a cell. There are no blockades.
+- Captures hit every enemy token on a non-safe cell.
+- A forced 6 is granted on a player's 4th opening roll if the first 3 rolls produced no 6 and no token left base.
+- Full placements are tracked (`winners` in order of finishing); the match finalizes when only one player remains, ranking that player last.
+- With the optional host advantage enabled, the host's dice are biased 50% toward a capture roll or a 6.
+- 4-player matches use the classic 52-cell track with 8 safe squares (4 starts + 4 star cells); 5-7 player matches use a multi-arm track with 11-cell sectors and 2 safe squares per arm.
+- A single legal move is executed automatically by the client when only one token can move.
+- Computer opponents pick moves with a server-side heuristic (release from base, capture, finish, progress).
+- No turn deadline is enforced yet; the 15-second timer and timeout forfeiture policy are planned.
 
 Open product decisions:
 
-- Winner-takes-all versus full placements for ranks 2-4.
 - Private-room rematch behavior.
-- Three-player quick-match queue and color assignment.
-- Guest session lifetime, account linking, and reconnect after session expiry.
+- Guest session lifetime and account linking.
+- Whether match events should move from the public `room.{CODE}` channel to authorized private channels.
 
-See [GAME_RULES.md](GAME_RULES.md) for the full ruleset and invariant list.
+See [GAME_RULES.md](GAME_RULES.md) for the target ruleset and invariant list.
 
 ## Architecture
 
-Ludo Arena starts as a modular monolith. HTTP commands mutate match state inside a database transaction. Accepted transitions are written to an outbox in the same transaction. A publisher sends committed events through Reverb. The client applies events by version and falls back to a snapshot when it detects a gap.
+Ludo Arena is a modular monolith. Today the authoritative state is a single JSON snapshot on the `rooms` row (`rooms.match_state`): tokens, colors, arms, turn, dice, winners, per-player stats, `state_version`, and `started_at`.
+
+Every mutating command (`roll`, `move`, seat/name/ready/start/end) runs inside a database transaction that re-reads the room with `lockForUpdate`, validates the action against the current state, increments `state_version`, and saves the snapshot. After commit, the server broadcasts the accepted action through Reverb; broadcast failures are logged but never roll back committed state.
 
 ```mermaid
 flowchart LR
-    C[React PWA] -->|HTTP command| L[Laravel]
-    L -->|transaction and row lock| DB[(MySQL)]
-    L -->|same transaction| O[(Outbox)]
-    O -->|publish| R[Laravel Reverb]
-    R -->|WebSocket event| C
-    C -->|snapshot request| L
+    C[React client] -->|HTTP command| L[Laravel]
+    L -->|transaction + row lock| DB[(SQLite / MySQL)]
+    L -->|after commit| R[Laravel Reverb]
+    R -->|room.updated / match.action| C
+    C -->|GET /play?room=CODE snapshot| L
 ```
 
-Core invariants:
+Session continuity and accidental exit:
 
-- Exactly one current player in an active match.
-- Every token belongs to exactly one participant.
-- Only legal transitions alter state.
-- `state_version` increments once per accepted command.
-- The same idempotency key cannot apply two transitions.
-- No capture on safe cells.
-- A terminal match cannot accept roll or move commands.
-- Reverb is transport only. MySQL remains the durable source of truth.
+- `rooms.match_state` is the authoritative snapshot. `Play.tsx` restores it with a `RESTORE` action on every mount/refresh, so a running match never restarts at zero.
+- `room_players.resume_token` plus the encrypted `ludo_resume_<CODE>` cookie (30 days, HttpOnly, SameSite=Lax) re-attach a browser to the seat it already owns after the Laravel session expires or the tab/browser closes. `ludo_last_room` remembers the last room code; authenticated users also fall back to `user_id`. Strangers never claim an occupied seat.
+- `GET /room` without a code resumes the browser's last room (redirecting to `/play?room=CODE` when it is already running). `GET /play?room=CODE` sends waiting rooms back to the lobby and ended rooms home.
+- `useGameExitGuard` blocks back/refresh/close while a match is live: `beforeunload` for refresh and tab close, a sentinel history entry plus `popstate` for the browser back button, and `ConfirmLeaveModal` for in-app links. Nothing leaves the page until the player confirms.
+- A `419` from a roll/move (session expired mid-match) reloads the page, which re-attaches the saved seat and restores the board instead of losing the match.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for transaction order, timer strategy, failure modes, and scaling notes.
+The outbox pattern, idempotency-key table, and dedicated `matches` schema described in [ARCHITECTURE.md](ARCHITECTURE.md) remain the target design for scale; they are not required by the current single-snapshot model.
 
 ## Realtime
 
-Laravel Reverb is installed and configured. The current local transport uses:
+Laravel Reverb is installed, configured, and actively broadcasting:
 
-- `BROADCAST_CONNECTION=reverb`.
-- `config/broadcasting.php` and `config/reverb.php`.
-- `routes/channels.php`, registered in `bootstrap/app.php`.
+- `BROADCAST_CONNECTION=reverb` with `ShouldBroadcastNow` events (no queue dependency for delivery).
 - Echo configured once in `resources/js/app.tsx`.
-- Private channel authorization through `/broadcasting/auth`.
-- A CSRF meta tag in `resources/views/app.blade.php`.
+- Two events on the public `room.{CODE}` channel:
+  - `room.updated` — the full lobby payload, emitted on seat, name, ready, settings, start, end, and join changes.
+  - `match.action` — one envelope per committed mutation (`roll`, `move`, `end`), carrying `action_id` (UUID), `player_id`, the dice value or `token_index`, `state_version`, and the full resulting `match_state`.
+- Broadcast failures are caught and logged by `RoomBroadcaster` with room/action context; committed game state is never rolled back.
+- The client applies an action only when it is the next expected event, ignores duplicates and stale versions, and falls back to the snapshot (page props) on reload.
 
-The realtime contract uses one composite `match.transitioned` event per committed mutation. Each event carries a schema version, event ID, action ID, state version, server timestamps, turn deadline, ordered visual effects, and optionally the authoritative state.
+Rate-limited HTTP APIs complement the socket: chat (30/min), client issue reporting (12/min), and the asset generation endpoints (3-15/min).
 
-The client:
-
-1. Fetches a snapshot and subscribes to the private match channel.
-2. Applies only `lastAppliedVersion + 1`.
-3. Ignores duplicate or stale versions.
-4. Requests a snapshot and cancels stale animations on a version gap.
-5. Re-fetches a snapshot on reconnect or visibility resume.
-6. Never optimistically commits dice or movement.
-
-See [REALTIME.md](REALTIME.md) for the full Reverb setup, channel authorization, event envelope, client algorithm, local verification, and production checklist.
+See [REALTIME.md](REALTIME.md) for the Reverb setup, channel authorization, envelope details, and production checklist.
 
 ## Requirements
 
@@ -194,6 +194,7 @@ See [REALTIME.md](REALTIME.md) for the full Reverb setup, channel authorization,
 - npm 10 or newer.
 - MySQL 8 for the target game database. SQLite is supported for local scaffolding.
 - Redis for the production queue, cache, matchmaking, and Reverb scaling.
+- An OpenRouter API key, if you want to (re)generate character sound effects, background music, or kill animations. The game runs fine without one using the committed assets.
 - Git.
 
 ## Getting started
@@ -269,10 +270,7 @@ Run these processes in separate terminals:
 # Terminal 1: WebSocket server
 php artisan reverb:start --debug
 
-# Terminal 2: queued jobs (outbox publisher once implemented)
-php artisan queue:work
-
-# Terminal 3: frontend hot reload
+# Terminal 2: frontend hot reload
 npm run dev
 ```
 
@@ -297,12 +295,17 @@ For HTTPS deployments, terminate TLS at a reverse proxy and set both `REVERB_SCH
 
 | Variable | Purpose | Local default |
 |---|---|---|
-| `APP_URL` | Public application URL | `http://localhost` |
+| `APP_URL` | Public application URL | `http://localhost:8000` |
 | `DB_CONNECTION` | Database driver | `sqlite` |
 | `SESSION_DRIVER` | Session store | `database` |
 | `CACHE_STORE` | Cache store | `database` |
 | `QUEUE_CONNECTION` | Queue connection | `database` |
 | `BROADCAST_CONNECTION` | Broadcast driver | `reverb` |
+| `ROOM_CREATE_PASSWORD` | Server-verified password required to create a room | `malaquena` in the scaffold; override in every deployment |
+| `OPENROUTER_API_KEY` | OpenRouter key for SFX, BGM, and kill animation generation | Empty; generation endpoints report not configured |
+| `OPENROUTER_AUDIO_MODEL` | Audio model for SFX and BGM | `bytedance-seed/seed-audio-1-0` |
+| `OPENROUTER_IMAGE_MODEL` | Image model for kill animations | `openai/gpt-image-2.6-sunburst` |
+| `OPENROUTER_BASE_URL` | OpenRouter API base URL | `https://openrouter.ai/api/v1` |
 | `REVERB_APP_ID` | Reverb application ID | Generated locally |
 | `REVERB_APP_KEY` | Reverb public key | Generated locally |
 | `REVERB_APP_SECRET` | Reverb secret | Generated locally |
@@ -315,7 +318,7 @@ For HTTPS deployments, terminate TLS at a reverse proxy and set both `REVERB_SCH
 | `VITE_REVERB_PORT` | Browser WebSocket port | Mirrors `REVERB_PORT` |
 | `VITE_REVERB_SCHEME` | Browser WebSocket scheme | Mirrors `REVERB_SCHEME` |
 
-`.env` is ignored by Git. Never commit generated Reverb credentials, database passwords, or application keys. `.env.example` contains placeholder credentials, not production secrets.
+`.env` is ignored by Git. Never commit generated Reverb credentials, database passwords, the OpenRouter key, or application keys. `.env.example` contains placeholder credentials, not production secrets.
 
 ## Available commands
 
@@ -330,7 +333,6 @@ For HTTPS deployments, terminate TLS at a reverse proxy and set both `REVERB_SCH
 | `npm run dev` | Start the Vite development server |
 | `php artisan reverb:start --debug` | Start the Reverb WebSocket server |
 | `php artisan reverb:restart` | Restart Reverb after configuration changes |
-| `php artisan queue:work` | Process queued jobs, including future outbox publication |
 | `php artisan config:clear` | Clear cached configuration |
 
 `npm run lint` is available, but it runs ESLint with `--fix` and may modify files.
@@ -339,32 +341,42 @@ For HTTPS deployments, terminate TLS at a reverse proxy and set both `REVERB_SCH
 
 ```text
 app/
-  Http/Controllers/        Authentication and profile controllers
+  Events/                  RoomUpdated, MatchAction broadcast events
+  Http/Controllers/        Room, chat, pages, auth, profile, and asset generation controllers
   Http/Middleware/         Inertia request handling
-  Models/                  Eloquent models
+  Models/                  Room (match_state snapshot), RoomPlayer, User
+  Services/
+    MatchRules.php         Board spec, dice, moves, capture, computer heuristic
+    RoomBroadcaster.php    Broadcast wrapper with failure logging
+    PlayerResume.php       Resume token and last-room memory
+    CharacterSoundGenerator.php, BackgroundMusicGenerator.php,
+    CharacterKillAnimationGenerator.php  OpenRouter asset generation
 config/
   broadcasting.php         Broadcast connections
   reverb.php               Reverb server and application credentials
+  ludo.php                 Room creation password
 database/
-  migrations/              Current Laravel schema
+  migrations/              Users, rooms, room_players, room_messages, cache, jobs
   factories/               Model factories
   seeders/                 Database seeders
 resources/
   css/app.css              Tailwind entry point and design tokens
   js/app.tsx               Inertia and Echo entry point
-  js/Components/           Shared UI components
-  js/Components/Game/      Board, dice, player card, logo, and icons
-  js/lib/ludo.ts           15x15 board geometry and player configs
+  js/Components/Game/      Board, dice, player cards, chat, modals, animations
+  js/lib/ludo.ts           Board geometry and player configs
+  js/lib/                  Board motion, sound, exit guard, viewport helpers
   js/Layouts/              Guest and authenticated layouts
-  js/Pages/                Home, Play, Room, auth, and profile pages
+  js/Pages/                Home, Play, Room, Dashboard, auth, and profile pages
   js/types/                TypeScript declarations
   views/app.blade.php      Inertia root template and CSRF meta
 routes/
-  web.php                  Home, practice board, room lobby, dashboard, and profile routes
+  web.php                  Home, how-it-works, play, room lobby, match, chat, and asset generation routes
   auth.php                 Authentication routes
   channels.php             Broadcast channel authorization
+public/
+  assets/                  Character art, pion figures, SFX, BGM, kill animations
 tests/
-  Feature/                 HTTP and integration tests
+  Feature/                 Page, room flow, and resume tests
   Unit/                    Unit tests
 ```
 
@@ -385,7 +397,7 @@ tests/Unit/Domain/Ludo/    Rules and property-based tests
 | [PRD.md](PRD.md) | Product requirements, journeys, acceptance scenarios, and launch gates |
 | [DESIGN.md](DESIGN.md) | Visual system, layout, tokens, components, and accessibility checklist |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System boundaries, transaction model, timers, and failure modes |
-| [ANIMATION.md](ANIMATION.md) | PixiJS and GSAP sequences, timing, interruption, and performance budgets |
+| [ANIMATION.md](ANIMATION.md) | Animation sequences, timing, interruption, and performance budgets |
 | [REALTIME.md](REALTIME.md) | Reverb setup, channel authorization, event envelope, and recovery |
 | [GAME_RULES.md](GAME_RULES.md) | Versioned ruleset, board model, invariants, and test matrix |
 | [PWA.md](PWA.md) | Installability, caching matrix, offline behavior, and mobile limitations |
@@ -402,24 +414,25 @@ npx tsc --noEmit
 npm run build
 ```
 
-The repository currently has two scaffold tests. The game test plan is broader:
+The current suite covers rendered pages, the room join/seat/ready/start flow, and match resume/reconnect behavior (`GamePagesTest`, `RoomFlowTest`, `GameResumeTest`). The game test plan is broader:
 
 - Pure rules engine tests for every dice value and board edge case.
 - Property-based tests for invariants, captures, safe cells, and finish conditions.
-- MySQL integration tests for locking, idempotency, outbox ordering, and duplicate actions.
+- MySQL integration tests for locking, idempotency, and duplicate actions.
 - Reverb integration tests for channel authorization and event delivery.
 - Reconnect, visibility resume, duplicate event, and version gap tests.
-- Playwright end-to-end tests for 2-4 player flows.
+- Playwright end-to-end tests for 2-7 player flows.
 - Mobile device QA for 320px width, safe areas, and reduced motion.
 
 ## Security and privacy
 
 - The server is authoritative. Client-provided dice, paths, and results are never trusted.
-- Dice values use a CSPRNG.
-- Commands use idempotency keys and expected state versions.
-- Match channels are private and must verify current match membership.
-- Room codes and invite links must not appear in public broadcasts.
-- Rate limiting is required for room creation, joining, roll, move, and matchmaking.
+- Dice values use a CSPRNG (`random_int`).
+- Every mutation re-reads the room under `lockForUpdate` inside a transaction.
+- Room creation is gated by a server-verified password (`ROOM_CREATE_PASSWORD`); the value never reaches the browser bundle.
+- Chat, client issue reporting, and asset generation endpoints are rate limited.
+- The OpenRouter API key is server-only and never exposed to the client.
+- Match events currently ride the public `room.{CODE}` channel. Moving match traffic to authorized private channels is an open hardening task.
 - `REVERB_ALLOWED_ORIGINS` must list explicit application origins outside local development.
 - Reverb credentials and `.env` values must stay out of version control.
 - Production requires HTTPS and WSS.
@@ -437,23 +450,22 @@ The interface targets:
 - Active-turn cues that do not rely on color alone.
 - Reduced-motion support with animation skip and fast-forward behavior.
 - A screen-reader equivalent for board status, active player, dice result, and legal moves.
-- Indonesian and English localization with externalized strings.
 
-The PWA scope includes a manifest, install icons, a service worker, an offline banner, update handling, and iOS install help. Match snapshots and actions are network-only. Offline clients may display the last-known board as a non-authoritative visual reference, but they must not replay moves.
+The PWA scope (manifest, install icons, service worker, offline banner, update handling, and iOS install help) is not started. Match snapshots and actions are network-only. Offline clients may display the last-known board as a non-authoritative visual reference, but they must not replay moves.
 
 ## Roadmap
 
-| Milestone | Scope |
-|---|---|
-| M0 | Decisions, repository setup, build pipeline, authentication, realtime foundation |
-| M1 | Design system, responsive shell, PWA manifest and service worker |
-| M2 | Board fixture, pure Ludo rules engine, property tests |
-| M3 | Match schema, rooms, matchmaking, atomic actions, idempotency, outbox |
-| M4 | Private match channels, snapshot recovery, reconnect, timer synchronization |
-| M5 | PixiJS board, GSAP animation, SFX, haptics, performance tuning |
-| M6 | Security review, load tests, observability, backup restore, pilot release |
+| Milestone | Scope | Status |
+|---|---|---|
+| M0 | Decisions, repository setup, build pipeline, authentication, realtime foundation | Done |
+| M1 | Design system, responsive shell | Done; PWA manifest and service worker pending |
+| M2 | Board renderer, Ludo rules engine | Done (CSS/SVG board, `MatchRules` engine); property tests pending |
+| M3 | Rooms, seats, characters, computer opponents, server-authoritative actions | Done; quick matchmaking and idempotency keys pending |
+| M4 | Realtime match events, snapshot recovery, reconnect | Done; timer synchronization pending |
+| M5 | Board animation, SFX, kill animations, BGM | Done without PixiJS/GSAP; haptics pending |
+| M6 | Security review, load tests, observability, backup restore, pilot release | Not started |
 
-The next engineering milestone is the immutable board fixture, the versioned rules engine, and the match schema. Match channel authorization can be enabled immediately after the membership tables exist.
+The next engineering milestones are quick matchmaking, turn timers with a timeout policy, the installable PWA layer, and hardening match channels from public to authorized private channels.
 
 See [TASKS.md](TASKS.md) and [ROADMAP.md](ROADMAP.md) for the detailed work breakdown.
 

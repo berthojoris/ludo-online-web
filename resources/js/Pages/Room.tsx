@@ -1388,7 +1388,7 @@ function RoomContent() {
 
                                                 {seatCharacter ? (
                                                     <div
-                                                        className="room-seat-scene"
+                                                        className="room-seat-scene max-h-20 sm:max-h-24"
                                                         style={tokenStyle}
                                                         aria-hidden="true"
                                                     >
@@ -1436,11 +1436,17 @@ function RoomContent() {
                                                 )}
 
                                                 {occupant ? (
-                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1.5 pt-1">
+                                                    <div
+                                                        className={`mt-auto flex min-w-0 gap-1.5 pt-1 ${
+                                                            isYou
+                                                                ? 'flex-col'
+                                                                : 'items-center justify-between'
+                                                        }`}
+                                                    >
                                                         <div className="flex min-w-0 flex-1 items-center gap-2">
                                                             {seatCharacter ? (
                                                                 <div
-                                                                    className="relative hidden h-8 w-8 shrink-0 rounded-full p-[2px] min-[400px]:block sm:h-9 sm:w-9"
+                                                                    className="relative hidden h-7 w-7 shrink-0 rounded-full p-[2px] min-[400px]:block sm:h-8 sm:w-8"
                                                                     style={{
                                                                         background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
                                                                     }}
@@ -1453,10 +1459,10 @@ function RoomContent() {
                                                                             seatCharacter.name
                                                                         }
                                                                         width={
-                                                                            36
+                                                                            32
                                                                         }
                                                                         height={
-                                                                            36
+                                                                            32
                                                                         }
                                                                         className="h-full w-full rounded-full bg-white object-cover"
                                                                     />
@@ -1492,7 +1498,7 @@ function RoomContent() {
                                                         </div>
 
                                                         {isYou && (
-                                                            <div className="flex shrink-0 items-center gap-1">
+                                                            <div className="flex min-w-0 items-center gap-1.5">
                                                                 <button
                                                                     type="button"
                                                                     disabled={
@@ -1513,20 +1519,14 @@ function RoomContent() {
                                                                             ? 'Ganti karakter'
                                                                             : 'Pilih karakter'
                                                                     }
-                                                                    className={`btn min-h-10 px-2.5 sm:min-h-11 ${
+                                                                    className={`btn min-h-9 min-w-0 flex-1 gap-1 px-2 text-xs sm:min-h-10 ${
                                                                         hasCharacter
-                                                                            ? 'btn-secondary w-10 px-0 sm:w-11 lg:w-auto lg:px-2.5'
-                                                                            : 'btn-primary text-xs'
+                                                                            ? 'btn-secondary'
+                                                                            : 'btn-primary'
                                                                     }`}
                                                                 >
-                                                                    <PawnIcon className="h-4 w-4 shrink-0" />
-                                                                    <span
-                                                                        className={
-                                                                            hasCharacter
-                                                                                ? 'hidden lg:inline'
-                                                                                : 'inline'
-                                                                        }
-                                                                    >
+                                                                    <PawnIcon className="h-3.5 w-3.5 shrink-0" />
+                                                                    <span className="truncate">
                                                                         Karakter
                                                                     </span>
                                                                 </button>
@@ -1540,7 +1540,7 @@ function RoomContent() {
                                                                             null,
                                                                         )
                                                                     }
-                                                                    className="btn btn-quiet min-h-10 shrink-0 px-2 sm:min-h-11"
+                                                                    className="btn btn-quiet min-h-9 shrink-0 px-2.5 text-xs sm:min-h-10"
                                                                 >
                                                                     Berdiri
                                                                 </button>
