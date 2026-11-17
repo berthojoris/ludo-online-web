@@ -5,7 +5,6 @@ use App\Http\Controllers\CharacterKillAnimationController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
-use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomChatController;
 use Illuminate\Support\Facades\Route;
@@ -55,16 +54,6 @@ Route::prefix('api/kill-animations')->name('kill-animations.')->group(function (
     Route::post('/characters/{character}/generate', [CharacterKillAnimationController::class, 'generateOne'])
         ->middleware('throttle:15,1')
         ->name('characters.generate');
-});
-
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth'])->name('dashboard');
-
-Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
 require __DIR__.'/auth.php';

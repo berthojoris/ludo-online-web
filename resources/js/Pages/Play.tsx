@@ -2045,7 +2045,9 @@ export default function Play() {
             return;
         }
 
-        const attemptKey = `${state.version}:${state.turn}:${tokenIndex}`;
+        // Local practice never bumps `version`, so the roll count is what tells
+        // a bonus roll apart from the previous one with the same token.
+        const attemptKey = `${state.version}:${state.turn}:${state.rolls[state.turn]}:${tokenIndex}`;
 
         if (autoMoveAttemptRef.current === attemptKey) {
             return;

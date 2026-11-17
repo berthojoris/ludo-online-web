@@ -160,6 +160,7 @@ class RoomController extends Controller
                         }
                         $player->seat_color = $seat;
                         $player->save();
+
                         continue;
                     }
                     $player->seat_color = null;
@@ -657,6 +658,8 @@ class RoomController extends Controller
                 'ended_by' => $player->name,
             ], $player);
         }
+
+        PlayerResume::forget($room->code);
 
         return redirect()->route('home');
     }

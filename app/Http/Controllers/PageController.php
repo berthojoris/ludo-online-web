@@ -46,6 +46,8 @@ class PageController extends Controller
             } elseif ($room->status === 'waiting') {
                 return redirect()->route('room', ['code' => $room->code]);
             } elseif ($room->status === 'ended') {
+                PlayerResume::forget($room->code);
+
                 return redirect()->route('home');
             } else {
                 RoomController::playerToken($request);

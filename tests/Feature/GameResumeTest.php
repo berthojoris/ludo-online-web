@@ -393,4 +393,124 @@ class GameResumeTest extends TestCase
                 && $context['exception'] instanceof ConnectException),
         );
     }
+
+    public function test_ending_the_match_expires_the_hosts_resume_cookie(): void
+    {
+        Event::fake([MatchAction::class]);
+        [$room] = $this->hostRoom();
+        $room->update([
+            'status' => 'started',
+            'match_state' => MatchRules::initial(0, ['red', 'yellow']),
+        ]);
+
+        $this->post("/rooms/{$room->code}/end")
+            ->assertRedirect(route('home'))
+            ->assertCookieExpired(PlayerResume::cookieName($room->code));
+    }
+
+    public function test_opening_an_ended_match_expires_its_resume_cookie(): void
+    {
+        [$room, $host] = $this->hostRoom();
+        $room->update(['status' => 'ended']);
+
+        $this->withCookie(PlayerResume::cookieName($room->code), $host->resume_token)
+            ->get("/play?room={$room->code}")
+            ->assertRedirect(route('home'))
+            ->assertCookieExpired(PlayerResume::cookieName($room->code));
+    }
+
+    public function test_a_browser_keeps_its_resume_cookies_while_it_carries_only_a_few(): void
+    {
+        $codes = ['ENDAA1', 'ENDAA2', 'ENDAA3', 'ENDAA4', 'ENDAA5'];
+
+        foreach ($codes as $code) {
+            $this->createRoomWithStatus($code, 'ended');
+        }
+
+        $response = $this->withResumeCookies($codes)->get('/')->assertOk();
+
+        foreach ($codes as $code) {
+            $response->assertCookieMissing(PlayerResume::cookieName($code));
+        }
+    }
+
+    public function test_piled_up_resume_cookies_expire_dead_rooms_first_then_the_least_active(): void
+    {
+        $live = ['LIVEA1', 'LIVEA2', 'LIVEA3', 'LIVEA4', 'LIVEA5', 'LIVEA6'];
+
+        foreach ($live as $minutesAgo => $code) {
+            $this->createRoomWithStatus($code, 'started', 60 - $minutesAgo);
+        }
+
+        $this->createRoomWithStatus('ENDED1', 'ended');
+        $this->createRoomWithStatus('ENDED2', 'ended');
+
+        $response = $this->withResumeCookies([...$live, 'ENDED1', 'ENDED2', 'GONEX1'])
+            ->get('/')
+            ->assertOk();
+
+        // Dead rooms go first, then the oldest live room beyond the limit.
+        foreach (['ENDED1', 'ENDED2', 'GONEX1', 'LIVEA1'] as $code) {
+            $response->assertCookieExpired(PlayerResume::cookieName($code));
+        }
+
+        foreach (['LIVEA2', 'LIVEA3', 'LIVEA4', 'LIVEA5', 'LIVEA6'] as $code) {
+            $response->assertCookieMissing(PlayerResume::cookieName($code));
+        }
+    }
+
+    public function test_pruning_keeps_the_last_room_and_expires_a_bounded_batch(): void
+    {
+        $live = ['LIVEB1', 'LIVEB2', 'LIVEB3', 'LIVEB4', 'LIVEB5', 'LIVEB6'];
+
+        foreach ($live as $minutesAgo => $code) {
+            $this->createRoomWithStatus($code, 'started', 60 - $minutesAgo);
+        }
+
+        $ended = ['ENDB01', 'ENDB02', 'ENDB03', 'ENDB04', 'ENDB05'];
+
+        foreach ($ended as $code) {
+            $this->createRoomWithStatus($code, 'ended');
+        }
+
+        $response = $this->withResumeCookies([...$live, ...$ended])
+            ->withCookie(PlayerResume::LAST_ROOM_COOKIE, 'LIVEB1')
+            ->get('/')
+            ->assertOk();
+
+        $expired = collect($response->headers->getCookies())
+            ->filter(fn ($cookie) => $cookie->isCleared())
+            ->map(fn ($cookie) => $cookie->getName())
+            ->values()
+            ->all();
+
+        $this->assertCount(PlayerResume::PRUNE_BATCH, $expired);
+        $this->assertNotContains(PlayerResume::cookieName('LIVEB1'), $expired);
+        $this->assertEmpty(array_diff($expired, array_map(PlayerResume::cookieName(...), $ended)));
+    }
+
+    private function createRoomWithStatus(string $code, string $status, int $minutesAgo = 0): Room
+    {
+        $room = Room::create([
+            'code' => $code,
+            'host_token' => 'host-'.$code,
+            'max_players' => 4,
+            'status' => $status,
+        ]);
+        $room->forceFill(['updated_at' => now()->subMinutes($minutesAgo)])->save();
+
+        return $room;
+    }
+
+    /**
+     * @param  list<string>  $codes
+     */
+    private function withResumeCookies(array $codes): static
+    {
+        foreach ($codes as $code) {
+            $this->withCookie(PlayerResume::cookieName($code), 'resume-'.$code);
+        }
+
+        return $this;
+    }
 }

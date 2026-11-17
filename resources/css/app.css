@@ -733,6 +733,19 @@
     -webkit-user-drag: none;
 }
 
+/* While the art request is retried, the seat-colored pin stands in for it. */
+.pion-art[data-failed] {
+    visibility: hidden;
+}
+
+.pion-art-fallback {
+    position: absolute;
+    left: 14%;
+    bottom: 0;
+    width: 72%;
+    height: auto;
+}
+
 /* The hit button is a sibling drawn over the figure (see LudoBoard TokenView). */
 .pion-hit:focus-visible {
     outline: none;

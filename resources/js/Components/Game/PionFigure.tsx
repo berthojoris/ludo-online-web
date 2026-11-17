@@ -1,4 +1,6 @@
+import { useRetryingImage } from '@/lib/useRetryingImage';
 import { CSSProperties } from 'react';
+import LudoPin from './LudoPin';
 
 export type PionMotion = 'idle' | 'hop' | 'knocked';
 
@@ -28,6 +30,7 @@ export default function PionFigure({
     style,
 }: PionFigureProps) {
     const hasCount = stackCount > 1;
+    const art = useRetryingImage(pionImage);
 
     return (
         <span
@@ -49,13 +52,17 @@ export default function PionFigure({
                     {hasCount && (
                         <span className="pion-count">{stackCount}</span>
                     )}
+                    {art.failed && <LudoPin className="pion-art-fallback" />}
                     <img
-                        src={pionImage}
+                        src={art.src}
                         alt=""
                         width={192}
                         height={320}
                         draggable={false}
                         decoding="sync"
+                        onError={art.onError}
+                        onLoad={art.onLoad}
+                        data-failed={art.failed || undefined}
                         className="pion-art"
                     />
                 </span>

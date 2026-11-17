@@ -25,6 +25,21 @@ class PlayerResume
 
     public const COOKIE_MINUTES = 60 * 24 * 30;
 
+    /**
+     * Resume cookies a browser may carry before older ones are expired. Each
+     * encrypted cookie adds roughly 360 bytes to every request, and a browser
+     * that played dozens of rooms otherwise sends a Cookie header that proxies
+     * such as Cloudflare reject (error 520) until the user clears site data.
+     */
+    public const MAX_RESUME_COOKIES = 5;
+
+    /**
+     * Cookies expired per response. Expired cookies are encrypted too, so each
+     * one adds about 450 bytes of Set-Cookie header; a small batch keeps the
+     * response headers well inside typical proxy buffers.
+     */
+    public const PRUNE_BATCH = 4;
+
     public static function cookieName(string $code): string
     {
         return self::COOKIE_PREFIX.strtoupper($code);
@@ -73,6 +88,62 @@ class PlayerResume
     public static function forget(string $code): void
     {
         cookie()->queue(cookie()->forget(self::cookieName($code)));
+    }
+
+    /**
+     * Expires resume cookies the browser no longer needs once it carries more
+     * than MAX_RESUME_COOKIES of them: cookies of ended or deleted rooms go
+     * first, then the least recently active rooms. The last room and cookies
+     * queued by the current request are always kept.
+     */
+    public static function pruneStale(Request $request): void
+    {
+        /** @var array<string, string> $namesByCode */
+        $namesByCode = [];
+
+        foreach (array_keys($request->cookies->all()) as $name) {
+            $name = (string) $name;
+
+            if (str_starts_with($name, self::COOKIE_PREFIX)) {
+                $namesByCode[strtoupper(substr($name, strlen(self::COOKIE_PREFIX)))] = $name;
+            }
+        }
+
+        if (count($namesByCode) <= self::MAX_RESUME_COOKIES) {
+            return;
+        }
+
+        $liveCodes = Room::whereIn('code', array_keys($namesByCode))
+            ->where('status', '!=', 'ended')
+            ->orderByDesc('updated_at')
+            ->pluck('code')
+            ->all();
+
+        $lastRoom = self::lastRoom($request);
+        $preferred = in_array($lastRoom, $liveCodes, true) ? [$lastRoom] : [];
+        $keep = array_slice(array_values(array_unique([...$preferred, ...$liveCodes])), 0, self::MAX_RESUME_COOKIES);
+
+        $stale = [
+            ...array_diff(array_keys($namesByCode), $liveCodes),
+            ...array_diff($liveCodes, $keep),
+        ];
+
+        $expired = 0;
+
+        foreach ($stale as $code) {
+            if ($expired >= self::PRUNE_BATCH) {
+                break;
+            }
+
+            $name = $namesByCode[$code];
+
+            if (cookie()->hasQueued($name)) {
+                continue;
+            }
+
+            cookie()->queue(cookie()->forget($name));
+            $expired++;
+        }
     }
 
     public static function find(Request $request, Room $room): ?RoomPlayer

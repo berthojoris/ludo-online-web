@@ -70,8 +70,8 @@ type RoomPageProps = {
 };
 
 const SEAT_GRID_CLASS: Record<PlayerCount, string> = {
-    2: 'grid-cols-1 grid-rows-2 sm:grid-cols-2 sm:grid-rows-1',
-    3: 'grid-cols-1 grid-rows-3 sm:grid-cols-3 sm:grid-rows-1',
+    2: 'grid-cols-2 grid-rows-1',
+    3: 'grid-cols-2 grid-rows-2 sm:grid-cols-3 sm:grid-rows-1',
     4: 'grid-cols-2 grid-rows-2',
     5: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
     6: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
