@@ -2,14 +2,12 @@ import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
 import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
 import RequiredPlayerNameModal from '@/Components/Game/RequiredPlayerNameModal';
-import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ArrowRightIcon,
     CheckIcon,
     ChevronLeftIcon,
     CloseIcon,
-    CopyIcon,
     DiceIcon,
     HashIcon,
     LinkIcon,
@@ -39,7 +37,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 
-type CopyState = 'idle' | 'code' | 'link' | 'error';
+type CopyState = 'idle' | 'link' | 'error';
 type ViewMode = 'lobby' | 'join';
 
 type RoomPlayerData = {
@@ -102,10 +100,10 @@ function RoomSettingsSummary({
             <fieldset className="mb-3" disabled={!isHost || pending} aria-busy={pending}>
                 <legend className="text-ink-muted text-xs font-medium">Lawan</legend>
                 <div className="segmented mt-1.5 grid grid-cols-2">
-                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => onSelectOpponent(false)}>Pemain asli</button>
+                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => onSelectOpponent(false)}>MANUSIA</button>
                     <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => onSelectOpponent(true)}>VS COMPUTER</button>
                 </div>
-                {vsComputer && <p className="text-ink-muted mt-1 text-xs">Komputer: MEDIUM</p>}
+                {vsComputer && <p className="text-ink-muted mt-1 text-xs">Level Computer: MEDIUM</p>}
             </fieldset>
             <div>
                 <div className="flex items-center justify-between gap-2">
@@ -380,7 +378,7 @@ function RoomContent() {
 
     const shareLink = liveRoom ? route('room', { code: liveRoom.code }) : '';
 
-    const copy = async (value: string, target: 'code' | 'link') => {
+    const copy = async (value: string, target: 'link') => {
         if (!value) {
             return;
         }
@@ -749,16 +747,7 @@ function RoomContent() {
                                     />
                                 </span>
                             </Link>
-                            {liveRoom && viewMode === 'lobby' && (
-                                <span className="border-line text-ink hidden items-baseline gap-1.5 rounded-lg border bg-white px-2.5 py-1 lg:inline-flex">
-                                    <span className="text-ink-muted text-[10px] font-semibold tracking-wide uppercase">
-                                        Ruang
-                                    </span>
-                                    <span className="font-mono text-xs font-bold tracking-[0.06em]">
-                                        #{liveRoom.code}
-                                    </span>
-                                </span>
-                            )}
+
                         </div>
 
                         <div
@@ -983,14 +972,6 @@ function RoomContent() {
                                 {/* Room code banner */}
                                 <div className="shadow-card relative flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 overflow-hidden rounded-2xl border border-white/85 bg-white/92 px-2.5 py-2 backdrop-blur-md sm:px-4 sm:py-2.5">
                                     <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                                        {/* A six is what lets a piece leave base, so the lobby shows one. */}
-                                        <div className="border-line bg-canvas relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border min-[380px]:flex sm:h-12 sm:w-12">
-                                            <Dice
-                                                value={6}
-                                                className="h-7 w-7 sm:h-8 sm:w-8"
-                                            />
-                                        </div>
-
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-1.5">
                                                 <span className="border-line bg-canvas text-ink inline-flex items-baseline gap-1.5 rounded-lg border px-2 py-0.5 sm:px-2.5">
@@ -1037,25 +1018,6 @@ function RoomContent() {
                                                 </span>
                                             </button>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                copy(liveRoom.code, 'code')
-                                            }
-                                            className="btn btn-quiet min-h-10 px-2.5 sm:min-h-11 sm:px-3"
-                                        >
-                                            {copyState === 'code' ? (
-                                                <>
-                                                    <CheckIcon className="text-success-ink h-3.5 w-3.5" />
-                                                    <span>Tersalin</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <CopyIcon className="h-3.5 w-3.5" />
-                                                    <span>Salin Kode</span>
-                                                </>
-                                            )}
-                                        </button>
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -1613,7 +1575,7 @@ function RoomContent() {
                                                         >
                                                             <PawnIcon className="h-4 w-4 shrink-0" />
                                                             <span className="truncate">
-                                                                Duduk & Pilih
+                                                                Pilih
                                                             </span>
                                                         </button>
                                                         <button
@@ -1825,7 +1787,7 @@ function RoomContent() {
                                                 />
                                                 {pendingAction
                                                     ? 'Memulai…'
-                                                    : 'Mulai main'}
+                                                    : 'Start'}
                                             </button>
                                         ) : (
                                             <div className="bg-surface-muted text-ink-muted inline-flex h-11 items-center justify-center rounded-xl px-3 text-center text-xs font-semibold">
@@ -1896,7 +1858,7 @@ function RoomContent() {
                                         />
                                         {pendingAction
                                             ? 'Memulai…'
-                                            : 'Mulai main'}
+                                            : 'Start'}
                                     </button>
                                 ) : (
                                     <div className="bg-surface-muted text-ink-muted inline-flex h-11 flex-1 items-center justify-center rounded-xl px-2 text-center text-[11px] font-semibold">
@@ -1968,42 +1930,57 @@ function RoomContent() {
                             </button>
                         </div>
 
-                        <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5">
-                            <div className="min-w-0">
-                                <p className="text-ink text-xs font-semibold">
-                                    Keuntungan host
-                                </p>
-                                <p className="text-ink-muted mt-0.5 text-[11px]">
-                                    Peluang 50% keluar markas atau menangkap
-                                    saat tersedia.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-label="Keuntungan host"
-                                aria-checked={Boolean(
-                                    liveRoom?.host_advantage,
+                        <div className="space-y-4">
+                            <RoomSettingsSummary
+                                vsComputer={Boolean(
+                                    liveRoom?.players.some(
+                                        (player) => player.is_computer,
+                                    ),
                                 )}
-                                aria-busy={pendingAction}
-                                disabled={!isHost || pendingAction}
-                                onClick={handleToggleAdvantage}
-                                className="switch shrink-0"
-                            >
-                                <span className="w-6 text-right tabular-nums">
-                                    {pendingAction
-                                        ? '…'
-                                        : liveRoom?.host_advantage
-                                          ? 'ON'
-                                          : 'OFF'}
-                                </span>
-                                <span
-                                    aria-hidden="true"
-                                    className="switch-track"
+                                onSelectOpponent={handleSelectOpponent}
+                                playerCount={playerCount}
+                                isHost={isHost}
+                                pending={pendingAction}
+                                onSelectPlayerCount={handleSelectPlayerCount}
+                            />
+
+                            <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5">
+                                <div className="min-w-0">
+                                    <p className="text-ink text-xs font-semibold">
+                                        Keuntungan host
+                                    </p>
+                                    <p className="text-ink-muted mt-0.5 text-[11px]">
+                                        Peluang 50% keluar markas atau menangkap
+                                        saat tersedia.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-label="Keuntungan host"
+                                    aria-checked={Boolean(
+                                        liveRoom?.host_advantage,
+                                    )}
+                                    aria-busy={pendingAction}
+                                    disabled={!isHost || pendingAction}
+                                    onClick={handleToggleAdvantage}
+                                    className="switch shrink-0"
                                 >
-                                    <span className="switch-thumb" />
-                                </span>
-                            </button>
+                                    <span className="w-6 text-right tabular-nums">
+                                        {pendingAction
+                                            ? '…'
+                                            : liveRoom?.host_advantage
+                                              ? 'ON'
+                                              : 'OFF'}
+                                    </span>
+                                    <span
+                                        aria-hidden="true"
+                                        className="switch-track"
+                                    >
+                                        <span className="switch-thumb" />
+                                    </span>
+                                </button>
+                            </div>
                         </div>
 
                         {!isHost && (

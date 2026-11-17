@@ -21,8 +21,8 @@ type CharacterSkillBurstProps = {
     onEnd?: (id: string) => void;
 };
 
-export const SKILL_BURST_DURATION_MS = 1400;
-const REDUCED_MOTION_HOLD_MS = 1000;
+export const SKILL_BURST_DURATION_MS = 2600;
+const REDUCED_MOTION_HOLD_MS = 1800;
 
 /**
  * Capture skill: the attacker's character rises out of the capture cell,

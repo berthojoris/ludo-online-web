@@ -141,10 +141,10 @@ export default function CreateRoomPasswordModal({
                     <fieldset className="mt-4" disabled={processing}>
                         <legend className="text-ink text-xs font-semibold">Lawan</legend>
                         <div className="segmented mt-1.5 grid grid-cols-2">
-                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => setVsComputer(false)}>Pemain asli</button>
+                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => setVsComputer(false)}>MANUSIA</button>
                             <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => setVsComputer(true)}>VS COMPUTER</button>
                         </div>
-                        {vsComputer && <p className="text-ink-muted mt-1 text-xs">Komputer: MEDIUM</p>}
+                        {vsComputer && <p className="text-ink-muted mt-1 text-xs">Level Computer: MEDIUM</p>}
                     </fieldset>
                     {passwordRequired && <>
                     <label

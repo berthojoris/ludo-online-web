@@ -1026,43 +1026,43 @@
         transform: translate(-50%, -50%)
             translate(var(--burst-dx), var(--burst-dy)) scale(0.12);
     }
-    10% {
+    8% {
         opacity: 1;
     }
-    28% {
+    18% {
         transform: translate(-50%, -62%)
             translate(
-                calc(var(--burst-dx) * 0.6),
-                calc(var(--burst-dy) * 0.6)
+                calc(var(--burst-dx) * 0.55),
+                calc(var(--burst-dy) * 0.55)
             )
-            scale(0.42);
+            scale(0.5);
     }
-    60% {
+    34% {
         opacity: 1;
         transform: translate(-50%, -54%) translate(0, 0) scale(1);
     }
-    74% {
+    82% {
         opacity: 1;
-        transform: translate(-50%, -54%) translate(0, 0) scale(1.05);
+        transform: translate(-50%, -54%) translate(0, 0) scale(1.04);
     }
     100% {
         opacity: 0;
-        transform: translate(-50%, -56%) translate(0, 0) scale(1.34);
+        transform: translate(-50%, -56%) translate(0, 0) scale(1.28);
     }
 }
 
 @keyframes skill-name {
     0%,
-    18% {
+    10% {
         opacity: 0;
         transform: translate(-50%, 10px) scale(0.9);
     }
-    32% {
+    22% {
         opacity: 1;
         transform: translate(-50%, 0) scale(1.04);
     }
-    40%,
-    78% {
+    30%,
+    82% {
         opacity: 1;
         transform: translate(-50%, 0) scale(1);
     }
