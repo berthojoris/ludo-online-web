@@ -440,13 +440,15 @@ class RoomController extends Controller
         }
 
         $startingPlayer = $players->random();
+        $seatColors = $players->pluck('seat_color')->all();
+        $boardArms = $players->count() >= 5 ? min(7, $players->count()) : 4;
 
         $room->status = 'started';
         $room->starting_player_id = $startingPlayer->id;
         $room->match_state = MatchRules::initial(
             $players->search(fn ($player) => $player->id === $startingPlayer->id),
-            $players->pluck('seat_color')->all(),
-            null,
+            $seatColors,
+            $boardArms,
         );
         $room->started_at = now();
         $room->save();

@@ -26,7 +26,6 @@ import {
     PLAYER_CONFIG,
     PlayerColor,
     SAFE_TRACK_INDICES,
-    START_OWNER,
     TRACK,
 } from '@/lib/ludo';
 import {
@@ -112,16 +111,14 @@ type LudoBoardProps = {
 const BOARD_SIZE = 15;
 const CELL_SIZE = 100 / BOARD_SIZE;
 
-const QUADRANTS: { color: PlayerColor; row: number; col: number }[] = [
-    { color: 'red', row: 0, col: 0 },
-    { color: 'green', row: 0, col: 9 },
-    { color: 'yellow', row: 9, col: 9 },
-    { color: 'blue', row: 9, col: 0 },
-];
+const QUADRANT_POSITIONS: Record<string, { row: number; col: number }> = {
+    red: { row: 0, col: 0 },
+    green: { row: 0, col: 9 },
+    yellow: { row: 9, col: 9 },
+    blue: { row: 9, col: 0 },
+};
 
-const LANE_CELLS: { color: PlayerColor; cell: Cell }[] = QUADRANTS.flatMap(
-    ({ color }) => PLAYER_CONFIG[color].lane.map((cell) => ({ color, cell })),
-);
+const CLASSIC_START_INDICES = [0, 13, 26, 39];
 
 function cellStyle(cell: Cell): CSSProperties {
     return {
@@ -674,15 +671,17 @@ const BoardSurface = memo(
                     </>
                 ) : (
                     <>
-                        {QUADRANTS.map(({ color, row, col }) => {
-                            const config = PLAYER_CONFIG[color];
+                        {spec.classicSlots.map(({ slotColor, playerColor }) => {
+                            const { row, col } = QUADRANT_POSITIONS[slotColor];
+                            const config = PLAYER_CONFIG[playerColor];
                             const palette = config.palette;
-                            const isWinner = color === firstWinner;
-                            const isActive = !isWinner && color === activeColor;
+                            const isWinner = playerColor === firstWinner;
+                            const isActive =
+                                !isWinner && playerColor === activeColor;
 
                             return (
                                 <div
-                                    key={color}
+                                    key={`${slotColor}-${playerColor}`}
                                     className="absolute rounded-[8%]"
                                     style={{
                                         left: `${col * CELL_SIZE}%`,
@@ -694,9 +693,13 @@ const BoardSurface = memo(
                                 >
                                     {isWinner ? (
                                         <WinnerQuadrantStage
-                                            color={color}
-                                            character={playerCharacters[color]}
-                                            playerName={playerNames[color]}
+                                            color={playerColor}
+                                            character={
+                                                playerCharacters[playerColor]
+                                            }
+                                            playerName={
+                                                playerNames[playerColor]
+                                            }
                                         />
                                     ) : (
                                         <>
@@ -752,7 +755,7 @@ const BoardSurface = memo(
                                                     </span>
                                                 </div>
                                             )}
-                                            {playerNames[color] && (
+                                            {playerNames[playerColor] && (
                                                 <div className="absolute inset-x-[12%] bottom-[6%] z-[2] flex justify-center">
                                                     <span
                                                         className="max-w-full truncate rounded-full bg-white/95 px-2.5 py-0.5 font-extrabold shadow-[0_1px_5px_rgba(32,43,58,0.18)]"
@@ -763,7 +766,7 @@ const BoardSurface = memo(
                                                             lineHeight: 1.3,
                                                         }}
                                                     >
-                                                        {playerNames[color]}
+                                                        {playerNames[playerColor]}
                                                     </span>
                                                 </div>
                                             )}
@@ -773,17 +776,17 @@ const BoardSurface = memo(
                             );
                         })}
 
-                        {QUADRANTS.map(({ color }) => {
-                            if (color === firstWinner) {
+                        {spec.classicSlots.map(({ slotColor, playerColor }) => {
+                            if (playerColor === firstWinner) {
                                 return null;
                             }
 
-                            const palette = PLAYER_CONFIG[color].palette;
+                            const palette = PLAYER_CONFIG[playerColor].palette;
 
-                            return PLAYER_CONFIG[color].base.map(
+                            return PLAYER_CONFIG[slotColor].base.map(
                                 (pad, index) => (
                                     <span
-                                        key={`pad-${color}-${index}`}
+                                        key={`pad-${slotColor}-${index}`}
                                         className="absolute z-[1] rounded-full border-2 bg-white/70"
                                         style={{
                                             left: `${(pad.col / BOARD_SIZE) * 100}%`,
@@ -799,7 +802,13 @@ const BoardSurface = memo(
                         })}
 
                         {TRACK.map((cell, index) => {
-                            const owner = START_OWNER[index];
+                            const startSlotIdx =
+                                CLASSIC_START_INDICES.indexOf(index);
+                            const owner =
+                                startSlotIdx !== -1
+                                    ? spec.classicSlots[startSlotIdx]
+                                          ?.playerColor
+                                    : undefined;
                             const ownerPalette = owner
                                 ? PLAYER_CONFIG[owner].palette
                                 : null;
@@ -844,7 +853,13 @@ const BoardSurface = memo(
                             );
                         })}
 
-                        {LANE_CELLS.map(({ color, cell }, index) => {
+                        {spec.classicSlots.flatMap(
+                            ({ slotColor, playerColor }) =>
+                                PLAYER_CONFIG[slotColor].lane.map((cell) => ({
+                                    color: playerColor,
+                                    cell,
+                                })),
+                        ).map(({ color, cell }, index) => {
                             const palette = PLAYER_CONFIG[color].palette;
 
                             return (
@@ -879,29 +894,49 @@ const BoardSurface = memo(
                         >
                             <div className="border-line/70 absolute inset-0 overflow-hidden rounded-[6%] border">
                                 <div
-                                    className="bg-ludo-red absolute inset-0"
+                                    className="absolute inset-0"
                                     style={{
+                                        background:
+                                            PLAYER_CONFIG[
+                                                spec.classicSlots[0]
+                                                    ?.playerColor ?? 'red'
+                                            ].palette.base,
                                         clipPath:
                                             'polygon(0 0, 50% 50%, 0 100%)',
                                     }}
                                 />
                                 <div
-                                    className="bg-ludo-green absolute inset-0"
+                                    className="absolute inset-0"
                                     style={{
+                                        background:
+                                            PLAYER_CONFIG[
+                                                spec.classicSlots[1]
+                                                    ?.playerColor ?? 'green'
+                                            ].palette.base,
                                         clipPath:
                                             'polygon(0 0, 100% 0, 50% 50%)',
                                     }}
                                 />
                                 <div
-                                    className="bg-ludo-yellow absolute inset-0"
+                                    className="absolute inset-0"
                                     style={{
+                                        background:
+                                            PLAYER_CONFIG[
+                                                spec.classicSlots[2]
+                                                    ?.playerColor ?? 'yellow'
+                                            ].palette.base,
                                         clipPath:
                                             'polygon(100% 0, 100% 100%, 50% 50%)',
                                     }}
                                 />
                                 <div
-                                    className="bg-ludo-blue absolute inset-0"
+                                    className="absolute inset-0"
                                     style={{
+                                        background:
+                                            PLAYER_CONFIG[
+                                                spec.classicSlots[3]
+                                                    ?.playerColor ?? 'blue'
+                                            ].palette.base,
                                         clipPath:
                                             'polygon(0 100%, 100% 100%, 50% 50%)',
                                     }}
@@ -1445,11 +1480,15 @@ export default function LudoBoard({
                               Math.min(...wedge.basePads.map((pad) => pad.y)) -
                               10,
                       }))
-                    : QUADRANTS.map(({ color, row, col }) => ({
-                          color,
-                          x: (col + 3) * CELL_SIZE,
-                          y: row * CELL_SIZE + 2,
-                      }))
+                    : spec.classicSlots.map(({ slotColor, playerColor }) => {
+                          const { row, col } = QUADRANT_POSITIONS[slotColor];
+
+                          return {
+                              color: playerColor,
+                              x: (col + 3) * CELL_SIZE,
+                              y: row * CELL_SIZE + 2,
+                          };
+                      })
                 ).map(({ color, x, y }) => {
                     const bubble = chatBubbles[color];
                     if (!bubble) return null;

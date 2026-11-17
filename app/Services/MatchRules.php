@@ -25,17 +25,46 @@ class MatchRules
             return 4;
         }
 
-        $maxIndex = 0;
+        $count = count($colors);
+
+        return $count >= 5 ? min(7, $count) : 4;
+    }
+
+    /**
+     * Map active player colors onto the board's physical arms/slots.
+     *
+     * @param  list<string>  $colors
+     * @return list<string>
+     */
+    public static function resolveSlotColors(array $colors, int $arms): array
+    {
+        $template = array_slice(Room::ALL_COLORS, 0, $arms);
+        $slots = array_fill(0, $arms, null);
+        $unplaced = [];
+
         foreach ($colors as $color) {
-            $idx = array_search($color, Room::ALL_COLORS, true);
-            if ($idx !== false && $idx > $maxIndex) {
-                $maxIndex = $idx;
+            $idx = array_search($color, $template, true);
+            if ($idx !== false && $slots[$idx] === null) {
+                $slots[$idx] = $color;
+            } elseif (! in_array($color, $unplaced, true)) {
+                $unplaced[] = $color;
             }
         }
 
-        $needed = max(count($colors), $maxIndex + 1);
+        foreach ($unplaced as $color) {
+            $emptyIdx = array_search(null, $slots, true);
+            if ($emptyIdx !== false) {
+                $slots[$emptyIdx] = $color;
+            }
+        }
 
-        return $needed >= 5 ? min(7, $needed) : 4;
+        for ($k = 0; $k < $arms; $k++) {
+            if ($slots[$k] === null) {
+                $slots[$k] = $template[$k];
+            }
+        }
+
+        return $slots;
     }
 
     /**
@@ -54,6 +83,13 @@ class MatchRules
         $resolvedArms = self::resolveArms($colors, $arms);
 
         if ($resolvedArms <= 4) {
+            $slots = self::resolveSlotColors($colors, 4);
+            $classicStartOffsets = [0, 13, 26, 39];
+            $starts = [];
+            for ($k = 0; $k < 4; $k++) {
+                $starts[$slots[$k]] = $classicStartOffsets[$k];
+            }
+
             return [
                 'arms' => 4,
                 'sector_length' => 13,
@@ -61,7 +97,7 @@ class MatchRules
                 'last_track_position' => 50,
                 'finish_position' => 56,
                 'safe' => self::CLASSIC_SAFE,
-                'starts' => self::CLASSIC_STARTS,
+                'starts' => $starts,
             ];
         }
 
@@ -69,12 +105,10 @@ class MatchRules
         $trackLength = $resolvedArms * $sectorLength;
         $safe = [];
         $starts = [];
+        $slots = self::resolveSlotColors($colors, $resolvedArms);
 
         for ($k = 0; $k < $resolvedArms; $k++) {
-            $color = Room::ALL_COLORS[$k] ?? null;
-            if ($color !== null) {
-                $starts[$color] = $k * $sectorLength;
-            }
+            $starts[$slots[$k]] = $k * $sectorLength;
             $safe[] = $k * $sectorLength;
             $safe[] = $k * $sectorLength + 6;
         }

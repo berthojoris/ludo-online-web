@@ -529,6 +529,11 @@ export type RadialWedge = {
     laneCells: { x: number; y: number; angleDeg: number }[];
 };
 
+export type ClassicBoardSlot = {
+    slotColor: PlayerColor;
+    playerColor: PlayerColor;
+};
+
 export type BoardSpec = {
     arms: number;
     isRadial: boolean;
@@ -539,6 +544,8 @@ export type BoardSpec = {
     finishPosition: number;
     safeIndices: Set<number>;
     starts: Partial<Record<PlayerColor, number>>;
+    classicSlots: ClassicBoardSlot[];
+    classicSlotByColor: Partial<Record<PlayerColor, PlayerColor>>;
     cellSizePercent: number;
     tokenSizePercent: number;
     padSizePercent: number;
@@ -547,7 +554,8 @@ export type BoardSpec = {
     centerRadius: number;
 };
 
-const RADIAL_SPEC_CACHE = new Map<number, BoardSpec>();
+const RADIAL_SPEC_CACHE = new Map<string, BoardSpec>();
+const CLASSIC_SPEC_CACHE = new Map<string, BoardSpec>();
 
 export function resolveBoardArms(
     order: PlayerColor[],
@@ -561,21 +569,43 @@ export function resolveBoardArms(
         return 4;
     }
 
-    let maxIndex = 0;
+    return order.length >= 5 ? Math.min(7, order.length) : 4;
+}
+
+export function resolveSlotColors(
+    order: PlayerColor[],
+    arms: number,
+): PlayerColor[] {
+    const template = ALL_PLAYER_COLORS.slice(0, arms);
+    const slots: (PlayerColor | null)[] = Array(arms).fill(null);
+    const unplaced: PlayerColor[] = [];
+
     for (const color of order) {
-        const idx = ALL_PLAYER_COLORS.indexOf(color);
-        if (idx > maxIndex) {
-            maxIndex = idx;
+        const idx = template.indexOf(color);
+        if (idx !== -1 && slots[idx] === null) {
+            slots[idx] = color;
+        } else if (!unplaced.includes(color)) {
+            unplaced.push(color);
         }
     }
 
-    const needed = Math.max(order.length, maxIndex + 1);
+    for (const color of unplaced) {
+        const emptyIdx = slots.indexOf(null);
+        if (emptyIdx !== -1) {
+            slots[emptyIdx] = color;
+        }
+    }
 
-    return needed >= 5 ? Math.min(7, needed) : 4;
+    return slots.map((slot, index) => slot ?? template[index]);
 }
 
-function buildRadialSpec(arms: 5 | 6 | 7): BoardSpec {
-    const cached = RADIAL_SPEC_CACHE.get(arms);
+function buildRadialSpec(
+    arms: 5 | 6 | 7,
+    order: PlayerColor[],
+): BoardSpec {
+    const ringColors = resolveSlotColors(order, arms);
+    const cacheKey = `${arms}:${ringColors.join(',')}`;
+    const cached = RADIAL_SPEC_CACHE.get(cacheKey);
     if (cached) {
         return cached;
     }
@@ -587,7 +617,6 @@ function buildRadialSpec(arms: 5 | 6 | 7): BoardSpec {
     const firstLanePosition = trackLength - 1;
     const finishPosition = trackLength + 3;
 
-    const ringColors = ALL_PLAYER_COLORS.slice(0, arms);
     const starts: Partial<Record<PlayerColor, number>> = {};
     const safeIndices = new Set<number>();
 
@@ -781,6 +810,8 @@ function buildRadialSpec(arms: 5 | 6 | 7): BoardSpec {
         finishPosition,
         safeIndices,
         starts,
+        classicSlots: [],
+        classicSlotByColor: {},
         cellSizePercent: d,
         tokenSizePercent,
         padSizePercent,
@@ -789,33 +820,63 @@ function buildRadialSpec(arms: 5 | 6 | 7): BoardSpec {
         centerRadius: rIn * 0.28,
     };
 
-    RADIAL_SPEC_CACHE.set(arms, spec);
+    RADIAL_SPEC_CACHE.set(cacheKey, spec);
 
     return spec;
 }
 
-const CLASSIC_SPEC: BoardSpec = {
-    arms: 4,
-    isRadial: false,
-    sectorLength: 13,
-    trackLength: TRACK_LENGTH,
-    lastTrackPosition: LAST_TRACK_POSITION,
-    firstLanePosition: FIRST_LANE_POSITION,
-    finishPosition: FINISH_POSITION,
-    safeIndices: SAFE_TRACK_INDICES,
-    starts: {
-        red: 0,
-        green: 13,
-        yellow: 26,
-        blue: 39,
-    },
-    cellSizePercent: 100 / 15,
-    tokenSizePercent: 5.9,
-    padSizePercent: 9.4,
-    trackCells: [],
-    wedges: [],
-    centerRadius: 0,
-};
+const CLASSIC_TEMPLATE_COLORS: PlayerColor[] = [
+    'red',
+    'green',
+    'yellow',
+    'blue',
+];
+const CLASSIC_START_OFFSETS = [0, 13, 26, 39];
+
+function buildClassicSpec(order: PlayerColor[]): BoardSpec {
+    const slotColors = resolveSlotColors(order, 4);
+    const cacheKey = slotColors.join(',');
+    const cached = CLASSIC_SPEC_CACHE.get(cacheKey);
+    if (cached) {
+        return cached;
+    }
+
+    const starts: Partial<Record<PlayerColor, number>> = {};
+    const classicSlotByColor: Partial<Record<PlayerColor, PlayerColor>> = {};
+    const classicSlots: ClassicBoardSlot[] = CLASSIC_TEMPLATE_COLORS.map(
+        (slotColor, index) => {
+            const playerColor = slotColors[index];
+            starts[playerColor] = CLASSIC_START_OFFSETS[index];
+            classicSlotByColor[playerColor] = slotColor;
+
+            return { slotColor, playerColor };
+        },
+    );
+
+    const spec: BoardSpec = {
+        arms: 4,
+        isRadial: false,
+        sectorLength: 13,
+        trackLength: TRACK_LENGTH,
+        lastTrackPosition: LAST_TRACK_POSITION,
+        firstLanePosition: FIRST_LANE_POSITION,
+        finishPosition: FINISH_POSITION,
+        safeIndices: SAFE_TRACK_INDICES,
+        starts,
+        classicSlots,
+        classicSlotByColor,
+        cellSizePercent: 100 / 15,
+        tokenSizePercent: 5.9,
+        padSizePercent: 9.4,
+        trackCells: [],
+        wedges: [],
+        centerRadius: 0,
+    };
+
+    CLASSIC_SPEC_CACHE.set(cacheKey, spec);
+
+    return spec;
+}
 
 export function getBoardSpec(
     order: PlayerColor[],
@@ -823,10 +884,10 @@ export function getBoardSpec(
 ): BoardSpec {
     const arms = resolveBoardArms(order, explicitArms);
     if (arms >= 5 && arms <= 7) {
-        return buildRadialSpec(arms as 5 | 6 | 7);
+        return buildRadialSpec(arms as 5 | 6 | 7, order);
     }
 
-    return CLASSIC_SPEC;
+    return buildClassicSpec(order);
 }
 
 export function boardTokenPoint(
@@ -836,7 +897,9 @@ export function boardTokenPoint(
     tokenIndex: number,
 ): Cell {
     if (!spec.isRadial) {
-        return tokenPoint(color, position, tokenIndex);
+        const geomColor = spec.classicSlotByColor[color] ?? color;
+
+        return tokenPoint(geomColor, position, tokenIndex);
     }
 
     const wedge = spec.wedges.find((item) => item.color === color);
