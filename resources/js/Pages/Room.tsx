@@ -20,6 +20,7 @@ import {
 import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
 import {
+    ALL_PLAYER_COLORS,
     ARENA_BACKGROUND_IMAGE,
     CharacterId,
     DEFAULT_CHARACTER_BY_COLOR,
@@ -27,7 +28,6 @@ import {
     PLAYER_CONFIG,
     PlayerColor,
     PlayerCount,
-    SEATS_BY_COUNT,
 } from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
@@ -67,15 +67,6 @@ type RoomPageProps = {
     roomError?: string | null;
     attemptedCode?: string | null;
     canCreateRoom?: boolean;
-};
-
-const SEAT_GRID_CLASS: Record<PlayerCount, string> = {
-    2: 'grid-cols-2 grid-rows-1',
-    3: 'grid-cols-2 grid-rows-2 sm:grid-cols-3 sm:grid-rows-1',
-    4: 'grid-cols-2 grid-rows-2',
-    5: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
-    6: 'grid-cols-2 grid-rows-3 sm:grid-cols-3 sm:grid-rows-2',
-    7: 'grid-cols-2 grid-rows-4 sm:grid-cols-3 sm:grid-rows-3 lg:grid-cols-4 lg:grid-rows-2',
 };
 
 const PLAYER_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
@@ -342,15 +333,24 @@ function RoomContent() {
         `room:${liveRoom?.code ?? 'none'}`,
     );
     const playerCount: PlayerCount = liveRoom?.max_players ?? 4;
-    const activeSeats = SEATS_BY_COUNT[playerCount];
+    const allColorSeats = ALL_PLAYER_COLORS;
     const players = liveRoom?.players ?? [];
     const occupiedCount = players.length;
+    const seatedCount = players.filter((p) => p.seat_color !== null).length;
     const readyCount = players.filter((p) => p.is_ready).length;
     const allSeated =
         players.length > 0 && players.every((p) => p.seat_color !== null);
+    const allCharactersPicked =
+        players.length > 0 &&
+        players.every((p) => p.is_computer || Boolean(p.character));
     const allReady =
-        players.length >= 2 && allSeated && players.every((p) => p.is_ready && (p.is_computer || p.name_confirmed));
-    const waitingForNames = players.some((p) => !p.is_computer && !p.name_confirmed);
+        players.length >= 2 &&
+        allSeated &&
+        allCharactersPicked &&
+        players.every((p) => p.is_ready && (p.is_computer || p.name_confirmed));
+    const waitingForNames = players.some(
+        (p) => !p.is_computer && !p.name_confirmed,
+    );
 
     const takenCharacters = useMemo(() => {
         const map: Partial<Record<CharacterId, string>> = {};
@@ -366,12 +366,14 @@ function RoomContent() {
         players.length < 2
             ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
             : !allSeated
-              ? 'Semua pemain harus memilih kursi terlebih dahulu.'
-              : waitingForNames
-                ? 'Menunggu semua pemain mengisi nama.'
-              : !allReady
-                ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
-                : null;
+              ? 'Tunggu semua pemain memilih warna home base dan duduk.'
+              : !allCharactersPicked
+                ? 'Tunggu semua pemain memilih karakter.'
+                : waitingForNames
+                  ? 'Menunggu semua pemain mengisi nama.'
+                  : !allReady
+                    ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
+                    : null;
 
     const joinBlocked =
         !liveRoom && Boolean(actionError) && Boolean(attemptedCode);
@@ -463,7 +465,14 @@ function RoomContent() {
             },
             {
                 preserveScroll: true,
-                onSuccess: () => setCharacterModalOpen(false),
+                onSuccess: () => {
+                    if (color !== null && !character) {
+                        setCharacterModalSeat(color);
+                        setCharacterModalOpen(true);
+                    } else {
+                        setCharacterModalOpen(false);
+                    }
+                },
                 onError: handleFirstError,
                 onFinish: () => setPendingAction(false),
             },
@@ -487,10 +496,10 @@ function RoomContent() {
         const targetSeat =
             seatColor ??
             currentMe?.seat_color ??
-            activeSeats.find(
+            allColorSeats.find(
                 (seat) => !players.some((p) => p.seat_color === seat),
             ) ??
-            activeSeats[0];
+            allColorSeats[0];
 
         handleSelectSeat(targetSeat, character);
     };
@@ -961,13 +970,7 @@ function RoomContent() {
                     </main>
                 ) : (
                     <main className="relative z-10 mx-auto flex min-h-0 w-full max-w-6xl min-w-0 flex-1 flex-col pt-2 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] sm:px-6 sm:pt-3 sm:pb-4">
-                        <div
-                            className={`grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-3.5 md:my-auto md:grid-cols-[minmax(0,1fr)_316px] lg:grid-cols-[minmax(0,1fr)_344px] ${
-                                playerCount >= 5
-                                    ? 'md:max-h-[700px]'
-                                    : 'md:max-h-[620px]'
-                            }`}
-                        >
+                        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] gap-2 sm:gap-3.5 md:my-auto md:max-h-[700px] md:grid-cols-[minmax(0,1fr)_316px] lg:grid-cols-[minmax(0,1fr)_344px]">
                             <section className="flex min-h-0 min-w-0 flex-col gap-2 sm:gap-2.5 [@media(orientation:landscape)_and_(max-height:520px)]:overflow-y-auto">
                                 {/* Room code banner */}
                                 <div className="shadow-card relative flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 overflow-hidden rounded-2xl border border-white/85 bg-white/92 px-2.5 py-2 backdrop-blur-md sm:px-4 sm:py-2.5">
@@ -989,29 +992,34 @@ function RoomContent() {
                                                 </span>
                                             </div>
                                             <p className="text-ink-muted mt-1 truncate text-[11px] font-medium">
-                                                {allReady
-                                                    ? 'Semua pemain siap bertanding!'
-                                                    : 'Menunggu pemain memilih kursi & karakter…'}
+                                                {!allSeated
+                                                    ? 'Pilih warna home base dulu, lalu duduk untuk memilih karakter…'
+                                                    : !allCharactersPicked
+                                                      ? 'Semua sudah duduk! Sekarang pilih karakter masing-masing…'
+                                                      : allReady
+                                                        ? 'Semua pemain siap bertanding!'
+                                                        : 'Menunggu semua pemain siap bertanding…'}
                                             </p>
                                         </div>
                                     </div>
 
                                     <div className="flex shrink-0 items-center gap-1.5">
-                                        {currentMe && (
+                                        {currentMe?.seat_color && (
                                             <button
                                                 type="button"
                                                 disabled={pendingAction}
                                                 onClick={() =>
                                                     openCharacterPickerForSeat(
-                                                        currentMe.seat_color ??
-                                                            activeSeats[0],
+                                                        currentMe.seat_color!,
                                                     )
                                                 }
                                                 className="btn btn-secondary min-h-10 px-2.5 sm:min-h-11 sm:px-3"
                                             >
                                                 <PawnIcon className="h-4 w-4" />
                                                 <span className="hidden min-[420px]:inline">
-                                                    Pilih Karakter
+                                                    {currentMe.character
+                                                        ? 'Ganti Karakter'
+                                                        : 'Pilih Karakter'}
                                                 </span>
                                                 <span className="min-[420px]:hidden">
                                                     Karakter
@@ -1066,12 +1074,11 @@ function RoomContent() {
                                                           ]
                                                         : null;
                                                 const charCfg =
-                                                    player.seat_color ||
+                                                    player.seat_color &&
                                                     player.character
                                                         ? getCharacterConfig(
                                                               player.character,
-                                                              player.seat_color ??
-                                                                  'red',
+                                                              player.seat_color,
                                                           )
                                                         : null;
                                                 const pillContent = (
@@ -1270,49 +1277,11 @@ function RoomContent() {
                                 )}
 
                                 <div
-                                    className={`relative grid min-h-0 min-w-0 flex-1 gap-2 sm:gap-3 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none ${SEAT_GRID_CLASS[playerCount]}`}
+                                    className="relative grid min-h-0 min-w-0 flex-1 auto-rows-fr grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-4 [@media(orientation:landscape)_and_(max-height:520px)]:min-h-[min(75dvh,320px)] [@media(orientation:landscape)_and_(max-height:520px)]:flex-none"
                                     role="group"
-                                    aria-label="Kursi meja Ludo"
+                                    aria-label="Pilih warna home base Ludo"
                                 >
-                                    {playerCount === 4 && (
-                                        <div
-                                            aria-hidden="true"
-                                            className="border-line pointer-events-none absolute top-1/2 left-1/2 z-10 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl border bg-white shadow-sm sm:grid"
-                                        >
-                                            <div className="relative h-7 w-7 overflow-hidden rounded-md">
-                                                <div
-                                                    className="bg-ludo-red absolute inset-0"
-                                                    style={{
-                                                        clipPath:
-                                                            'polygon(0 0, 50% 50%, 0 100%)',
-                                                    }}
-                                                />
-                                                <div
-                                                    className="bg-ludo-green absolute inset-0"
-                                                    style={{
-                                                        clipPath:
-                                                            'polygon(0 0, 100% 0, 50% 50%)',
-                                                    }}
-                                                />
-                                                <div
-                                                    className="bg-ludo-yellow absolute inset-0"
-                                                    style={{
-                                                        clipPath:
-                                                            'polygon(100% 0, 100% 100%, 50% 50%)',
-                                                    }}
-                                                />
-                                                <div
-                                                    className="bg-ludo-blue absolute inset-0"
-                                                    style={{
-                                                        clipPath:
-                                                            'polygon(0 100%, 100% 100%, 50% 50%)',
-                                                    }}
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {activeSeats.map((color) => {
+                                    {allColorSeats.map((color) => {
                                         const config = PLAYER_CONFIG[color];
                                         const palette = config.palette;
                                         const occupant = players.find(
@@ -1322,14 +1291,19 @@ function RoomContent() {
                                             occupant !== undefined &&
                                             occupant.id === currentMe?.id;
                                         const occupied = Boolean(occupant);
-                                        const seatCharacter =
-                                            getCharacterConfig(
-                                                occupant?.character ??
-                                                    DEFAULT_CHARACTER_BY_COLOR[
-                                                        color
-                                                    ],
-                                                color,
-                                            );
+                                        const hasCharacter = Boolean(
+                                            occupant?.character,
+                                        );
+                                        const seatCharacter = hasCharacter
+                                            ? getCharacterConfig(
+                                                  occupant?.character,
+                                                  color,
+                                              )
+                                            : null;
+                                        const capacityFull =
+                                            !occupied &&
+                                            !currentMe?.seat_color &&
+                                            seatedCount >= playerCount;
 
                                         const tokenStyle = {
                                             '--token-light': palette.light,
@@ -1340,10 +1314,10 @@ function RoomContent() {
                                         return (
                                             <div
                                                 key={color}
-                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[20px] border p-2 transition sm:rounded-[22px] sm:p-3 ${
+                                                className={`relative flex min-h-0 min-w-0 flex-col justify-between rounded-[18px] border p-2 transition sm:rounded-[20px] sm:p-2.5 ${
                                                     occupied
                                                         ? 'shadow-card border-white/90 bg-white/95 backdrop-blur-md'
-                                                        : 'border-white/75 bg-white/82 backdrop-blur-sm hover:bg-white/95'
+                                                        : 'border-white/80 bg-white/86 backdrop-blur-sm hover:bg-white/95'
                                                 }`}
                                                 style={
                                                     isYou
@@ -1355,12 +1329,12 @@ function RoomContent() {
                                                 }
                                             >
                                                 <div className="flex min-w-0 items-center justify-between gap-1">
-                                                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+                                                    <div className="flex min-w-0 items-center gap-1.5">
                                                         <LudoPin
-                                                            className="h-5 w-5 shrink-0 min-[400px]:h-6 min-[400px]:w-6 sm:h-7 sm:w-7"
+                                                            className="h-5 w-5 shrink-0 sm:h-6 sm:w-6"
                                                             style={tokenStyle}
                                                             pionImage={
-                                                                occupied
+                                                                seatCharacter
                                                                     ? seatCharacter.pion
                                                                     : undefined
                                                             }
@@ -1373,19 +1347,6 @@ function RoomContent() {
                                                         >
                                                             {config.label}
                                                         </span>
-                                                        {occupied && (
-                                                            <span
-                                                                className="hidden truncate rounded-full px-1.5 py-0.5 text-[9px] font-extrabold text-white min-[420px]:inline-block"
-                                                                style={{
-                                                                    background:
-                                                                        palette.base,
-                                                                }}
-                                                            >
-                                                                {
-                                                                    seatCharacter.name
-                                                                }
-                                                            </span>
-                                                        )}
                                                     </div>
 
                                                     {occupant ? (
@@ -1401,72 +1362,124 @@ function RoomContent() {
                                                             )}
                                                             {occupant.is_ready
                                                                 ? 'Siap'
-                                                                : 'Belum siap'}
+                                                                : hasCharacter
+                                                                  ? 'Belum siap'
+                                                                  : 'Pilih karakter'}
                                                         </span>
                                                     ) : (
-                                                        <span className="bg-surface-muted text-ink-muted shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium">
-                                                            Kosong
+                                                        <span
+                                                            className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold sm:text-[10px]"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    capacityFull
+                                                                        ? '#f1f5f9'
+                                                                        : palette.soft,
+                                                                color: capacityFull
+                                                                    ? '#64748b'
+                                                                    : palette.text,
+                                                            }}
+                                                        >
+                                                            {capacityFull
+                                                                ? 'Penuh'
+                                                                : 'Tersedia'}
                                                         </span>
                                                     )}
                                                 </div>
 
-                                                <div
-                                                    className={`room-seat-scene ${
-                                                        playerCount >= 5
-                                                            ? 'hidden sm:block'
-                                                            : ''
-                                                    }`}
-                                                    style={tokenStyle}
-                                                    aria-hidden="true"
-                                                >
+                                                {seatCharacter ? (
                                                     <div
-                                                        className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}
+                                                        className="room-seat-scene"
+                                                        style={tokenStyle}
+                                                        aria-hidden="true"
                                                     >
-                                                        <img
-                                                            src={
-                                                                seatCharacter.image
-                                                            }
-                                                            alt=""
-                                                            width={180}
-                                                            height={180}
-                                                            className="room-seat-token object-contain drop-shadow-[0_6px_10px_rgba(20,32,52,0.28)]"
-                                                        />
-                                                        <span className="room-seat-piece-base" />
+                                                        <div className="room-seat-piece room-seat-piece-occupied">
+                                                            <img
+                                                                src={
+                                                                    seatCharacter.image
+                                                                }
+                                                                alt=""
+                                                                width={180}
+                                                                height={180}
+                                                                className="room-seat-token object-contain drop-shadow-[0_6px_10px_rgba(20,32,52,0.28)]"
+                                                            />
+                                                            <span className="room-seat-piece-base" />
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                ) : (
+                                                    <div
+                                                        className="my-1 flex min-h-0 flex-1 items-center justify-center"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <div
+                                                            className="grid aspect-square h-full max-h-14 w-auto grid-cols-2 gap-1.5 rounded-2xl border-2 p-2 shadow-inner sm:max-h-16 sm:gap-2 sm:p-2.5"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    palette.soft,
+                                                                borderColor: `${palette.base}66`,
+                                                            }}
+                                                        >
+                                                            {[0, 1, 2, 3].map(
+                                                                (pad) => (
+                                                                    <span
+                                                                        key={
+                                                                            pad
+                                                                        }
+                                                                        className="h-full w-full rounded-full shadow-sm ring-2 ring-white/90"
+                                                                        style={{
+                                                                            background: `radial-gradient(circle at 32% 30%, ${palette.light}, ${palette.base} 70%, ${palette.dark})`,
+                                                                        }}
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {occupant ? (
-                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1.5 pt-1 sm:gap-2 sm:pt-1.5">
+                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1.5 pt-1">
                                                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                                                            <div
-                                                                className="relative hidden h-9 w-9 shrink-0 rounded-full p-[2px] min-[400px]:block sm:h-10 sm:w-10"
-                                                                style={{
-                                                                    background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
-                                                                }}
-                                                            >
-                                                                <img
-                                                                    src={
-                                                                        seatCharacter.image
-                                                                    }
-                                                                    alt={
-                                                                        seatCharacter.name
-                                                                    }
-                                                                    width={40}
-                                                                    height={40}
-                                                                    className="h-full w-full rounded-full bg-white object-cover"
+                                                            {seatCharacter ? (
+                                                                <div
+                                                                    className="relative hidden h-8 w-8 shrink-0 rounded-full p-[2px] min-[400px]:block sm:h-9 sm:w-9"
+                                                                    style={{
+                                                                        background: `linear-gradient(135deg, ${palette.base}, ${palette.dark})`,
+                                                                    }}
+                                                                >
+                                                                    <img
+                                                                        src={
+                                                                            seatCharacter.image
+                                                                        }
+                                                                        alt={
+                                                                            seatCharacter.name
+                                                                        }
+                                                                        width={
+                                                                            36
+                                                                        }
+                                                                        height={
+                                                                            36
+                                                                        }
+                                                                        className="h-full w-full rounded-full bg-white object-cover"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <span
+                                                                    className="hidden h-7 w-7 shrink-0 rounded-full border-2 border-white shadow-sm min-[400px]:block"
+                                                                    style={{
+                                                                        backgroundColor:
+                                                                            palette.base,
+                                                                    }}
                                                                 />
-                                                            </div>
+                                                            )}
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-ink truncate text-xs font-bold min-[360px]:text-sm">
+                                                                <p className="text-ink truncate text-xs font-bold sm:text-sm">
                                                                     {
                                                                         occupant.name
                                                                     }
                                                                 </p>
-                                                                <p className="text-ink-muted truncate text-[10px] leading-tight min-[360px]:text-[11px]">
-                                                                    {
-                                                                        seatCharacter.name
-                                                                    }{' '}
-                                                                    ·{' '}
+                                                                <p className="text-ink-muted truncate text-[10px] leading-tight">
+                                                                    {seatCharacter
+                                                                        ? `${seatCharacter.name} · `
+                                                                        : ''}
                                                                     {isYou
                                                                         ? occupant.is_host
                                                                             ? 'Kamu (Host)'
@@ -1490,12 +1503,30 @@ function RoomContent() {
                                                                             color,
                                                                         )
                                                                     }
-                                                                    aria-label="Ganti karakter"
-                                                                    title="Ganti karakter"
-                                                                    className="btn btn-secondary min-h-10 w-10 px-0 sm:min-h-11 sm:w-11 lg:w-auto lg:px-3"
+                                                                    aria-label={
+                                                                        hasCharacter
+                                                                            ? 'Ganti karakter'
+                                                                            : 'Pilih karakter'
+                                                                    }
+                                                                    title={
+                                                                        hasCharacter
+                                                                            ? 'Ganti karakter'
+                                                                            : 'Pilih karakter'
+                                                                    }
+                                                                    className={`btn min-h-10 px-2.5 sm:min-h-11 ${
+                                                                        hasCharacter
+                                                                            ? 'btn-secondary w-10 px-0 sm:w-11 lg:w-auto lg:px-2.5'
+                                                                            : 'btn-primary text-xs'
+                                                                    }`}
                                                                 >
-                                                                    <PawnIcon className="h-4 w-4" />
-                                                                    <span className="hidden lg:inline">
+                                                                    <PawnIcon className="h-4 w-4 shrink-0" />
+                                                                    <span
+                                                                        className={
+                                                                            hasCharacter
+                                                                                ? 'hidden lg:inline'
+                                                                                : 'inline'
+                                                                        }
+                                                                    >
                                                                         Karakter
                                                                     </span>
                                                                 </button>
@@ -1509,7 +1540,7 @@ function RoomContent() {
                                                                             null,
                                                                         )
                                                                     }
-                                                                    className="btn btn-quiet min-h-10 shrink-0 px-2.5 sm:min-h-11"
+                                                                    className="btn btn-quiet min-h-10 shrink-0 px-2 sm:min-h-11"
                                                                 >
                                                                     Berdiri
                                                                 </button>
@@ -1550,18 +1581,19 @@ function RoomContent() {
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <div className="mt-auto flex min-w-0 items-center justify-between gap-1 pt-1 sm:gap-1.5 sm:pt-1.5">
+                                                    <div className="mt-auto flex min-w-0 items-center pt-1">
                                                         <button
                                                             type="button"
                                                             disabled={
-                                                                pendingAction
+                                                                pendingAction ||
+                                                                capacityFull
                                                             }
                                                             onClick={() =>
-                                                                openCharacterPickerForSeat(
+                                                                handleSelectSeat(
                                                                     color,
                                                                 )
                                                             }
-                                                            className="btn btn-seat min-h-10 min-w-0 flex-1 gap-1 px-2 sm:min-h-11 sm:px-3"
+                                                            className="btn btn-seat min-h-10 w-full min-w-0 gap-1.5 px-2.5 text-xs sm:min-h-11 sm:text-sm"
                                                             style={
                                                                 {
                                                                     '--seat-base':
@@ -1573,25 +1605,20 @@ function RoomContent() {
                                                                 } as CSSProperties
                                                             }
                                                         >
-                                                            <PawnIcon className="h-4 w-4 shrink-0" />
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                                                style={{
+                                                                    backgroundColor:
+                                                                        palette.base,
+                                                                }}
+                                                            />
                                                             <span className="truncate">
-                                                                Pilih
-                                                            </span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                copy(
-                                                                    shareLink,
-                                                                    'link',
-                                                                )
-                                                            }
-                                                            aria-label={`Undang ke kursi ${config.label}`}
-                                                            className="btn btn-secondary min-h-10 w-10 shrink-0 px-0 sm:min-h-11 sm:w-auto sm:min-w-11 sm:px-2.5"
-                                                        >
-                                                            <LinkIcon className="h-3.5 w-3.5" />
-                                                            <span className="hidden sm:inline">
-                                                                Undang
+                                                                {capacityFull
+                                                                    ? 'Slot Penuh'
+                                                                    : currentMe?.seat_color
+                                                                      ? 'Pindah ke Sini'
+                                                                      : 'Pilih Warna'}
                                                             </span>
                                                         </button>
                                                     </div>
@@ -1625,16 +1652,19 @@ function RoomContent() {
                                         )}
                                     </div>
 
-                                    {/* Visual Player Roster matching Image 1 */}
+                                    {/* Visual Player Roster */}
                                     <ul className="divide-line border-line mb-3.5 divide-y rounded-2xl border bg-white px-3">
                                         {players.map((p) => {
                                             const seatCfg = p.seat_color
                                                 ? PLAYER_CONFIG[p.seat_color]
                                                 : null;
-                                            const charCfg = getCharacterConfig(
-                                                p.character,
-                                                p.seat_color ?? 'red',
-                                            );
+                                            const charCfg =
+                                                p.seat_color && p.character
+                                                    ? getCharacterConfig(
+                                                          p.character,
+                                                          p.seat_color,
+                                                      )
+                                                    : null;
 
                                             return (
                                                 <li
@@ -1643,7 +1673,7 @@ function RoomContent() {
                                                 >
                                                     <div className="flex min-w-0 items-center gap-2.5">
                                                         <div
-                                                            className="h-8 w-8 shrink-0 rounded-full p-[1.5px]"
+                                                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full p-[1.5px]"
                                                             style={{
                                                                 background:
                                                                     seatCfg
@@ -1653,17 +1683,31 @@ function RoomContent() {
                                                                         : '#cbd5e1',
                                                             }}
                                                         >
-                                                            <img
-                                                                src={
-                                                                    charCfg.image
-                                                                }
-                                                                alt={
-                                                                    charCfg.name
-                                                                }
-                                                                width={32}
-                                                                height={32}
-                                                                className="h-full w-full rounded-full bg-white object-cover"
-                                                            />
+                                                            {charCfg ? (
+                                                                <img
+                                                                    src={
+                                                                        charCfg.image
+                                                                    }
+                                                                    alt={
+                                                                        charCfg.name
+                                                                    }
+                                                                    width={32}
+                                                                    height={32}
+                                                                    className="h-full w-full rounded-full bg-white object-cover"
+                                                                />
+                                                            ) : (
+                                                                <span
+                                                                    className="h-full w-full rounded-full border-2 border-white"
+                                                                    style={{
+                                                                        backgroundColor:
+                                                                            seatCfg
+                                                                                ? seatCfg
+                                                                                      .palette
+                                                                                      .base
+                                                                                : '#e2e8f0',
+                                                                    }}
+                                                                />
+                                                            )}
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="text-ink truncate text-xs font-bold">
@@ -1674,8 +1718,10 @@ function RoomContent() {
                                                             </p>
                                                             <p className="text-ink-muted truncate text-[10px]">
                                                                 {p.seat_color
-                                                                    ? `${charCfg.name} · ${PLAYER_CONFIG[p.seat_color].label}`
-                                                                    : 'Belum pilih kursi'}
+                                                                    ? charCfg
+                                                                        ? `${charCfg.name} · ${PLAYER_CONFIG[p.seat_color].label}`
+                                                                        : `${PLAYER_CONFIG[p.seat_color].label} · Pilih karakter`
+                                                                    : 'Belum pilih warna'}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -1735,10 +1781,12 @@ function RoomContent() {
                                                 </p>
                                                 <p className="text-ink-muted mt-0.5 text-[11px]">
                                                     {!currentMe?.seat_color
-                                                        ? 'Pilih kursi dulu untuk menandai siap.'
-                                                        : currentMe.is_ready
-                                                          ? 'Kamu sudah siap bermain.'
-                                                          : 'Aktifkan saat kamu siap bermain.'}
+                                                        ? 'Pilih warna home base dulu.'
+                                                        : !currentMe.character
+                                                          ? 'Pilih karakter dulu untuk siap.'
+                                                          : currentMe.is_ready
+                                                            ? 'Kamu sudah siap bermain.'
+                                                            : 'Aktifkan saat kamu siap bermain.'}
                                                 </p>
                                             </div>
                                             <button
@@ -1751,6 +1799,7 @@ function RoomContent() {
                                                 aria-busy={pendingAction}
                                                 disabled={
                                                     !currentMe?.seat_color ||
+                                                    !currentMe?.character ||
                                                     pendingAction
                                                 }
                                                 onClick={handleToggleReady}
@@ -1810,9 +1859,11 @@ function RoomContent() {
                             <div className="flex min-w-0 items-center gap-2">
                                 <div className="border-line flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border pr-1 pl-3">
                                     <span className="text-ink min-w-0 truncate text-xs font-semibold">
-                                        {currentMe?.seat_color
-                                            ? 'Ready'
-                                            : 'Pilih kursi'}
+                                        {!currentMe?.seat_color
+                                            ? 'Pilih warna'
+                                            : !currentMe.character
+                                              ? 'Pilih karakter'
+                                              : 'Ready'}
                                     </span>
                                     <button
                                         type="button"
@@ -1824,6 +1875,7 @@ function RoomContent() {
                                         aria-busy={pendingAction}
                                         disabled={
                                             !currentMe?.seat_color ||
+                                            !currentMe?.character ||
                                             pendingAction
                                         }
                                         onClick={handleToggleReady}

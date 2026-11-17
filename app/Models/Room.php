@@ -112,7 +112,10 @@ class Room extends Model
             'started_at' => $this->started_at?->toIso8601String(),
             'match_state' => $this->match_state,
             'players' => $this->players->map(function (RoomPlayer $player) {
-                $character = $player->character ?? ($player->seat_color ? (self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null);
+                $character = $player->character;
+                if ($character === null && $this->status === 'started' && $player->seat_color) {
+                    $character = self::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar';
+                }
                 $name = $player->is_computer && $player->name === 'Computer'
                     ? self::characterName($character)
                     : $player->name;

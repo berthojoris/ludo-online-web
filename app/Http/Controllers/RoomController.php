@@ -84,16 +84,14 @@ class RoomController extends Controller
                 'status' => 'waiting',
             ]);
 
-            $firstSeat = $room->allowedSeats()[0];
-
             RoomPlayer::create([
                 'room_id' => $room->id,
                 'player_token' => $token,
                 'user_id' => $request->user()?->id,
                 'name' => self::defaultPlayerName($request, true),
-                'seat_color' => $firstSeat,
-                'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$firstSeat] ?? 'ignivar',
-                'is_ready' => true,
+                'seat_color' => null,
+                'character' => null,
+                'is_ready' => false,
                 'is_host' => true,
             ]);
 
@@ -146,28 +144,6 @@ class RoomController extends Controller
             $refreshComputers = array_key_exists('vs_computer', $validated) || (array_key_exists('max_players', $validated) && $hasComputers);
             if ($refreshComputers) {
                 $lockedRoom->players()->where('is_computer', true)->delete();
-            }
-
-            $allowedSeats = $lockedRoom->allowedSeats();
-            $players = $lockedRoom->players()->get();
-
-            foreach ($players as $player) {
-                if ($player->seat_color !== null && ! in_array($player->seat_color, $allowedSeats, true)) {
-                    if ($player->is_computer) {
-                        $seat = collect($allowedSeats)->first(fn ($color) => ! $players->contains('seat_color', $color));
-                        if (! $seat) {
-                            throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer pada kapasitas ini.']);
-                        }
-                        $player->seat_color = $seat;
-                        $player->save();
-
-                        continue;
-                    }
-                    $player->seat_color = null;
-                    $player->character = null;
-                    $player->is_ready = false;
-                    $player->save();
-                }
             }
 
             if ($refreshComputers && $computerMode) {
@@ -232,18 +208,18 @@ class RoomController extends Controller
         DB::transaction(function () use ($room, $token, $seatColor, $character) {
             $lockedRoom = Room::where('id', $room->id)->lockForUpdate()->firstOrFail();
 
-            if ($seatColor !== null && ! in_array($seatColor, $lockedRoom->allowedSeats(), true)) {
-                throw ValidationException::withMessages([
-                    'seat_color' => 'Kursi tidak tersedia untuk kapasitas ruang ini.',
-                ]);
-            }
-
             $player = $lockedRoom->players()->where('player_token', $token)->first();
             if (! $player) {
                 abort(403, 'Kamu belum bergabung ke ruang ini.');
             }
 
             if ($seatColor !== null) {
+                if ($player->seat_color === null && $lockedRoom->players()->whereNotNull('seat_color')->count() >= $lockedRoom->max_players) {
+                    throw ValidationException::withMessages([
+                        'seat_color' => 'Semua kursi untuk kapasitas ruang ini sudah terisi.',
+                    ]);
+                }
+
                 $taken = $lockedRoom->players()
                     ->where('seat_color', $seatColor)
                     ->where('id', '!=', $player->id)
@@ -251,7 +227,7 @@ class RoomController extends Controller
 
                 if ($taken) {
                     throw ValidationException::withMessages([
-                        'seat_color' => 'Kursi ini sudah ditempati pemain lain.',
+                        'seat_color' => 'Warna home base ini sudah dipilih pemain lain.',
                     ]);
                 }
             }
@@ -267,15 +243,14 @@ class RoomController extends Controller
             }
 
             $player->seat_color = $seatColor;
-            $player->character = $seatColor === null
-                ? null
-                : ($character ?? self::firstFreeCharacter($takenCharacters, [
-                    $player->character,
-                    Room::DEFAULT_CHARACTER_BY_COLOR[$seatColor] ?? null,
-                ]));
-            // Taking a seat opts the player in right away; they can still
-            // switch themselves back to "not ready" from the lobby.
-            $player->is_ready = $seatColor !== null;
+            if ($seatColor === null) {
+                $player->character = null;
+            } elseif ($character !== null) {
+                $player->character = $character;
+            } elseif ($player->character !== null && in_array($player->character, $takenCharacters, true)) {
+                $player->character = null;
+            }
+            $player->is_ready = $seatColor !== null && $player->character !== null;
             $player->save();
         });
 
@@ -398,7 +373,13 @@ class RoomController extends Controller
 
         if ($player->seat_color === null) {
             throw ValidationException::withMessages([
-                'ready' => 'Pilih kursi terlebih dahulu sebelum menandai siap.',
+                'ready' => 'Pilih warna home base terlebih dahulu sebelum menandai siap.',
+            ]);
+        }
+
+        if (! $player->is_computer && $player->character === null) {
+            throw ValidationException::withMessages([
+                'ready' => 'Pilih karakter terlebih dahulu sebelum menandai siap.',
             ]);
         }
 
@@ -436,7 +417,13 @@ class RoomController extends Controller
 
         if ($players->contains(fn (RoomPlayer $p) => $p->seat_color === null)) {
             throw ValidationException::withMessages([
-                'start' => 'Semua pemain harus memilih kursi terlebih dahulu.',
+                'start' => 'Semua pemain harus memilih warna home base dan duduk terlebih dahulu.',
+            ]);
+        }
+
+        if ($players->contains(fn (RoomPlayer $p) => ! $p->is_computer && $p->character === null)) {
+            throw ValidationException::withMessages([
+                'start' => 'Semua pemain harus memilih karakter terlebih dahulu.',
             ]);
         }
 
@@ -459,7 +446,7 @@ class RoomController extends Controller
         $room->match_state = MatchRules::initial(
             $players->search(fn ($player) => $player->id === $startingPlayer->id),
             $players->pluck('seat_color')->all(),
-            $room->max_players >= 5 ? $room->max_players : 4,
+            null,
         );
         $room->started_at = now();
         $room->save();
