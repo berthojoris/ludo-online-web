@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BackgroundMusicController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
@@ -39,6 +40,10 @@ Route::prefix('api/sound-effects')->name('sound-effects.')->group(function () {
     Route::post('/characters/{character}/generate', [CharacterSoundController::class, 'generateOne'])
         ->middleware('throttle:15,1')
         ->name('characters.generate');
+    Route::get('/background-music', [BackgroundMusicController::class, 'show'])->name('background-music.show');
+    Route::post('/background-music/generate', [BackgroundMusicController::class, 'generate'])
+        ->middleware('throttle:3,1')
+        ->name('background-music.generate');
 });
 
 Route::get('/dashboard', function () {

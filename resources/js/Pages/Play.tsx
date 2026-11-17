@@ -58,6 +58,8 @@ import {
     playWinSound,
     preloadCharacterSounds,
     setSoundEnabled,
+    startBackgroundMusic,
+    stopBackgroundMusic,
     unlockAudio,
 } from '@/lib/sound';
 import { preloadImages } from '@/lib/preloadImages';
@@ -1388,6 +1390,27 @@ export default function Play() {
         }
     }, [state.winner, state.human]);
 
+    // Battle music loops for the whole match and stops once it is decided,
+    // when the host ends the room, or when the player leaves the game screen.
+    const backgroundMusicActive =
+        screen === 'game' &&
+        !state.winner &&
+        (room
+            ? Boolean(me) && room.status === 'started' && serverWinner === null
+            : true);
+
+    useEffect(() => {
+        if (!backgroundMusicActive) {
+            stopBackgroundMusic();
+
+            return;
+        }
+
+        startBackgroundMusic();
+
+        return () => stopBackgroundMusic();
+    }, [backgroundMusicActive]);
+
     useEffect(() => {
         if (room) {
             return;
@@ -1753,6 +1776,7 @@ export default function Play() {
     processMatchActionRef.current = (action) => {
         if (action.type === 'end') {
             rememberAction(seenActionsRef.current, action.action_id);
+            stopBackgroundMusic();
             router.visit(route('home'));
 
             return true;
@@ -2355,10 +2379,15 @@ export default function Play() {
         }
         cue(playUiSound);
         setEndingGame(true);
+        stopBackgroundMusic();
         router.post(
             route('rooms.end', { code: room.code }),
             {},
             {
+                onError: () => {
+                    // The match is still running if the end request failed.
+                    startBackgroundMusic();
+                },
                 onFinish: () => {
                     setEndingGame(false);
                     setEndGameModalOpen(false);
@@ -3060,11 +3089,22 @@ export default function Play() {
                             <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
                                 <section className="shadow-card shrink-0 rounded-[22px] border border-white/85 bg-white/95 p-4 backdrop-blur-md">
                                     <div className="flex items-center gap-3.5">
-                                        <div className="dice-stage grid aspect-square w-[clamp(72px,6.5vw,92px)] shrink-0 place-items-center rounded-[20px]">
+                                        <div
+                                            className="dice-stage grid aspect-square w-[clamp(72px,6.5vw,92px)] shrink-0 place-items-center rounded-[20px]"
+                                            style={
+                                                {
+                                                    '--dice-dark':
+                                                        PLAYER_CONFIG[
+                                                            state.turn
+                                                        ].palette.dark,
+                                                } as CSSProperties
+                                            }
+                                        >
                                             <Dice
                                                 value={displayDice}
                                                 rolling={state.phase === 'rolling'}
                                                 variant="sapphire"
+                                                color={state.turn}
                                                 className="h-[60%] w-[60%]"
                                             />
                                         </div>
@@ -3205,11 +3245,21 @@ export default function Play() {
 
                         <div className="shadow-card mt-2 shrink-0 rounded-[20px] border border-white/85 bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex items-center gap-2">
-                                <div className="dice-stage grid h-12 w-12 shrink-0 place-items-center rounded-[14px]">
+                                <div
+                                    className="dice-stage grid h-12 w-12 shrink-0 place-items-center rounded-[14px]"
+                                    style={
+                                        {
+                                            '--dice-dark':
+                                                PLAYER_CONFIG[state.turn]
+                                                    .palette.dark,
+                                        } as CSSProperties
+                                    }
+                                >
                                     <Dice
                                         value={displayDice}
                                         rolling={state.phase === 'rolling'}
                                         variant="sapphire"
+                                        color={state.turn}
                                         className="h-[66%] w-[66%]"
                                     />
                                 </div>

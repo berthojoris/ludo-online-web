@@ -281,9 +281,7 @@ export function setSoundEnabled(value: boolean): void {
         }
     }
 
-    if (value) {
-        void unlockAudio();
-    }
+    syncBackgroundMusicWithToggle(value);
 }
 
 /**
@@ -303,6 +301,10 @@ export async function unlockAudio(): Promise<void> {
         } catch {
             // Ignore and let the next gesture try again.
         }
+    }
+
+    if (musicWanted && context?.state === 'running') {
+        void resumeBackgroundMusic();
     }
 }
 
@@ -868,4 +870,204 @@ export function playDefeatSound(): void {
             wet: 0.35,
         });
     });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gameplay background music                                                  */
+/* -------------------------------------------------------------------------- */
+
+const BACKGROUND_MUSIC_URL = '/assets/music/battle-arena.mp3';
+const BACKGROUND_MUSIC_VOLUME = 0.32;
+const BACKGROUND_MUSIC_FADE_IN = 1.2;
+const BACKGROUND_MUSIC_FADE_OUT = 0.6;
+
+let musicWanted = false;
+let musicSource: AudioBufferSourceNode | null = null;
+let musicGain: GainNode | null = null;
+let musicBuffer: AudioBuffer | null = null;
+let musicBytes: Promise<ArrayBuffer | null> | null = null;
+let musicStarting = false;
+let musicGestureBound = false;
+
+function fetchMusicBytes(): Promise<ArrayBuffer | null> {
+    if (!musicBytes) {
+        musicBytes = fetch(BACKGROUND_MUSIC_URL)
+            .then((response) => (response.ok ? response.arrayBuffer() : null))
+            .catch(() => null)
+            .then((bytes) => {
+                if (!bytes) {
+                    // Allow a later retry instead of caching the failure.
+                    musicBytes = null;
+                }
+
+                return bytes;
+            });
+    }
+
+    return musicBytes;
+}
+
+async function decodeMusic(context: AudioContext): Promise<AudioBuffer | null> {
+    if (musicBuffer) {
+        return musicBuffer;
+    }
+
+    const bytes = await fetchMusicBytes();
+
+    if (!bytes) {
+        return null;
+    }
+
+    try {
+        musicBuffer = await context.decodeAudioData(bytes.slice(0));
+    } catch {
+        musicBuffer = null;
+    }
+
+    return musicBuffer;
+}
+
+function onMusicGesture(): void {
+    void unlockAudio().then(resumeBackgroundMusic);
+}
+
+/**
+ * Browsers block audio until the first user gesture. While music is wanted but
+ * the context is still suspended (e.g. after a page reload mid-match), start it
+ * on the next tap, click, or key press.
+ */
+function bindMusicGesture(): void {
+    if (musicGestureBound || typeof window === 'undefined') {
+        return;
+    }
+
+    musicGestureBound = true;
+    window.addEventListener('pointerdown', onMusicGesture, true);
+    window.addEventListener('keydown', onMusicGesture, true);
+}
+
+function unbindMusicGesture(): void {
+    if (!musicGestureBound || typeof window === 'undefined') {
+        return;
+    }
+
+    musicGestureBound = false;
+    window.removeEventListener('pointerdown', onMusicGesture, true);
+    window.removeEventListener('keydown', onMusicGesture, true);
+}
+
+function haltMusicSource(fade: number): void {
+    const source = musicSource;
+    const gain = musicGain;
+
+    musicSource = null;
+    musicGain = null;
+
+    if (!source || !gain) {
+        return;
+    }
+
+    const context = gain.context;
+    const now = context.currentTime;
+
+    try {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), now);
+        gain.gain.linearRampToValueAtTime(0.0001, now + fade);
+        source.stop(now + fade + 0.02);
+    } catch {
+        try {
+            source.stop();
+        } catch {
+            // Already stopped.
+        }
+    }
+
+    source.onended = () => {
+        source.disconnect();
+        gain.disconnect();
+    };
+}
+
+async function resumeBackgroundMusic(): Promise<void> {
+    if (!musicWanted || !enabled || musicSource || musicStarting) {
+        return;
+    }
+
+    const context = getContext();
+
+    if (!context) {
+        return;
+    }
+
+    if (context.state !== 'running') {
+        bindMusicGesture();
+        void fetchMusicBytes();
+
+        return;
+    }
+
+    musicStarting = true;
+
+    try {
+        const buffer = await decodeMusic(context);
+
+        if (
+            !buffer ||
+            !musicWanted ||
+            !enabled ||
+            musicSource ||
+            context.state !== 'running'
+        ) {
+            return;
+        }
+
+        const source = context.createBufferSource();
+        const gain = context.createGain();
+        const now = context.currentTime;
+
+        source.buffer = buffer;
+        source.loop = true;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(
+            BACKGROUND_MUSIC_VOLUME,
+            now + BACKGROUND_MUSIC_FADE_IN,
+        );
+
+        // Straight to the output so the SFX compressor never pumps the music.
+        source.connect(gain);
+        gain.connect(context.destination);
+        source.start(now);
+
+        musicSource = source;
+        musicGain = gain;
+        unbindMusicGesture();
+    } finally {
+        musicStarting = false;
+    }
+}
+
+/**
+ * Starts the looping battle music. It keeps repeating until
+ * stopBackgroundMusic() is called, and honours the global sound toggle.
+ */
+export function startBackgroundMusic(): void {
+    musicWanted = true;
+    void resumeBackgroundMusic();
+}
+
+/** Fades out and stops the battle music (match finished or ended by host). */
+export function stopBackgroundMusic(): void {
+    musicWanted = false;
+    unbindMusicGesture();
+    haltMusicSource(BACKGROUND_MUSIC_FADE_OUT);
+}
+
+/** Mute/unmute hook used by setSoundEnabled(). */
+function syncBackgroundMusicWithToggle(value: boolean): void {
+    if (value) {
+        void unlockAudio().then(resumeBackgroundMusic);
+    } else {
+        haltMusicSource(0.25);
+    }
 }

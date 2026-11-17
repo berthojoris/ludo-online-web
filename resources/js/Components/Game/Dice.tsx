@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { PLAYER_CONFIG, PlayerColor } from '@/lib/ludo';
+import {
+    CSSProperties,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 
 type DiceVariant = 'classic' | 'sapphire';
 
@@ -7,6 +14,7 @@ type DiceProps = {
     rolling?: boolean;
     className?: string;
     variant?: DiceVariant;
+    color?: PlayerColor;
 };
 
 const VARIANT_CLASSES: Record<DiceVariant, { face: string; pip: string }> = {
@@ -81,8 +89,10 @@ export default function Dice({
     rolling = false,
     className = 'h-14 w-14',
     variant = 'classic',
+    color,
 }: DiceProps) {
     const variantClasses = VARIANT_CLASSES[variant];
+    const palette = color ? PLAYER_CONFIG[color].palette : null;
     const rootRef = useRef<HTMLDivElement>(null);
     const cubeRef = useRef<HTMLDivElement>(null);
     const animationRef = useRef<Animation | null>(null);
@@ -206,7 +216,18 @@ export default function Dice({
             role="img"
             aria-label={`Dadu menunjukkan ${value}`}
             className={`relative ${className}`}
-            style={{ perspective: '620px' }}
+            style={
+                {
+                    perspective: '620px',
+                    ...(palette
+                        ? {
+                              '--dice-light': palette.light,
+                              '--dice-base': palette.base,
+                              '--dice-dark': palette.dark,
+                          }
+                        : {}),
+                } as CSSProperties
+            }
         >
             <div
                 ref={cubeRef}

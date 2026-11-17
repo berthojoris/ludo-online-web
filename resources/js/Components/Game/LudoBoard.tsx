@@ -937,7 +937,11 @@ const TokenView = memo(function TokenView({
     return (
         <div
             ref={elementRef}
-            className="absolute top-0 left-0 transition-transform duration-[180ms] ease-[cubic-bezier(0.37,0,0.63,1)]"
+            className={`absolute top-0 left-0 ${
+                motion === 'idle'
+                    ? 'transition-transform duration-[180ms] ease-[cubic-bezier(0.37,0,0.63,1)]'
+                    : ''
+            }`}
             style={style}
             aria-hidden={hidden || undefined}
         >
@@ -1143,7 +1147,18 @@ export default function LudoBoard({
             if (animated.has(id)) {
                 motion.confirmed = true;
             } else if (motion.confirmed) {
-                stopMotion(id);
+                const element = elementsRef.current.get(id);
+
+                if (element) {
+                    // Commit the final transform without triggering a 180ms CSS
+                    // transition from the pre-walk position when cancelling WAAPI.
+                    element.style.transition = 'none';
+                    stopMotion(id);
+                    void element.offsetWidth;
+                    element.style.transition = '';
+                } else {
+                    stopMotion(id);
+                }
             }
         }
     }, [placements, stopMotion]);
