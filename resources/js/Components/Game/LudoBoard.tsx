@@ -44,6 +44,7 @@ import {
 import CharacterSkillBurst, { SkillBurst } from './CharacterSkillBurst';
 import { StarIcon } from './Icons';
 import PionFigure, { PionMotion } from './PionFigure';
+import WinnerQuadrantStage from './WinnerQuadrantStage';
 
 export type BoardToken = {
     id: string;
@@ -100,6 +101,7 @@ type LudoBoardProps = {
     >;
     activeColor?: PlayerColor;
     activeLabel?: string;
+    firstWinner?: PlayerColor | null;
     order?: PlayerColor[];
     arms?: number;
     skillBursts?: SkillBurst[];
@@ -355,13 +357,15 @@ function placeTokens(
 type BoardSurfaceProps = {
     spec: BoardSpec;
     playerNames: Partial<Record<PlayerColor, string>>;
+    playerCharacters: Partial<Record<PlayerColor, CharacterId | string | null>>;
     activeColor?: PlayerColor;
     activeLabel?: string;
+    firstWinner?: PlayerColor | null;
 };
 
-function samePlayerNames(
-    a: Partial<Record<PlayerColor, string>>,
-    b: Partial<Record<PlayerColor, string>>,
+function sameRecord<T>(
+    a: Partial<Record<PlayerColor, T>>,
+    b: Partial<Record<PlayerColor, T>>,
 ): boolean {
     const keys = Object.keys(a) as PlayerColor[];
 
@@ -376,8 +380,10 @@ const BoardSurface = memo(
     function BoardSurface({
         spec,
         playerNames,
+        playerCharacters,
         activeColor,
         activeLabel,
+        firstWinner,
     }: BoardSurfaceProps) {
         const cellBox = spec.cellSizePercent * 0.9;
         const cellRx = cellBox * 0.2;
@@ -595,11 +601,21 @@ const BoardSurface = memo(
                         </svg>
 
                         {spec.wedges.map((wedge) => {
-                            const palette = PLAYER_CONFIG[wedge.color].palette;
-                            const isActive = wedge.color === activeColor;
+                            const charConfig = getCharacterConfig(
+                                playerCharacters[wedge.color],
+                                wedge.color,
+                            );
+                            const palette =
+                                wedge.color === firstWinner
+                                    ? PLAYER_CONFIG[charConfig.accentColor]
+                                          .palette
+                                    : PLAYER_CONFIG[wedge.color].palette;
+                            const isWinner = wedge.color === firstWinner;
+                            const isActive =
+                                !isWinner && wedge.color === activeColor;
                             const name = playerNames[wedge.color];
 
-                            if (!name && !(isActive && activeLabel)) {
+                            if (!name && !isWinner && !(isActive && activeLabel)) {
                                 return null;
                             }
 
@@ -612,6 +628,19 @@ const BoardSurface = memo(
                                         top: `${wedge.badgePos.y}%`,
                                     }}
                                 >
+                                    {isWinner && (
+                                        <span
+                                            className="max-w-full truncate rounded-full border border-[#fde047] px-1.5 py-px font-black tracking-[0.07em] text-white uppercase shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
+                                            style={{
+                                                background: `linear-gradient(180deg, ${palette.base} 0%, ${palette.dark} 100%)`,
+                                                fontSize:
+                                                    'clamp(6px, 1.65cqw, 10px)',
+                                                lineHeight: 1.25,
+                                            }}
+                                        >
+                                            ★ WINNER
+                                        </span>
+                                    )}
                                     {isActive && activeLabel && (
                                         <span
                                             className="max-w-full truncate rounded-full px-1.5 py-px font-extrabold tracking-[0.06em] text-white uppercase"
@@ -648,7 +677,8 @@ const BoardSurface = memo(
                         {QUADRANTS.map(({ color, row, col }) => {
                             const config = PLAYER_CONFIG[color];
                             const palette = config.palette;
-                            const isActive = color === activeColor;
+                            const isWinner = color === firstWinner;
+                            const isActive = !isWinner && color === activeColor;
 
                             return (
                                 <div
@@ -662,77 +692,92 @@ const BoardSurface = memo(
                                         background: `radial-gradient(circle at 28% 22%, ${palette.light}66, transparent 58%), ${palette.base}`,
                                     }}
                                 >
-                                    <div
-                                        className="absolute inset-[11.5%] rounded-[15%] bg-white/92"
-                                        style={{
-                                            boxShadow:
-                                                'inset 0 2px 10px rgba(32,43,58,0.10), 0 1px 0 rgba(255,255,255,0.8)',
-                                        }}
-                                    />
-                                    {activeColor && !isActive && (
-                                        <div
-                                            aria-hidden="true"
-                                            className="pointer-events-none absolute inset-0 z-[1] rounded-[8%] bg-white/18"
+                                    {isWinner ? (
+                                        <WinnerQuadrantStage
+                                            color={color}
+                                            character={playerCharacters[color]}
+                                            playerName={playerNames[color]}
                                         />
-                                    )}
-                                    {isActive && (
-                                        <div
-                                            aria-hidden="true"
-                                            className="pointer-events-none absolute inset-0 z-[3]"
-                                        >
+                                    ) : (
+                                        <>
                                             <div
-                                                className="absolute inset-[2.5%] rounded-[9%]"
+                                                className="absolute inset-[11.5%] rounded-[15%] bg-white/92"
                                                 style={{
-                                                    boxShadow: `inset 0 0 0 2.5px rgba(255,255,255,0.95), 0 0 0 3px ${palette.base}, 0 0 18px 2px ${palette.base}66`,
+                                                    boxShadow:
+                                                        'inset 0 2px 10px rgba(32,43,58,0.10), 0 1px 0 rgba(255,255,255,0.8)',
                                                 }}
                                             />
-                                            <div
-                                                className="animate-turn-flash absolute inset-[2.5%] rounded-[9%]"
-                                                style={{
-                                                    boxShadow: `0 0 0 6px ${palette.base}, 0 0 30px 8px ${palette.base}80`,
-                                                }}
-                                            />
-                                        </div>
-                                    )}
-                                    {isActive && activeLabel && (
-                                        <div
-                                            aria-hidden="true"
-                                            className="pointer-events-none absolute inset-x-[8%] top-[5.5%] z-[2] flex justify-center"
-                                        >
-                                            <span
-                                                className="max-w-full truncate rounded-full px-2.5 py-0.5 font-extrabold tracking-[0.06em] text-white uppercase"
-                                                style={{
-                                                    background: palette.dark,
-                                                    fontSize:
-                                                        'clamp(7px, 2.05cqw, 12px)',
-                                                    lineHeight: 1.3,
-                                                    boxShadow: `0 2px 8px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.32)`,
-                                                }}
-                                            >
-                                                {activeLabel}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {playerNames[color] && (
-                                        <div className="absolute inset-x-[12%] bottom-[6%] z-[2] flex justify-center">
-                                            <span
-                                                className="max-w-full truncate rounded-full bg-white/95 px-2.5 py-0.5 font-extrabold shadow-[0_1px_5px_rgba(32,43,58,0.18)]"
-                                                style={{
-                                                    color: palette.text,
-                                                    fontSize:
-                                                        'clamp(6.5px, 1.85cqw, 11.5px)',
-                                                    lineHeight: 1.3,
-                                                }}
-                                            >
-                                                {playerNames[color]}
-                                            </span>
-                                        </div>
+                                            {activeColor && !isActive && (
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="pointer-events-none absolute inset-0 z-[1] rounded-[8%] bg-white/18"
+                                                />
+                                            )}
+                                            {isActive && (
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="pointer-events-none absolute inset-0 z-[3]"
+                                                >
+                                                    <div
+                                                        className="absolute inset-[2.5%] rounded-[9%]"
+                                                        style={{
+                                                            boxShadow: `inset 0 0 0 2.5px rgba(255,255,255,0.95), 0 0 0 3px ${palette.base}, 0 0 18px 2px ${palette.base}66`,
+                                                        }}
+                                                    />
+                                                    <div
+                                                        className="animate-turn-flash absolute inset-[2.5%] rounded-[9%]"
+                                                        style={{
+                                                            boxShadow: `0 0 0 6px ${palette.base}, 0 0 30px 8px ${palette.base}80`,
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                            {isActive && activeLabel && (
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="pointer-events-none absolute inset-x-[8%] top-[5.5%] z-[2] flex justify-center"
+                                                >
+                                                    <span
+                                                        className="max-w-full truncate rounded-full px-2.5 py-0.5 font-extrabold tracking-[0.06em] text-white uppercase"
+                                                        style={{
+                                                            background:
+                                                                palette.dark,
+                                                            fontSize:
+                                                                'clamp(7px, 2.05cqw, 12px)',
+                                                            lineHeight: 1.3,
+                                                            boxShadow: `0 2px 8px ${palette.dark}59, inset 0 0 0 1px rgba(255,255,255,0.32)`,
+                                                        }}
+                                                    >
+                                                        {activeLabel}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {playerNames[color] && (
+                                                <div className="absolute inset-x-[12%] bottom-[6%] z-[2] flex justify-center">
+                                                    <span
+                                                        className="max-w-full truncate rounded-full bg-white/95 px-2.5 py-0.5 font-extrabold shadow-[0_1px_5px_rgba(32,43,58,0.18)]"
+                                                        style={{
+                                                            color: palette.text,
+                                                            fontSize:
+                                                                'clamp(6.5px, 1.85cqw, 11.5px)',
+                                                            lineHeight: 1.3,
+                                                        }}
+                                                    >
+                                                        {playerNames[color]}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             );
                         })}
 
                         {QUADRANTS.map(({ color }) => {
+                            if (color === firstWinner) {
+                                return null;
+                            }
+
                             const palette = PLAYER_CONFIG[color].palette;
 
                             return PLAYER_CONFIG[color].base.map(
@@ -872,7 +917,9 @@ const BoardSurface = memo(
         previous.spec === next.spec &&
         previous.activeColor === next.activeColor &&
         previous.activeLabel === next.activeLabel &&
-        samePlayerNames(previous.playerNames, next.playerNames),
+        previous.firstWinner === next.firstWinner &&
+        sameRecord(previous.playerNames, next.playerNames) &&
+        sameRecord(previous.playerCharacters, next.playerCharacters),
 );
 
 type TokenViewProps = {
@@ -1050,6 +1097,7 @@ export default function LudoBoard({
     playerCharacters = {},
     activeColor,
     activeLabel,
+    firstWinner = null,
     order,
     arms,
     skillBursts = [],
@@ -1378,8 +1426,10 @@ export default function LudoBoard({
             <BoardSurface
                 spec={spec}
                 playerNames={playerNames}
+                playerCharacters={playerCharacters}
                 activeColor={activeColor}
                 activeLabel={activeLabel}
+                firstWinner={firstWinner}
             />
 
             <div className="pointer-events-none absolute inset-0 z-[20]">

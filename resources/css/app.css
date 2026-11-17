@@ -167,31 +167,11 @@
         pointer-events: none;
     }
 
-    .room-seat-orbit {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        aspect-ratio: 1;
-        border: 1px solid color-mix(in srgb, var(--token-base) 18%, transparent);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-    }
-
-    .room-seat-orbit-outer {
-        width: min(74cqw, 92cqh, 210px);
-        background: radial-gradient(circle, color-mix(in srgb, var(--token-base) 9%, white), transparent 72%);
-    }
-
-    .room-seat-orbit-inner {
-        width: min(52cqw, 64cqh, 148px);
-        border-style: dashed;
-    }
-
     .room-seat-piece {
         position: relative;
         top: 50%;
         left: 50%;
-        width: min(38cqw, 86cqh, 108px);
+        width: min(68cqw, 86cqh, 196px);
         aspect-ratio: 1;
         transform: translate(-50%, -50%);
     }
@@ -199,10 +179,10 @@
     .room-seat-token {
         position: absolute;
         z-index: 1;
-        top: 0%;
-        left: 8%;
-        width: 84%;
-        height: 84%;
+        top: 4%;
+        left: 4%;
+        width: 92%;
+        height: 92%;
         aspect-ratio: 1;
         animation: room-piece-float 4s ease-in-out infinite;
     }
@@ -214,25 +194,11 @@
 
     .room-seat-piece-base {
         position: absolute;
-        inset: 66% 0 13%;
+        inset: 74% 12% 9%;
         border: 1px solid color-mix(in srgb, var(--token-base) 28%, white);
         border-radius: 50%;
         background: color-mix(in srgb, var(--token-base) 13%, white);
     }
-
-    .room-seat-marker {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: clamp(5px, 1vw, 8px);
-        aspect-ratio: 1;
-        border-radius: 50%;
-        background: var(--token-base);
-        opacity: .35;
-    }
-
-    .room-seat-marker-one { transform: translate(-28cqw, -25cqh); }
-    .room-seat-marker-two { transform: translate(26cqw, 25cqh); }
 
     /*
      * Room buttons share one tactile language: a 2.5D bottom edge that

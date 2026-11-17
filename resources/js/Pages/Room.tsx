@@ -1457,8 +1457,6 @@ function RoomContent() {
                                                     style={tokenStyle}
                                                     aria-hidden="true"
                                                 >
-                                                    <div className="room-seat-orbit room-seat-orbit-outer" />
-                                                    <div className="room-seat-orbit room-seat-orbit-inner" />
                                                     <div
                                                         className={`room-seat-piece ${occupied ? 'room-seat-piece-occupied' : 'room-seat-piece-waiting'}`}
                                                     >
@@ -1467,14 +1465,12 @@ function RoomContent() {
                                                                 seatCharacter.image
                                                             }
                                                             alt=""
-                                                            width={84}
-                                                            height={84}
-                                                            className="room-seat-token rounded-full object-contain drop-shadow-[0_6px_10px_rgba(20,32,52,0.28)]"
+                                                            width={180}
+                                                            height={180}
+                                                            className="room-seat-token object-contain drop-shadow-[0_6px_10px_rgba(20,32,52,0.28)]"
                                                         />
                                                         <span className="room-seat-piece-base" />
                                                     </div>
-                                                    <div className="room-seat-marker room-seat-marker-one" />
-                                                    <div className="room-seat-marker room-seat-marker-two" />
                                                 </div>
 
                                                 {occupant ? (

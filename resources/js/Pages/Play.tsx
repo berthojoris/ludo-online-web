@@ -3078,6 +3078,11 @@ export default function Play() {
                                                             ? undefined
                                                             : turnLabel
                                                     }
+                                                    firstWinner={
+                                                        state.winners[0] ??
+                                                        state.winner ??
+                                                        null
+                                                    }
                                                     className="h-full w-full"
                                                 />
                                             </div>
