@@ -32,6 +32,7 @@ type MatchResultModalProps = {
     standings: MatchStanding[];
     durationSeconds: number;
     totalMoves: number;
+    canRestart?: boolean;
     onPlayAgain: () => void;
     onOpenSetup: () => void;
     onClose: () => void;
@@ -52,11 +53,13 @@ export default function MatchResultModal({
     standings,
     durationSeconds,
     totalMoves,
+    canRestart = true,
     onPlayAgain,
     onOpenSetup,
     onClose,
 }: MatchResultModalProps) {
     const playAgainRef = useRef<HTMLButtonElement>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
     const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
@@ -65,7 +68,7 @@ export default function MatchResultModal({
         }
 
         const frame = window.requestAnimationFrame(() => {
-            playAgainRef.current?.focus();
+            (playAgainRef.current ?? closeRef.current)?.focus();
         });
 
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -130,6 +133,7 @@ export default function MatchResultModal({
                     </span>
 
                     <button
+                        ref={closeRef}
                         type="button"
                         onClick={onClose}
                         aria-label="Tutup dialog dan lihat papan"
@@ -326,33 +330,50 @@ export default function MatchResultModal({
                 </dl>
 
                 <div className="mt-5 flex flex-col gap-2.5">
-                    <button
-                        ref={playAgainRef}
-                        type="button"
-                        onClick={onPlayAgain}
-                        className="bg-brand hover:bg-brand-dark inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.75)] transition active:scale-[0.99]"
-                    >
-                        <RefreshIcon className="h-4 w-4" />
-                        Main lagi
-                    </button>
+                    {canRestart ? (
+                        <>
+                            <button
+                                ref={playAgainRef}
+                                type="button"
+                                onClick={onPlayAgain}
+                                className="bg-brand hover:bg-brand-dark inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.75)] transition active:scale-[0.99]"
+                            >
+                                <RefreshIcon className="h-4 w-4" />
+                                Main lagi
+                            </button>
 
-                    <div className="grid grid-cols-2 gap-2.5">
-                        <button
-                            type="button"
-                            onClick={onOpenSetup}
-                            className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
-                        >
-                            <UsersIcon className="h-4 w-4 shrink-0" />
-                            <span>Atur pemain</span>
-                        </button>
-                        <Link
-                            href={route('home')}
-                            className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
-                        >
-                            <HomeIcon className="h-4 w-4 shrink-0" />
-                            <span>Beranda</span>
-                        </Link>
-                    </div>
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <button
+                                    type="button"
+                                    onClick={onOpenSetup}
+                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                                >
+                                    <UsersIcon className="h-4 w-4 shrink-0" />
+                                    <span>Atur pemain</span>
+                                </button>
+                                <Link
+                                    href={route('home')}
+                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                                >
+                                    <HomeIcon className="h-4 w-4 shrink-0" />
+                                    <span>Beranda</span>
+                                </Link>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-ink-muted text-center text-xs leading-5">
+                                Hanya host yang bisa memulai pertandingan baru.
+                            </p>
+                            <Link
+                                href={route('home')}
+                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                            >
+                                <HomeIcon className="h-4 w-4 shrink-0" />
+                                <span>Beranda</span>
+                            </Link>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

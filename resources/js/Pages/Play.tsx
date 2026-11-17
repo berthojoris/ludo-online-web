@@ -984,6 +984,7 @@ export default function Play() {
     const roomArms =
         room?.match_state?.arms ??
         (room && room.max_players >= 5 ? room.max_players : 4);
+    const canRestartMatch = !room || Boolean(me?.is_host);
     const myRoomIndex =
         room?.players.findIndex((player) => player.id === me?.id) ?? -1;
     const myRoomColor: PlayerId = roomOrder[myRoomIndex] ?? 'blue';
@@ -3137,7 +3138,9 @@ export default function Play() {
                                     </div>
 
                                     {state.winner ? (
-                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <div
+                                            className={`mt-3 grid gap-2 ${canRestartMatch ? 'grid-cols-2' : 'grid-cols-1'}`}
+                                        >
                                             <button
                                                 type="button"
                                                 onClick={() =>
@@ -3148,14 +3151,16 @@ export default function Play() {
                                                 <TrophyIcon className="h-4 w-4" />
                                                 Lihat hasil
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={playAgain}
-                                                className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 text-xs font-semibold text-white transition active:scale-[0.99]"
-                                            >
-                                                <RefreshIcon className="h-4 w-4" />
-                                                Main lagi
-                                            </button>
+                                            {canRestartMatch && (
+                                                <button
+                                                    type="button"
+                                                    onClick={playAgain}
+                                                    className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-1.5 rounded-2xl px-3 text-xs font-semibold text-white transition active:scale-[0.99]"
+                                                >
+                                                    <RefreshIcon className="h-4 w-4" />
+                                                    Main lagi
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
                                         <>
@@ -3351,6 +3356,7 @@ export default function Play() {
                     standings={standings}
                     durationSeconds={durationSeconds}
                     totalMoves={state.totalMoves}
+                    canRestart={canRestartMatch}
                     onPlayAgain={playAgain}
                     onOpenSetup={openSetup}
                     onClose={() => setResultModalOpen(false)}
