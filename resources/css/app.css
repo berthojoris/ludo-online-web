@@ -567,7 +567,7 @@
 .home-chat-bubble {
     position: absolute;
     transform: translateX(-50%);
-    width: min(48cqw, 16rem);
+    width: min(34cqw, 11rem);
     padding: clamp(.55rem, 2.5cqw, .85rem) clamp(.75rem, 3.5cqw, 1.15rem);
     border: 2px solid #202b3a;
     border-radius: clamp(.65rem, 3cqw, 1rem);
