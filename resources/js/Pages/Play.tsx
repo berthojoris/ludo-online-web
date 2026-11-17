@@ -192,6 +192,15 @@ type Action =
     | { type: 'MOVE'; tokenIndex: number; now: number; version?: number }
     | { type: 'RESET'; now: number; turn?: PlayerId };
 
+const TURN_TIMEOUT_SECONDS = 60;
+
+function formatTurnTimer(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
 const LOCAL_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
 
@@ -2377,6 +2386,77 @@ export default function Play() {
         }
     };
 
+    const handleRollRef = useRef(handleRoll);
+    handleRollRef.current = handleRoll;
+
+    const turnTimerActive =
+        screen === 'game' &&
+        !state.winner &&
+        state.turn === state.human &&
+        (state.phase === 'idle' ||
+            (state.phase === 'choosing' && state.legalMoves.length > 0)) &&
+        !movingToken &&
+        returningTokens.length === 0;
+
+    const turnTimerKey = turnTimerActive
+        ? `${state.version}:${state.turn}:${state.phase}:${state.rolls[state.turn]}:${state.totalMoves}`
+        : null;
+
+    const [turnSecondsLeft, setTurnSecondsLeft] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!turnTimerKey) {
+            setTurnSecondsLeft(null);
+
+            return;
+        }
+
+        const deadline = Date.now() + TURN_TIMEOUT_SECONDS * 1000;
+        let triggered = false;
+        setTurnSecondsLeft(TURN_TIMEOUT_SECONDS);
+
+        const interval = window.setInterval(() => {
+            const remaining = Math.max(
+                0,
+                Math.ceil((deadline - Date.now()) / 1000),
+            );
+            setTurnSecondsLeft(remaining);
+
+            if (remaining <= 0 && !triggered) {
+                triggered = true;
+                window.clearInterval(interval);
+
+                const current = stateRef.current;
+                if (
+                    current.winner ||
+                    current.turn !== current.human ||
+                    movingRef.current
+                ) {
+                    return;
+                }
+
+                if (current.phase === 'idle') {
+                    void handleRollRef.current();
+                } else if (
+                    current.phase === 'choosing' &&
+                    current.legalMoves.length > 0
+                ) {
+                    const randomMove =
+                        current.legalMoves[
+                            Math.floor(
+                                Math.random() * current.legalMoves.length,
+                            )
+                        ];
+                    if (randomMove) {
+                        void animateMoveRef.current(randomMove.tokenIndex);
+                    }
+                }
+            }
+        }, 250);
+
+        return () => window.clearInterval(interval);
+    }, [turnTimerKey]);
+
     const handleConfirmEndGame = () => {
         if (!room || !me?.is_host || endingGame) {
             return;
@@ -3118,16 +3198,33 @@ export default function Play() {
                                             />
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p
-                                                className="text-[10px] font-extrabold tracking-[0.14em]"
-                                                style={{
-                                                    color: PLAYER_CONFIG[
-                                                        state.turn
-                                                    ].palette.text,
-                                                }}
-                                            >
-                                                {turnLabel}
-                                            </p>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <p
+                                                    className="truncate text-[10px] font-extrabold tracking-[0.14em]"
+                                                    style={{
+                                                        color: PLAYER_CONFIG[
+                                                            state.turn
+                                                        ].palette.text,
+                                                    }}
+                                                >
+                                                    {turnLabel}
+                                                </p>
+                                                {turnSecondsLeft !== null && (
+                                                    <span
+                                                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold tabular-nums ${
+                                                            turnSecondsLeft <=
+                                                            10
+                                                                ? 'bg-danger/12 text-danger animate-pulse'
+                                                                : 'bg-surface-muted text-ink-muted'
+                                                        }`}
+                                                        aria-label={`Sisa waktu giliran ${turnSecondsLeft} detik`}
+                                                    >
+                                                        {formatTurnTimer(
+                                                            turnSecondsLeft,
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p
                                                 className="text-ink mt-1 text-sm leading-5 font-bold"
                                                 aria-live="polite"
@@ -3277,15 +3374,31 @@ export default function Play() {
                                     />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <p
-                                        className="truncate text-[9px] font-bold tracking-[0.12em]"
-                                        style={{
-                                            color: PLAYER_CONFIG[state.turn]
-                                                .palette.text,
-                                        }}
-                                    >
-                                        {turnLabel}
-                                    </p>
+                                    <div className="flex items-center justify-between gap-1.5">
+                                        <p
+                                            className="truncate text-[9px] font-bold tracking-[0.12em]"
+                                            style={{
+                                                color: PLAYER_CONFIG[state.turn]
+                                                    .palette.text,
+                                            }}
+                                        >
+                                            {turnLabel}
+                                        </p>
+                                        {turnSecondsLeft !== null && (
+                                            <span
+                                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold tabular-nums ${
+                                                    turnSecondsLeft <= 10
+                                                        ? 'bg-danger/12 text-danger animate-pulse'
+                                                        : 'bg-surface-muted text-ink-muted'
+                                                }`}
+                                                aria-label={`Sisa waktu giliran ${turnSecondsLeft} detik`}
+                                            >
+                                                {formatTurnTimer(
+                                                    turnSecondsLeft,
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
                                     <p
                                         className="text-ink truncate text-[11px] font-semibold"
                                         aria-live="polite"
