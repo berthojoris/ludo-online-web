@@ -12,10 +12,10 @@ import {
     CopyIcon,
     DiceIcon,
     HashIcon,
-    InfoIcon,
     LinkIcon,
     PawnIcon,
     PencilIcon,
+    SlidersIcon,
     TrophyIcon,
     UsersIcon,
 } from '@/Components/Game/Icons';
@@ -82,42 +82,20 @@ const SEAT_GRID_CLASS: Record<PlayerCount, string> = {
 
 const PLAYER_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
 
-function getRoomRules(playerCount: PlayerCount) {
-    return [
-        { label: 'Timer giliran', value: '15 detik' },
-        { label: 'Keluar markas', value: 'Angka 6' },
-        { label: 'Tiga kali angka 6', value: 'Hangus' },
-        {
-            label: 'Petak aman',
-            value: playerCount >= 5 ? `${playerCount * 2} petak` : '8 petak',
-        },
-        {
-            label: 'Bentuk papan',
-            value: playerCount >= 5 ? `${playerCount} sisi` : '4 sisi (15×15)',
-        },
-    ];
-}
-
 function RoomSettingsSummary({
     playerCount,
-    hostAdvantage,
     isHost,
     pending,
     onSelectPlayerCount,
-    onToggleAdvantage,
     vsComputer,
     onSelectOpponent,
-    showRules = true,
 }: {
     playerCount: PlayerCount;
-    hostAdvantage: boolean;
     isHost: boolean;
     pending: boolean;
     onSelectPlayerCount: (count: PlayerCount) => void;
-    onToggleAdvantage: () => void;
     vsComputer: boolean;
     onSelectOpponent: (computer: boolean) => void;
-    showRules?: boolean;
 }) {
     return (
         <>
@@ -155,52 +133,6 @@ function RoomSettingsSummary({
                     ))}
                 </div>
             </div>
-
-            {isHost && (
-                <div className="border-line mt-3 flex items-center justify-between gap-3 rounded-2xl border px-3 py-2">
-                    <div className="min-w-0">
-                        <p className="text-ink text-xs font-semibold">
-                            Keuntungan host
-                        </p>
-                        <p className="text-ink-muted mt-0.5 text-[11px]">
-                            Peluang 50% keluar markas atau menangkap saat
-                            tersedia.
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-label="Keuntungan host"
-                        aria-checked={hostAdvantage}
-                        aria-busy={pending}
-                        disabled={!isHost || pending}
-                        onClick={onToggleAdvantage}
-                        className="switch"
-                    >
-                        <span className="w-6 text-right tabular-nums">
-                            {pending ? '…' : hostAdvantage ? 'ON' : 'OFF'}
-                        </span>
-                        <span aria-hidden="true" className="switch-track">
-                            <span className="switch-thumb" />
-                        </span>
-                    </button>
-                </div>
-            )}
-            {showRules && (
-                <dl className="divide-line border-line mt-3 divide-y rounded-2xl border px-3">
-                    {getRoomRules(playerCount).map((item) => (
-                        <div
-                            key={item.label}
-                            className="flex items-center justify-between py-2 text-xs"
-                        >
-                            <dt className="text-ink-muted">{item.label}</dt>
-                            <dd className="text-ink font-semibold tabular-nums">
-                                {item.value}
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
-            )}
         </>
     );
 }
@@ -262,7 +194,7 @@ function RoomContent() {
         serverRoom?.code ?? attemptedCode ?? '',
     );
     const [copyState, setCopyState] = useState<CopyState>('idle');
-    const [rulesModalOpen, setRulesModalOpen] = useState(false);
+    const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
     const [createPasswordOpen, setCreatePasswordOpen] = useState(false);
     const [createPasswordError, setCreatePasswordError] = useState<
         string | null
@@ -283,7 +215,7 @@ function RoomContent() {
     const [characterModalOpen, setCharacterModalOpen] = useState(false);
     const [characterModalSeat, setCharacterModalSeat] =
         useState<PlayerColor | null>(null);
-    const rulesOverlayStyle = useModalViewport(rulesModalOpen);
+    const advancedOverlayStyle = useModalViewport(advancedModalOpen);
     const hostRenameOverlayStyle = useModalViewport(hostEditingPlayer !== null);
 
     useEffect(() => {
@@ -312,20 +244,20 @@ function RoomContent() {
     }, []);
 
     useEffect(() => {
-        if (!rulesModalOpen) {
+        if (!advancedModalOpen) {
             return;
         }
 
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                setRulesModalOpen(false);
+                setAdvancedModalOpen(false);
             }
         };
 
         window.addEventListener('keydown', onKeyDown);
 
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [rulesModalOpen]);
+    }, [advancedModalOpen]);
 
     useEffect(() => {
         if (!hostEditingPlayer) {
@@ -860,14 +792,14 @@ function RoomContent() {
                                     type="button"
                                     onClick={() => {
                                         cue();
-                                        setRulesModalOpen(true);
+                                        setAdvancedModalOpen(true);
                                     }}
-                                    aria-label="Lihat aturan main"
-                                    className="btn btn-secondary btn-sm min-w-9 px-2 min-[380px]:px-2.5"
+                                    aria-label="Advanced"
+                                    className="btn btn-secondary btn-sm min-w-9 px-2 min-[360px]:px-2.5"
                                 >
-                                    <InfoIcon className="h-3.5 w-3.5" />
-                                    <span className="hidden min-[380px]:inline">
-                                        Aturan
+                                    <SlidersIcon className="h-3.5 w-3.5" />
+                                    <span className="hidden min-[360px]:inline">
+                                        Advanced
                                     </span>
                                 </button>
                             )}
@@ -1830,18 +1762,11 @@ function RoomContent() {
                                         vsComputer={Boolean(liveRoom?.players.some((player) => player.is_computer))}
                                         onSelectOpponent={handleSelectOpponent}
                                         playerCount={playerCount}
-                                        hostAdvantage={Boolean(
-                                            liveRoom?.host_advantage,
-                                        )}
-                                        onToggleAdvantage={
-                                            handleToggleAdvantage
-                                        }
                                         isHost={isHost}
                                         pending={pendingAction}
                                         onSelectPlayerCount={
                                             handleSelectPlayerCount
                                         }
-                                        showRules={false}
                                     />
 
                                     <div className="border-line/80 mt-auto flex flex-col gap-2 border-t pt-3.5">
@@ -2016,60 +1941,79 @@ function RoomContent() {
                 onConfirm={handleConfirmCharacter}
             />
 
-            {rulesModalOpen && liveRoom && (
+            {advancedModalOpen && liveRoom && (
                 <div
                     className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
-                    style={rulesOverlayStyle}
+                    style={advancedOverlayStyle}
                     role="dialog"
                     aria-modal="true"
-                    aria-labelledby="room-rules-title"
+                    aria-labelledby="room-advanced-title"
                     onClick={(event) => {
                         if (event.target === event.currentTarget) {
-                            setRulesModalOpen(false);
+                            setAdvancedModalOpen(false);
                         }
                     }}
                 >
                     <div className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
                         <div className="mb-4 flex items-center justify-between gap-2">
                             <h2
-                                id="room-rules-title"
+                                id="room-advanced-title"
                                 className="text-ink text-base font-semibold"
                             >
-                                Pengaturan & aturan meja
+                                Advanced
                             </h2>
                             <button
                                 type="button"
-                                onClick={() => setRulesModalOpen(false)}
-                                aria-label="Tutup aturan"
+                                onClick={() => setAdvancedModalOpen(false)}
+                                aria-label="Tutup Advanced"
                                 className="btn btn-quiet btn-sm btn-icon"
                             >
                                 <CloseIcon className="h-4 w-4" />
                             </button>
                         </div>
 
-                        <RoomSettingsSummary
-                            vsComputer={Boolean(liveRoom?.players.some((player) => player.is_computer))}
-                            onSelectOpponent={handleSelectOpponent}
-                            playerCount={playerCount}
-                            hostAdvantage={Boolean(liveRoom?.host_advantage)}
-                            onToggleAdvantage={handleToggleAdvantage}
-                            isHost={isHost}
-                            pending={pendingAction}
-                            onSelectPlayerCount={handleSelectPlayerCount}
-                        />
-
-                        {isHost && (
+                        <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5">
+                            <div className="min-w-0">
+                                <p className="text-ink text-xs font-semibold">
+                                    Keuntungan host
+                                </p>
+                                <p className="text-ink-muted mt-0.5 text-[11px]">
+                                    Peluang 50% keluar markas atau menangkap
+                                    saat tersedia.
+                                </p>
+                            </div>
                             <button
                                 type="button"
-                                disabled={pendingAction}
-                                onClick={() => {
-                                    setRulesModalOpen(false);
-                                    handleCreateNewRoom();
-                                }}
-                                className="btn btn-secondary mt-3 w-full"
+                                role="switch"
+                                aria-label="Keuntungan host"
+                                aria-checked={Boolean(
+                                    liveRoom?.host_advantage,
+                                )}
+                                aria-busy={pendingAction}
+                                disabled={!isHost || pendingAction}
+                                onClick={handleToggleAdvantage}
+                                className="switch shrink-0"
                             >
-                                Buat ruang baru
+                                <span className="w-6 text-right tabular-nums">
+                                    {pendingAction
+                                        ? '…'
+                                        : liveRoom?.host_advantage
+                                          ? 'ON'
+                                          : 'OFF'}
+                                </span>
+                                <span
+                                    aria-hidden="true"
+                                    className="switch-track"
+                                >
+                                    <span className="switch-thumb" />
+                                </span>
                             </button>
+                        </div>
+
+                        {!isHost && (
+                            <p className="text-ink-muted mt-2.5 text-[11px]">
+                                Hanya host yang dapat mengubah pengaturan ini.
+                            </p>
                         )}
                     </div>
                 </div>
