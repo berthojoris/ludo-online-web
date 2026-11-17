@@ -91,6 +91,36 @@
             inset 0 -4px 5px rgb(32 43 58 / 10%);
     }
 
+    /* Blue / white / silver 3D dice used on the match turn card. */
+    .dice-face-sapphire {
+        background:
+            radial-gradient(circle at 26% 20%, rgb(255 255 255 / 58%), rgb(255 255 255 / 0%) 44%),
+            linear-gradient(150deg, #6aa8ff 0%, #2f6bf0 46%, #1c3f9e 100%);
+        border: 1.5px solid #dfe6f0;
+        box-shadow:
+            inset 0 0 0 2px rgb(196 207 222 / 55%),
+            inset 0 3px 4px rgb(255 255 255 / 45%),
+            inset 0 -6px 8px rgb(12 24 64 / 38%);
+    }
+
+    .dice-pip-sapphire {
+        background: radial-gradient(circle at 35% 30%, #ffffff 0%, #eef2f8 42%, #aab6c7 100%);
+        box-shadow:
+            inset 0 -1px 1px rgb(12 24 64 / 28%),
+            0 1px 1.5px rgb(12 24 64 / 40%);
+    }
+
+    /* Silver pedestal that frames the sapphire dice. */
+    .dice-stage {
+        background:
+            radial-gradient(ellipse 52% 14% at 50% 86%, rgb(28 63 158 / 30%), rgb(28 63 158 / 0%) 72%),
+            radial-gradient(circle at 50% 30%, #ffffff 0%, #eef3fa 46%, #d3dce9 100%);
+        border: 1px solid #cdd7e4;
+        box-shadow:
+            inset 0 2px 3px rgb(255 255 255 / 95%),
+            inset 0 -4px 7px rgb(28 63 158 / 14%);
+    }
+
     .dot-grid {
         background-image: radial-gradient(rgb(32 43 58 / 8%) 1px, transparent 1px);
         background-size: 18px 18px;

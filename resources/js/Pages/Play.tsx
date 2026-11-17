@@ -45,7 +45,7 @@ import {
 } from '@/lib/ludo';
 import {
     isSoundEnabled,
-    playCaptureSound,
+    playCharacterSkillSound,
     playChooseTokenSound,
     playDefeatSound,
     playDiceRollSound,
@@ -56,6 +56,7 @@ import {
     playTurnSound,
     playUiSound,
     playWinSound,
+    preloadCharacterSounds,
     setSoundEnabled,
     unlockAudio,
 } from '@/lib/sound';
@@ -1664,7 +1665,7 @@ export default function Play() {
             }
 
             if (capturedTargets.length > 0) {
-                playCaptureSound();
+                playCharacterSkillSound(state.characters[color], color);
                 boardHandleRef.current?.impact(
                     boardTokenPoint(activeSpec, color, move.target, tokenIndex),
                     color,
@@ -2117,15 +2118,18 @@ export default function Play() {
     );
 
     useEffect(() => {
-        preloadImages(
-            state.order.flatMap((color) => {
-                const character = getCharacterConfig(
-                    state.characters[color],
-                    color,
-                );
+        const activeCharacters = state.order.map((color) =>
+            getCharacterConfig(state.characters[color], color),
+        );
 
-                return [character.pion, character.image];
-            }),
+        preloadImages(
+            activeCharacters.flatMap((character) => [
+                character.pion,
+                character.image,
+            ]),
+        );
+        preloadCharacterSounds(
+            activeCharacters.map((character) => character.id),
         );
     }, [state.order, state.characters]);
 
@@ -3055,8 +3059,16 @@ export default function Play() {
 
                             <aside className="hidden min-h-0 min-w-0 flex-col gap-3 md:flex">
                                 <section className="shadow-card shrink-0 rounded-[22px] border border-white/85 bg-white/95 p-4 backdrop-blur-md">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
+                                    <div className="flex items-center gap-3.5">
+                                        <div className="dice-stage grid aspect-square w-[clamp(72px,6.5vw,92px)] shrink-0 place-items-center rounded-[20px]">
+                                            <Dice
+                                                value={displayDice}
+                                                rolling={state.phase === 'rolling'}
+                                                variant="sapphire"
+                                                className="h-[60%] w-[60%]"
+                                            />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
                                             <p
                                                 className="text-[10px] font-extrabold tracking-[0.14em]"
                                                 style={{
@@ -3074,11 +3086,6 @@ export default function Play() {
                                                 {instruction}
                                             </p>
                                         </div>
-                                        <Dice
-                                            value={displayDice}
-                                            rolling={state.phase === 'rolling'}
-                                            className="h-14 w-14 shrink-0"
-                                        />
                                     </div>
 
                                     {state.winner ? (
@@ -3198,11 +3205,14 @@ export default function Play() {
 
                         <div className="shadow-card mt-2 shrink-0 rounded-[20px] border border-white/85 bg-white/95 p-2 backdrop-blur-md md:hidden">
                             <div className="flex items-center gap-2">
-                                <Dice
-                                    value={displayDice}
-                                    rolling={state.phase === 'rolling'}
-                                    className="h-11 w-11 shrink-0"
-                                />
+                                <div className="dice-stage grid h-12 w-12 shrink-0 place-items-center rounded-[14px]">
+                                    <Dice
+                                        value={displayDice}
+                                        rolling={state.phase === 'rolling'}
+                                        variant="sapphire"
+                                        className="h-[66%] w-[66%]"
+                                    />
+                                </div>
                                 <div className="min-w-0 flex-1">
                                     <p
                                         className="truncate text-[9px] font-bold tracking-[0.12em]"

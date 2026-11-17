@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
@@ -29,6 +30,16 @@ Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->middlew
 Route::post('/client-issues', [ClientIssueController::class, 'store'])
     ->middleware('throttle:12,1')
     ->name('client-issues.store');
+
+Route::prefix('api/sound-effects')->name('sound-effects.')->group(function () {
+    Route::get('/characters', [CharacterSoundController::class, 'index'])->name('characters.index');
+    Route::post('/characters/generate', [CharacterSoundController::class, 'generateAll'])
+        ->middleware('throttle:6,1')
+        ->name('characters.generate-all');
+    Route::post('/characters/{character}/generate', [CharacterSoundController::class, 'generateOne'])
+        ->middleware('throttle:15,1')
+        ->name('characters.generate');
+});
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');

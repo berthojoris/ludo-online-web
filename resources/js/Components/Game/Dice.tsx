@@ -1,9 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+type DiceVariant = 'classic' | 'sapphire';
+
 type DiceProps = {
     value: number;
     rolling?: boolean;
     className?: string;
+    variant?: DiceVariant;
+};
+
+const VARIANT_CLASSES: Record<DiceVariant, { face: string; pip: string }> = {
+    classic: {
+        face: 'dice-face',
+        pip: 'bg-ink shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)]',
+    },
+    sapphire: {
+        face: 'dice-face-sapphire',
+        pip: 'dice-pip-sapphire',
+    },
 };
 
 type Face = {
@@ -44,7 +58,7 @@ const FACES: Face[] = [
 
 const normalise = (degrees: number) => ((degrees % 360) + 360) % 360;
 
-function DiceFace({ value }: { value: number }) {
+function DiceFace({ value, pipClass }: { value: number; pipClass: string }) {
     const activePips = PIPS[value] ?? PIPS[1];
 
     return (
@@ -52,7 +66,9 @@ function DiceFace({ value }: { value: number }) {
             {Array.from({ length: 9 }).map((_, index) => (
                 <span key={index} className="flex items-center justify-center">
                     {activePips.includes(index) && (
-                        <span className="bg-ink block h-[58%] w-[58%] rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)]" />
+                        <span
+                            className={`block h-[58%] w-[58%] rounded-full ${pipClass}`}
+                        />
                     )}
                 </span>
             ))}
@@ -64,7 +80,9 @@ export default function Dice({
     value,
     rolling = false,
     className = 'h-14 w-14',
+    variant = 'classic',
 }: DiceProps) {
+    const variantClasses = VARIANT_CLASSES[variant];
     const rootRef = useRef<HTMLDivElement>(null);
     const cubeRef = useRef<HTMLDivElement>(null);
     const animationRef = useRef<Animation | null>(null);
@@ -202,13 +220,16 @@ export default function Dice({
                 {FACES.map((face) => (
                     <div
                         key={face.value}
-                        className="dice-face absolute inset-0 rounded-[22%]"
+                        className={`${variantClasses.face} absolute inset-0 rounded-[22%]`}
                         style={{
                             transform: `${face.transform} translateZ(${halfSize}px)`,
                             backfaceVisibility: 'hidden',
                         }}
                     >
-                        <DiceFace value={face.value} />
+                        <DiceFace
+                            value={face.value}
+                            pipClass={variantClasses.pip}
+                        />
                     </div>
                 ))}
             </div>

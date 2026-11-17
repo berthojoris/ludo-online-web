@@ -22,6 +22,7 @@ export type CharacterConfig = {
     element: string;
     image: string;
     pion: string;
+    sfx: string;
     accentColor: PlayerColor;
     description: string;
     traits: [string, string, string];
@@ -57,6 +58,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Api',
         image: '/assets/char_ignivar.webp',
         pion: '/assets/pion/pion_ignivar.webp',
+        sfx: '/assets/sfx/ignivar.mp3',
         accentColor: 'red',
         description:
             'Naga penguasa api dengan kekuatan penuh semangat dan tekad juang tinggi.',
@@ -69,6 +71,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Es',
         image: '/assets/char_frost_claw.webp',
         pion: '/assets/pion/pion_frost_claw.webp',
+        sfx: '/assets/sfx/frost_claw.mp3',
         accentColor: 'blue',
         description:
             'Serigala es abadi yang berburu dengan ketenangan dingin dan presisi tajam.',
@@ -81,6 +84,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Cahaya',
         image: '/assets/char_solgarde.webp',
         pion: '/assets/pion/pion_solgarde.webp',
+        sfx: '/assets/sfx/solgarde.mp3',
         accentColor: 'yellow',
         description:
             'Singa penjaga surya yang memimpin arena dengan wibawa emas dan keberanian.',
@@ -93,6 +97,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Alam',
         image: '/assets/char_verdantor.webp',
         pion: '/assets/pion/pion_verdantor.webp',
+        sfx: '/assets/sfx/verdantor.mp3',
         accentColor: 'green',
         description:
             'Penjaga hutan purba yang tangguh, sabar, dan selalu menemukan jalan keluar.',
@@ -105,6 +110,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Bayangan',
         image: '/assets/char_umrax.webp',
         pion: '/assets/pion/pion_umrax.webp',
+        sfx: '/assets/sfx/umrax.mp3',
         accentColor: 'purple',
         description:
             'Penguasa bayangan malam yang bergerak senyap dan mengejutkan lawan di tikungan.',
@@ -117,6 +123,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Samudra',
         image: '/assets/char_aqualon.webp',
         pion: '/assets/pion/pion_aqualon.webp',
+        sfx: '/assets/sfx/aqualon.mp3',
         accentColor: 'teal',
         description:
             'Leviathan arus dalam yang menerjang rintangan bagaikan gelombang pasang.',
@@ -129,6 +136,7 @@ export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
         element: 'Angin',
         image: '/assets/char_zephyira.webp',
         pion: '/assets/pion/pion_zephyira.webp',
+        sfx: '/assets/sfx/zephyira.mp3',
         accentColor: 'orange',
         description:
             'Griffin langit berkilau yang melesat melintasi papan secepat hembusan badai.',

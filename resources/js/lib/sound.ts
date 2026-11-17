@@ -1,3 +1,9 @@
+import {
+    CharacterId,
+    getCharacterConfig,
+    PlayerColor,
+} from '@/lib/ludo';
+
 const STORAGE_KEY = 'ludo-arena:sound';
 const MUTED_VALUE = 'off';
 
@@ -6,6 +12,13 @@ let audioContext: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let reverbNode: ConvolverNode | null = null;
 let noiseBuffer: AudioBuffer | null = null;
+
+const characterRawBuffers = new Map<CharacterId, ArrayBuffer>();
+const characterAudioBuffers = new Map<CharacterId, AudioBuffer>();
+const characterPendingFetches = new Map<
+    CharacterId,
+    Promise<ArrayBuffer | null>
+>();
 
 if (typeof window !== 'undefined') {
     try {
@@ -511,6 +524,151 @@ export function playCaptureSound(): void {
             wet: 0.35,
         });
     });
+}
+
+async function fetchCharacterAudioBytes(
+    characterId: CharacterId,
+    url: string,
+): Promise<ArrayBuffer | null> {
+    const cached = characterRawBuffers.get(characterId);
+
+    if (cached) {
+        return cached;
+    }
+
+    const pending = characterPendingFetches.get(characterId);
+
+    if (pending) {
+        return pending;
+    }
+
+    const request = fetch(url)
+        .then(async (response) => {
+            if (!response.ok) {
+                return null;
+            }
+
+            const bytes = await response.arrayBuffer();
+            characterRawBuffers.set(characterId, bytes);
+
+            return bytes;
+        })
+        .catch(() => null)
+        .finally(() => {
+            characterPendingFetches.delete(characterId);
+        });
+
+    characterPendingFetches.set(characterId, request);
+
+    return request;
+}
+
+async function decodeCharacterAudio(
+    context: AudioContext,
+    characterId: CharacterId,
+    url: string,
+): Promise<AudioBuffer | null> {
+    const decoded = characterAudioBuffers.get(characterId);
+
+    if (decoded) {
+        return decoded;
+    }
+
+    const bytes = await fetchCharacterAudioBytes(characterId, url);
+
+    if (!bytes) {
+        return null;
+    }
+
+    try {
+        // Slice so decodeAudioData never detaches the cached raw ArrayBuffer.
+        const buffer = await context.decodeAudioData(bytes.slice(0));
+        characterAudioBuffers.set(characterId, buffer);
+
+        return buffer;
+    } catch {
+        return null;
+    }
+}
+
+function playDecodedCharacterBuffer(
+    context: AudioContext,
+    buffer: AudioBuffer,
+): void {
+    const { master } = getGraph(context);
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    const now = context.currentTime;
+
+    source.buffer = buffer;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.42, now + 0.015);
+
+    source.connect(gain);
+    gain.connect(master);
+    source.start(now);
+}
+
+/**
+ * Preloads and decodes character capture sound effects so playback is instant
+ * when a capture skill burst fires mid-game.
+ */
+export function preloadCharacterSounds(
+    characterIds: readonly CharacterId[],
+): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const context = getContext();
+
+    for (const characterId of characterIds) {
+        const config = getCharacterConfig(characterId);
+
+        if (context && context.state === 'running') {
+            void decodeCharacterAudio(context, config.id, config.sfx);
+        } else {
+            void fetchCharacterAudioBytes(config.id, config.sfx);
+        }
+    }
+}
+
+/**
+ * Plays the character's unique sound effect when capturing an opponent token,
+ * falling back to the synthesized capture sound if the asset fails to load.
+ */
+export function playCharacterSkillSound(
+    character?: string | null,
+    fallbackColor: PlayerColor = 'red',
+): void {
+    const context = canPlay();
+
+    if (!context) {
+        return;
+    }
+
+    const config = getCharacterConfig(character, fallbackColor);
+    const cached = characterAudioBuffers.get(config.id);
+
+    if (cached) {
+        playDecodedCharacterBuffer(context, cached);
+
+        return;
+    }
+
+    void decodeCharacterAudio(context, config.id, config.sfx).then(
+        (buffer) => {
+            if (!enabled || context.state !== 'running') {
+                return;
+            }
+
+            if (buffer) {
+                playDecodedCharacterBuffer(context, buffer);
+            } else {
+                playCaptureSound();
+            }
+        },
+    );
 }
 
 /** Bell arpeggio when a token reaches the finish. */
