@@ -1950,8 +1950,8 @@ function RoomContent() {
                                         Keuntungan host
                                     </p>
                                     <p className="text-ink-muted mt-0.5 text-[11px]">
-                                        Peluang 50% keluar markas atau menangkap
-                                        saat tersedia.
+                                        Peluang 50% dadu 6 (keluar markas / di
+                                        jalan) atau menangkap saat tersedia.
                                     </p>
                                 </div>
                                 <button

@@ -185,7 +185,7 @@ class MatchRules
 
         if ($hostAdvantage) {
             $preferred = self::captureRolls($state, $player);
-            if (! $preferred && count(array_filter($state['tokens'][$player] ?? [], fn ($position) => $position !== -1)) === 0) {
+            if (! $preferred && self::moves($state, $player, 6)) {
                 $preferred = [6];
             }
             if ($preferred && random_int(1, 2) === 1) {
