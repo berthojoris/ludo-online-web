@@ -16,7 +16,10 @@ import {
     UsersIcon,
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
-import LudoBoard, { BoardToken } from '@/Components/Game/LudoBoard';
+import LudoBoard, {
+    BoardToken,
+    LudoBoardHandle,
+} from '@/Components/Game/LudoBoard';
 import MatchResultModal, {
     MatchStanding,
 } from '@/Components/Game/MatchResultModal';
@@ -56,6 +59,7 @@ import {
     setSoundEnabled,
     unlockAudio,
 } from '@/lib/sound';
+import { preloadImages } from '@/lib/preloadImages';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
@@ -1003,6 +1007,7 @@ export default function Play() {
     const endGameOverlayStyle = useModalViewport(endGameModalOpen);
     const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
+    const boardHandleRef = useRef<LudoBoardHandle>(null);
     const rollHttp = useHttp<Record<string, never>, MatchCommandResponse>();
     const moveHttp = useHttp<{ token_index: number }, MatchCommandResponse>({
         token_index: 0,
@@ -1032,6 +1037,7 @@ export default function Play() {
 
     const cancelMoveAnimations = useCallback(() => {
         animationGenerationRef.current += 1;
+        boardHandleRef.current?.stopAll();
         movingRef.current = false;
         setMovingToken(null);
         setReturningTokens([]);
@@ -1427,77 +1433,17 @@ export default function Play() {
                 return;
             }
 
-            let acceptedAction = serverAction;
-
-            if (room && !fromRemote) {
-                movePendingRef.current = true;
-
-                try {
-                    const csrf =
-                        document
-                            .querySelector('meta[name="csrf-token"]')
-                            ?.getAttribute('content') ?? '';
-                    moveHttp.transform(() => ({ token_index: tokenIndex }));
-                    const data = await moveHttp.post(
-                        route('rooms.match.move', { code: room.code }),
-                        { headers: { 'X-CSRF-TOKEN': csrf } },
-                    );
-
-                    if (!data?.action) {
-                        reportClientIssue(
-                            'Move was not accepted; requesting the authoritative state',
-                            {
-                                level: 'warning',
-                                source: 'game.move',
-                                roomCode: room.code,
-                                action: 'rejected',
-                                context: {
-                                    connection: connectionStatusRef.current,
-                                    http_status: 422,
-                                    current_version: stateRef.current.version,
-                                },
-                            },
-                        );
-                        syncRoomState('move-rejected');
-
-                        return;
-                    }
-
-                    acceptedAction = data.action;
-                } catch (error) {
-                    const status =
-                        error instanceof HttpResponseError
-                            ? error.response.status
-                            : undefined;
-
-                    if (status === 401 || status === 419) {
-                        window.location.reload();
-
-                        return;
-                    }
-
-                    reportClientIssue('Move request failed', {
-                        source: 'game.move',
-                        roomCode: room.code,
-                        action: 'request',
-                        stack: error instanceof Error ? error.stack : undefined,
-                        context: {
-                            connection: connectionStatusRef.current,
-                            http_status: status,
-                            current_version: stateRef.current.version,
-                        },
-                    });
-                    syncRoomState('move-failed');
-
-                    return;
-                } finally {
-                    movePendingRef.current = false;
+            /**
+             * Checks a server-accepted move against local state. Returns false
+             * when the move must not be animated (it was restored or ignored).
+             */
+            const acceptAction = (action?: MatchActionData): boolean => {
+                if (!room) {
+                    return true;
                 }
-            }
 
-            if (room) {
-                const version = acceptedAction?.state_version;
-                const snapshot = acceptedAction?.match_state;
+                const version = action?.state_version;
+                const snapshot = action?.match_state;
 
                 if (!version || !snapshot) {
                     reportClientIssue(
@@ -1510,16 +1456,18 @@ export default function Play() {
                     );
                     syncRoomState('move-snapshot-missing');
 
-                    return;
+                    return false;
                 }
 
                 if (
-                    (acceptedAction?.action_id &&
-                        seenActionsRef.current.has(acceptedAction.action_id)) ||
+                    (action?.action_id &&
+                        seenActionsRef.current.has(action.action_id)) ||
                     version <= stateRef.current.version
                 ) {
-                    return;
+                    return false;
                 }
+
+                rememberAction(seenActionsRef.current, action?.action_id);
 
                 if (
                     version !== stateRef.current.version + 1 ||
@@ -1528,19 +1476,16 @@ export default function Play() {
                         (candidate) => candidate.tokenIndex === tokenIndex,
                     )
                 ) {
-                    rememberAction(
-                        seenActionsRef.current,
-                        acceptedAction?.action_id,
-                    );
                     restoreMatch(snapshot);
 
-                    return;
+                    return false;
                 }
 
-                rememberAction(
-                    seenActionsRef.current,
-                    acceptedAction?.action_id,
-                );
+                return true;
+            };
+
+            if (fromRemote && !acceptAction(serverAction)) {
+                return;
             }
 
             const color = state.turn;
@@ -1599,19 +1544,120 @@ export default function Play() {
             const animationGeneration = animationGenerationRef.current;
             const animationWasCancelled = () =>
                 animationGeneration !== animationGenerationRef.current;
+            const abortMove = () => {
+                if (!animationWasCancelled()) {
+                    cancelMoveAnimations();
+                }
+            };
 
+            // The walk starts before the server answers so a tap feels instant;
+            // a rejected move cancels it and the authoritative state is restored.
             movingRef.current = true;
             void unlockAudio();
+            setMovingToken({ color, tokenIndex, position: from });
 
-            for (const [index, position] of steps.entries()) {
+            const walk =
+                boardHandleRef.current?.walkToken(
+                    `${color}-${tokenIndex}`,
+                    steps.map((position) =>
+                        boardTokenPoint(
+                            activeSpec,
+                            color,
+                            position,
+                            tokenIndex,
+                        ),
+                    ),
+                    {
+                        leap: from === BASE_POSITION,
+                        onStep: (index) => playHopSound(index),
+                    },
+                ) ?? Promise.resolve();
+
+            let committedAction = serverAction;
+
+            if (room && !fromRemote) {
+                movePendingRef.current = true;
+                let acceptedAction: MatchActionData | undefined;
+
+                try {
+                    const csrf =
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') ?? '';
+                    moveHttp.transform(() => ({ token_index: tokenIndex }));
+                    const data = await moveHttp.post(
+                        route('rooms.match.move', { code: room.code }),
+                        { headers: { 'X-CSRF-TOKEN': csrf } },
+                    );
+
+                    if (!data?.action) {
+                        abortMove();
+                        reportClientIssue(
+                            'Move was not accepted; requesting the authoritative state',
+                            {
+                                level: 'warning',
+                                source: 'game.move',
+                                roomCode: room.code,
+                                action: 'rejected',
+                                context: {
+                                    connection: connectionStatusRef.current,
+                                    http_status: 422,
+                                    current_version: stateRef.current.version,
+                                },
+                            },
+                        );
+                        syncRoomState('move-rejected');
+
+                        return;
+                    }
+
+                    acceptedAction = data.action;
+                } catch (error) {
+                    abortMove();
+
+                    const status =
+                        error instanceof HttpResponseError
+                            ? error.response.status
+                            : undefined;
+
+                    if (status === 401 || status === 419) {
+                        window.location.reload();
+
+                        return;
+                    }
+
+                    reportClientIssue('Move request failed', {
+                        source: 'game.move',
+                        roomCode: room.code,
+                        action: 'request',
+                        stack: error instanceof Error ? error.stack : undefined,
+                        context: {
+                            connection: connectionStatusRef.current,
+                            http_status: status,
+                            current_version: stateRef.current.version,
+                        },
+                    });
+                    syncRoomState('move-failed');
+
+                    return;
+                } finally {
+                    movePendingRef.current = false;
+                }
+
                 if (animationWasCancelled()) {
                     return;
                 }
 
-                setMovingToken({ color, tokenIndex, position });
-                playHopSound(index);
-                await new Promise((resolve) => window.setTimeout(resolve, 140));
+                if (!acceptAction(acceptedAction)) {
+                    abortMove();
+
+                    return;
+                }
+
+                committedAction = acceptedAction;
             }
+
+            await walk;
 
             if (animationWasCancelled()) {
                 return;
@@ -1619,6 +1665,10 @@ export default function Play() {
 
             if (capturedTargets.length > 0) {
                 playCaptureSound();
+                boardHandleRef.current?.impact(
+                    boardTokenPoint(activeSpec, color, move.target, tokenIndex),
+                    color,
+                );
                 skillBurstIdRef.current += 1;
                 setSkillBursts((bursts) => [
                     ...bursts,
@@ -1634,55 +1684,26 @@ export default function Play() {
                         ),
                     },
                 ]);
+                setReturningTokens(
+                    capturedTargets.map((item) => ({
+                        color: item.color,
+                        tokenIndex: item.tokenIndex,
+                        position: item.fromPosition,
+                    })),
+                );
 
-                const reducedMotion = window.matchMedia(
-                    '(prefers-reduced-motion: reduce)',
-                ).matches;
-
-                if (!reducedMotion) {
-                    const maxPos = Math.max(
-                        ...capturedTargets.map((item) => item.fromPosition),
-                    );
-                    const stepDelay = Math.max(
-                        26,
-                        Math.min(
-                            55,
-                            Math.floor(1400 / Math.max(1, maxPos + 1)),
+                // Hit-stop, then each captured pion is thrown back to its base.
+                await (boardHandleRef.current?.knockTokens(
+                    capturedTargets.map((item) => ({
+                        id: `${item.color}-${item.tokenIndex}`,
+                        to: boardTokenPoint(
+                            activeSpec,
+                            item.color,
+                            BASE_POSITION,
+                            item.tokenIndex,
                         ),
-                    );
-
-                    for (let pos = maxPos; pos >= 0; pos--) {
-                        if (animationWasCancelled()) {
-                            return;
-                        }
-
-                        setReturningTokens(
-                            capturedTargets.map((item) => ({
-                                color: item.color,
-                                tokenIndex: item.tokenIndex,
-                                position: Math.min(item.fromPosition, pos),
-                            })),
-                        );
-                        await new Promise((resolve) =>
-                            window.setTimeout(resolve, stepDelay),
-                        );
-                    }
-
-                    if (animationWasCancelled()) {
-                        return;
-                    }
-
-                    setReturningTokens(
-                        capturedTargets.map((item) => ({
-                            color: item.color,
-                            tokenIndex: item.tokenIndex,
-                            position: BASE_POSITION,
-                        })),
-                    );
-                    await new Promise((resolve) =>
-                        window.setTimeout(resolve, 140),
-                    );
-                }
+                    })),
+                ) ?? Promise.resolve());
             } else if (move.target === activeSpec.finishPosition) {
                 playFinishSound();
             }
@@ -1695,7 +1716,7 @@ export default function Play() {
                 type: 'MOVE',
                 tokenIndex,
                 now: Date.now(),
-                version: acceptedAction?.state_version,
+                version: committedAction?.state_version,
             });
             setMovingToken(null);
             setReturningTokens([]);
@@ -1714,6 +1735,7 @@ export default function Play() {
             state.characters,
             restoreMatch,
             syncRoomState,
+            cancelMoveAnimations,
         ],
     );
 
@@ -2061,7 +2083,6 @@ export default function Play() {
                     busy: canInteractWithMove && moveHttp.processing,
                     moving: isMoving,
                     returning: isReturning,
-                    step: isMoving ? displayPosition : undefined,
                     onClick: canInteractWithMove
                         ? () => {
                               void animateMove(tokenIndex);
@@ -2086,6 +2107,27 @@ export default function Play() {
         animateMove,
         moveHttp.processing,
     ]);
+
+    const boardPlayerNames = useMemo(
+        () =>
+            Object.fromEntries(
+                state.order.map((color) => [color, state.names[color]]),
+            ),
+        [state.order, state.names],
+    );
+
+    useEffect(() => {
+        preloadImages(
+            state.order.flatMap((color) => {
+                const character = getCharacterConfig(
+                    state.characters[color],
+                    color,
+                );
+
+                return [character.pion, character.image];
+            }),
+        );
+    }, [state.order, state.characters]);
 
     const finished = (color: PlayerId) =>
         state.tokens[color].filter(
@@ -2978,16 +3020,14 @@ export default function Play() {
                                                 }}
                                             >
                                                 <LudoBoard
+                                                    ref={boardHandleRef}
                                                     tokens={boardTokens}
                                                     chatBubbles={chatBubbles}
                                                     order={state.order}
                                                     arms={state.arms}
-                                                    playerNames={Object.fromEntries(
-                                                        state.order.map((color) => [
-                                                            color,
-                                                            state.names[color],
-                                                        ]),
-                                                    )}
+                                                    playerNames={
+                                                        boardPlayerNames
+                                                    }
                                                     playerCharacters={
                                                         state.characters
                                                     }

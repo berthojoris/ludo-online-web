@@ -1,4 +1,23 @@
 import {
+    BoardPlacement,
+    FLIGHT_SHADOW_KEYFRAMES,
+    HIT_KEYFRAMES,
+    HIT_STOP_MS,
+    HOP_KEYFRAMES,
+    launchDuration,
+    launchKeyframes,
+    LEAP_KEYFRAMES,
+    LEAP_MS,
+    placementTransform,
+    prefersReducedMotion,
+    settled,
+    SHADOW_HOP_KEYFRAMES,
+    SHAKE_KEYFRAMES,
+    SPIN_KEYFRAMES,
+    WALK_STEP_MS,
+    walkKeyframes,
+} from '@/lib/boardMotion';
+import {
     ARENA_BACKGROUND_IMAGE,
     Cell,
     CharacterId,
@@ -10,7 +29,18 @@ import {
     START_OWNER,
     TRACK,
 } from '@/lib/ludo';
-import { CSSProperties } from 'react';
+import {
+    CSSProperties,
+    memo,
+    Ref,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import CharacterSkillBurst, { SkillBurst } from './CharacterSkillBurst';
 import { StarIcon } from './Icons';
 import PionFigure, { PionMotion } from './PionFigure';
@@ -24,12 +54,44 @@ export type BoardToken = {
     busy?: boolean;
     moving?: boolean;
     returning?: boolean;
-    step?: number;
     onClick?: () => void;
     label?: string;
 };
 
+/**
+ * Imperative board animations. They run on the compositor through the Web
+ * Animations API, so a whole walk costs one React render instead of one per
+ * cell. A token keeps its last frame until the parent clears its `moving` or
+ * `returning` flag, then settles into the position React renders.
+ */
+export type LudoBoardHandle = {
+    walkToken: (
+        id: string,
+        path: Cell[],
+        options?: { leap?: boolean; onStep?: (index: number) => void },
+    ) => Promise<void>;
+    knockTokens: (targets: { id: string; to: Cell }[]) => Promise<void>;
+    impact: (point: Cell, color: PlayerColor) => void;
+    stopAll: () => void;
+};
+
+type BoardEffect = {
+    id: number;
+    kind: 'impact' | 'dust';
+    x: number;
+    y: number;
+    color: PlayerColor;
+};
+
+type TokenMotion = {
+    animations: Animation[];
+    timers: number[];
+    /** Set once a commit has shown the token as moving or returning. */
+    confirmed: boolean;
+};
+
 type LudoBoardProps = {
+    ref?: Ref<LudoBoardHandle>;
     tokens?: BoardToken[];
     chatBubbles?: Partial<Record<PlayerColor, { id: number; message: string }>>;
     playerNames?: Partial<Record<PlayerColor, string>>;
@@ -138,14 +200,78 @@ function tokenGroups(tokens: BoardToken[]) {
     return groups;
 }
 
-type RenderedToken = BoardToken & {
+type BoardSpec = ReturnType<typeof getBoardSpec>;
+
+/** One rendered token: where it sits and how it looks after stacking rules. */
+type TokenPlacement = {
+    token: BoardToken;
+    placement: BoardPlacement;
+    zIndex: number;
+    /** Same-color pions sharing a cell draw once; the others stay mounted but hidden. */
+    hidden: boolean;
     stackCount: number;
+    fanned: boolean;
+    legal: boolean;
+    busy: boolean;
+    onClick?: () => void;
+    ordinal: number;
 };
 
-function collapseSameColorTokens(tokens: BoardToken[]): RenderedToken[] {
-    const collapsed: RenderedToken[] = [];
+function toBoardPercent(spec: BoardSpec, point: Cell) {
+    return spec.isRadial
+        ? { x: point.col, y: point.row }
+        : {
+              x: (point.col / BOARD_SIZE) * 100,
+              y: (point.row / BOARD_SIZE) * 100,
+          };
+}
 
-    for (const cellGroup of tokenGroups(tokens).values()) {
+/**
+ * Stable per-token placements. Moving and returning tokens are left out of
+ * stacking and fanning, so passing over another pion never hides or jostles it.
+ */
+function placeTokens(
+    tokens: BoardToken[],
+    spec: BoardSpec,
+    activeColor?: PlayerColor,
+): TokenPlacement[] {
+    const placed: TokenPlacement[] = [];
+    const ordinalById = new Map<string, number>();
+    const counters = new Map<PlayerColor, number>();
+    const depthOf = (y: number, dy: number) =>
+        Math.round(y * 4) + (dy > 0 ? 2 : dy < 0 ? 0 : 1);
+
+    for (const token of tokens) {
+        const next = counters.get(token.color) ?? 0;
+        counters.set(token.color, next + 1);
+        ordinalById.set(token.id, next);
+    }
+
+    const restingTokens: BoardToken[] = [];
+
+    for (const token of tokens) {
+        if (!token.moving && !token.returning) {
+            restingTokens.push(token);
+            continue;
+        }
+
+        const { x, y } = toBoardPercent(spec, token.point);
+
+        placed.push({
+            token,
+            placement: { x, y, dx: 0, dy: 0 },
+            zIndex: (token.returning ? 1500 : 1000) + depthOf(y, 0),
+            hidden: false,
+            stackCount: 1,
+            fanned: false,
+            legal: Boolean(token.legal),
+            busy: Boolean(token.busy),
+            onClick: token.onClick,
+            ordinal: ordinalById.get(token.id) ?? 0,
+        });
+    }
+
+    for (const cellGroup of tokenGroups(restingTokens).values()) {
         const byColor = new Map<PlayerColor, BoardToken[]>();
 
         for (const token of cellGroup) {
@@ -154,99 +280,109 @@ function collapseSameColorTokens(tokens: BoardToken[]): RenderedToken[] {
             byColor.set(token.color, list);
         }
 
-        for (const colorTokens of byColor.values()) {
-            if (colorTokens.length === 1) {
-                collapsed.push({ ...colorTokens[0], stackCount: 1 });
-                continue;
-            }
+        const primaries: {
+            primary: BoardToken;
+            members: BoardToken[];
+        }[] = [];
 
+        for (const members of byColor.values()) {
             const primary =
-                colorTokens.find((t) => t.returning) ??
-                colorTokens.find((t) => t.moving) ??
-                colorTokens.find((t) => t.legal) ??
-                colorTokens.find((t) => t.busy) ??
-                colorTokens[0];
-            const legal = colorTokens.some((t) => t.legal);
-            const busy = colorTokens.some((t) => t.busy);
-            const moving = colorTokens.some((t) => t.moving);
-            const returning = colorTokens.some((t) => t.returning);
-            const onClick =
-                colorTokens.find((t) => t.legal && t.onClick)?.onClick ??
-                colorTokens.find((t) => t.onClick)?.onClick;
-
-            collapsed.push({
-                ...primary,
-                legal,
-                busy,
-                moving,
-                returning,
-                onClick,
-                stackCount: colorTokens.length,
-            });
+                members.find((t) => t.legal) ??
+                members.find((t) => t.busy) ??
+                members[0];
+            primaries.push({ primary, members });
         }
-    }
 
-    return collapsed;
-}
-
-export default function LudoBoard({
-    tokens = [],
-    chatBubbles = {},
-    playerNames = {},
-    playerCharacters = {},
-    activeColor,
-    activeLabel,
-    order,
-    arms,
-    skillBursts = [],
-    onSkillBurstEnd,
-    className = '',
-}: LudoBoardProps) {
-    const inferredOrder =
-        order ??
-        (Object.keys(playerNames).length > 0
-            ? (Object.keys(playerNames) as PlayerColor[])
-            : (['red', 'green', 'yellow', 'blue'] as PlayerColor[]));
-    const spec = getBoardSpec(inferredOrder, arms);
-    const cellBox = spec.cellSizePercent * 0.9;
-    const cellRx = cellBox * 0.2;
-    const renderedTokens = collapseSameColorTokens(tokens);
-
-    const layout = new Map<
-        string,
-        { index: number; slot: number; count: number; raised: boolean }
-    >();
-
-    for (const group of tokenGroups(renderedTokens).values()) {
-        const count = group.length;
+        const count = primaries.length;
         const slots = frontToBackSlots(count);
         // The turn player's pions take the front fan slots so they are not buried under opponents.
-        const ranked = group
-            .map((token, index) => ({ token, index }))
+        const ranked = primaries
+            .map((entry, index) => ({ entry, index }))
             .sort(
                 (a, b) =>
-                    stackPriority(b.token, activeColor) -
-                        stackPriority(a.token, activeColor) ||
+                    stackPriority(b.entry.primary, activeColor) -
+                        stackPriority(a.entry.primary, activeColor) ||
                     a.index - b.index,
             );
 
-        ranked.forEach(({ token, index }, rank) => {
-            layout.set(token.id, {
-                index,
-                slot: slots[rank % slots.length],
-                count,
-                raised: count > 1 && token.color === activeColor,
-            });
+        ranked.forEach(({ entry }, rank) => {
+            const { primary, members } = entry;
+            const [dx, dy] = groupOffset(slots[rank % slots.length], count);
+            const { x, y } = toBoardPercent(spec, primary.point);
+            const raised = count > 1 && primary.color === activeColor;
+            const depth = depthOf(y, dy);
+            const zIndex = primary.legal
+                ? 500 + depth
+                : raised
+                  ? 250 + depth
+                  : 10 + depth;
+            const legal = members.some((t) => t.legal);
+            const busy = members.some((t) => t.busy);
+            const onClick =
+                members.find((t) => t.legal && t.onClick)?.onClick ??
+                members.find((t) => t.onClick)?.onClick;
+
+            for (const member of members) {
+                const isPrimary = member === primary;
+
+                placed.push({
+                    token: member,
+                    placement: { x, y, dx, dy },
+                    zIndex,
+                    hidden: !isPrimary,
+                    stackCount: isPrimary ? members.length : 1,
+                    fanned: count > 1,
+                    legal: isPrimary && legal,
+                    busy: isPrimary && busy,
+                    onClick: isPrimary ? onClick : undefined,
+                    ordinal: ordinalById.get(member.id) ?? 0,
+                });
+            }
         });
     }
 
+    // Keep DOM order identical to the input: reordering keyed nodes would
+    // detach them and cancel any running animation or transition.
+    const inputIndex = new Map(tokens.map((token, index) => [token.id, index]));
+
+    return placed.sort(
+        (a, b) =>
+            (inputIndex.get(a.token.id) ?? 0) -
+            (inputIndex.get(b.token.id) ?? 0),
+    );
+}
+
+type BoardSurfaceProps = {
+    spec: BoardSpec;
+    playerNames: Partial<Record<PlayerColor, string>>;
+    activeColor?: PlayerColor;
+    activeLabel?: string;
+};
+
+function samePlayerNames(
+    a: Partial<Record<PlayerColor, string>>,
+    b: Partial<Record<PlayerColor, string>>,
+): boolean {
+    const keys = Object.keys(a) as PlayerColor[];
+
     return (
-        <div
-            className={`relative aspect-square w-full select-none ${className}`}
-            role="group"
-            aria-label={`Papan Ludo ${spec.arms} pemain`}
-            style={{ containerType: 'inline-size' }}
-        >
+        keys.length === Object.keys(b).length &&
+        keys.every((key) => a[key] === b[key])
+    );
+}
+
+/** The static board art. It only re-renders when the turn or names change. */
+const BoardSurface = memo(
+    function BoardSurface({
+        spec,
+        playerNames,
+        activeColor,
+        activeLabel,
+    }: BoardSurfaceProps) {
+        const cellBox = spec.cellSizePercent * 0.9;
+        const cellRx = cellBox * 0.2;
+
+        return (
             <div className="absolute inset-0 overflow-hidden rounded-[5.5%] border-[3px] border-white/90 bg-white shadow-[0_22px_55px_-20px_rgba(20,32,52,0.55)]">
                 {/* Scenic arena background texture beneath the board */}
                 <div
@@ -730,175 +866,632 @@ export default function LudoBoard({
                     </>
                 )}
             </div>
+        );
+    },
+    (previous, next) =>
+        previous.spec === next.spec &&
+        previous.activeColor === next.activeColor &&
+        previous.activeLabel === next.activeLabel &&
+        samePlayerNames(previous.playerNames, next.playerNames),
+);
+
+type TokenViewProps = {
+    id: string;
+    color: PlayerColor;
+    pionImage: string;
+    characterName: string;
+    label: string;
+    transform: string;
+    widthPercent: number;
+    zIndex: number;
+    hidden: boolean;
+    legal: boolean;
+    busy: boolean;
+    motion: PionMotion;
+    fanned: boolean;
+    stackCount: number;
+    clickable: boolean;
+    onActivate: (id: string) => void;
+    registerElement: (id: string, element: HTMLDivElement | null) => void;
+};
+
+/**
+ * One pion. The figure is never remounted when the pion becomes clickable or
+ * starts moving, so running animations on it are never cut off.
+ */
+const TokenView = memo(function TokenView({
+    id,
+    color,
+    pionImage,
+    characterName,
+    label,
+    transform,
+    widthPercent,
+    zIndex,
+    hidden,
+    legal,
+    busy,
+    motion,
+    fanned,
+    stackCount,
+    clickable,
+    onActivate,
+    registerElement,
+}: TokenViewProps) {
+    const palette = PLAYER_CONFIG[color].palette;
+    const elementRef = useCallback(
+        (element: HTMLDivElement | null) => registerElement(id, element),
+        [id, registerElement],
+    );
+    const style = {
+        width: `${widthPercent}%`,
+        aspectRatio: '1 / 1',
+        transform,
+        zIndex,
+        visibility: hidden ? 'hidden' : undefined,
+        '--token-light': palette.light,
+        '--token-base': palette.base,
+        '--token-dark': palette.dark,
+    } as CSSProperties;
+
+    return (
+        <div
+            ref={elementRef}
+            className="absolute top-0 left-0 transition-transform duration-[180ms] ease-[cubic-bezier(0.37,0,0.63,1)]"
+            style={style}
+            aria-hidden={hidden || undefined}
+        >
+            {clickable && !hidden && (
+                <button
+                    type="button"
+                    onClick={() => onActivate(id)}
+                    disabled={busy || !legal}
+                    aria-busy={busy || undefined}
+                    aria-label={
+                        legal
+                            ? `${label} (${characterName}) siap digerakkan`
+                            : `${label} (${characterName})`
+                    }
+                    className={`pion-hit absolute inset-x-0 -top-[58%] bottom-0 z-[1] rounded-[45%] after:absolute after:-inset-2 after:rounded-full after:content-[''] disabled:cursor-not-allowed ${
+                        legal ? 'cursor-pointer' : 'cursor-default'
+                    } ${motion === 'idle' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                />
+            )}
+            <PionFigure
+                pionImage={pionImage}
+                legal={legal}
+                busy={busy}
+                motion={motion}
+                stacked={fanned}
+                stackCount={stackCount}
+            />
+        </div>
+    );
+});
+
+const SPARKS = Array.from({ length: 10 }, (_, index) => index);
+const DUST_PUFFS = Array.from({ length: 6 }, (_, index) => index);
+const EFFECT_LIFETIME_MS = { impact: 760, dust: 560 } as const;
+
+function BoardEffectView({
+    effect,
+    onDone,
+}: {
+    effect: BoardEffect;
+    onDone: (id: number) => void;
+}) {
+    useEffect(() => {
+        const timeout = window.setTimeout(
+            () => onDone(effect.id),
+            EFFECT_LIFETIME_MS[effect.kind],
+        );
+
+        return () => window.clearTimeout(timeout);
+    }, [effect.id, effect.kind, onDone]);
+
+    const palette = PLAYER_CONFIG[effect.color].palette;
+    const style = {
+        left: `${effect.x}%`,
+        top: `${effect.y}%`,
+        '--fx-base': palette.base,
+        '--fx-light': palette.light,
+    } as CSSProperties;
+
+    if (effect.kind === 'dust') {
+        return (
+            <span className="board-dust" style={style}>
+                {DUST_PUFFS.map((index) => (
+                    <span
+                        key={index}
+                        className="board-dust-puff"
+                        style={
+                            {
+                                '--puff-x': `${(index - 2.5) * 34}%`,
+                                '--puff-delay': `${(index % 3) * 24}ms`,
+                            } as CSSProperties
+                        }
+                    />
+                ))}
+            </span>
+        );
+    }
+
+    return (
+        <span className="board-impact" style={style}>
+            <span className="board-impact-ring" />
+            {SPARKS.map((index) => (
+                <span
+                    key={index}
+                    className="board-spark"
+                    style={
+                        {
+                            '--spark-angle': `${index * 36 + (index % 2) * 14}deg`,
+                            '--spark-distance': `${index % 2 ? 150 : 210}%`,
+                            '--spark-delay': `${(index % 3) * 22}ms`,
+                        } as CSSProperties
+                    }
+                />
+            ))}
+        </span>
+    );
+}
+
+const DEFAULT_ORDER: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
+
+export default function LudoBoard({
+    ref,
+    tokens = [],
+    chatBubbles = {},
+    playerNames = {},
+    playerCharacters = {},
+    activeColor,
+    activeLabel,
+    order,
+    arms,
+    skillBursts = [],
+    onSkillBurstEnd,
+    className = '',
+}: LudoBoardProps) {
+    const orderKey = (
+        order ??
+        (Object.keys(playerNames).length > 0
+            ? (Object.keys(playerNames) as PlayerColor[])
+            : DEFAULT_ORDER)
+    ).join(',');
+    const spec = useMemo(
+        () => getBoardSpec(orderKey.split(',') as PlayerColor[], arms),
+        [orderKey, arms],
+    );
+    const placements = useMemo(
+        () => placeTokens(tokens, spec, activeColor),
+        [tokens, spec, activeColor],
+    );
+    const tokenWidth = spec.tokenSizePercent * 1.12;
+
+    const rootRef = useRef<HTMLDivElement>(null);
+    const elementsRef = useRef(new Map<string, HTMLDivElement>());
+    const placementsRef = useRef(
+        new Map<string, { placement: BoardPlacement; color: PlayerColor }>(),
+    );
+    const clickHandlersRef = useRef(new Map<string, () => void>());
+    const motionsRef = useRef(new Map<string, TokenMotion>());
+    const effectIdRef = useRef(0);
+    const [effects, setEffects] = useState<BoardEffect[]>([]);
+
+    const registerElement = useCallback(
+        (id: string, element: HTMLDivElement | null) => {
+            if (element) {
+                elementsRef.current.set(id, element);
+            } else {
+                elementsRef.current.delete(id);
+            }
+        },
+        [],
+    );
+
+    const onActivate = useCallback((id: string) => {
+        clickHandlersRef.current.get(id)?.();
+    }, []);
+
+    const stopMotion = useCallback((id: string) => {
+        const motion = motionsRef.current.get(id);
+
+        if (!motion) {
+            return;
+        }
+
+        motion.timers.forEach((timer) => window.clearTimeout(timer));
+        motion.animations.forEach((animation) => animation.cancel());
+        motionsRef.current.delete(id);
+    }, []);
+
+    const addEffect = useCallback((effect: Omit<BoardEffect, 'id'>) => {
+        effectIdRef.current += 1;
+        const id = effectIdRef.current;
+
+        setEffects((list) => [...list, { ...effect, id }]);
+    }, []);
+
+    const removeEffect = useCallback((id: number) => {
+        setEffects((list) => list.filter((effect) => effect.id !== id));
+    }, []);
+
+    /**
+     * Records where each token was committed, and releases held animations of
+     * tokens the parent no longer marks as moving so they settle into place.
+     */
+    useLayoutEffect(() => {
+        placementsRef.current = new Map(
+            placements.map((item) => [
+                item.token.id,
+                { placement: item.placement, color: item.token.color },
+            ]),
+        );
+        clickHandlersRef.current = new Map(
+            placements.flatMap((item) =>
+                item.onClick ? [[item.token.id, item.onClick] as const] : [],
+            ),
+        );
+
+        const animated = new Set(
+            placements
+                .filter((item) => item.token.moving || item.token.returning)
+                .map((item) => item.token.id),
+        );
+
+        for (const [id, motion] of motionsRef.current) {
+            if (animated.has(id)) {
+                motion.confirmed = true;
+            } else if (motion.confirmed) {
+                stopMotion(id);
+            }
+        }
+    }, [placements, stopMotion]);
+
+    useEffect(() => {
+        const motions = motionsRef.current;
+
+        return () => {
+            for (const motion of motions.values()) {
+                motion.timers.forEach((timer) => window.clearTimeout(timer));
+            }
+        };
+    }, []);
+
+    useImperativeHandle(ref, () => {
+        const feetOffset = tokenWidth * 0.3;
+        const toPlacement = (cell: Cell): BoardPlacement => ({
+            ...toBoardPercent(spec, cell),
+            dx: 0,
+            dy: 0,
+        });
+        const startMotion = (id: string) => {
+            stopMotion(id);
+            const motion: TokenMotion = {
+                animations: [],
+                timers: [],
+                confirmed: false,
+            };
+            motionsRef.current.set(id, motion);
+
+            return motion;
+        };
+        const isCurrent = (id: string, motion: TokenMotion) =>
+            motionsRef.current.get(id) === motion;
+
+        return {
+            walkToken(id, path, options = {}) {
+                const element = elementsRef.current.get(id);
+
+                if (!element || path.length === 0) {
+                    return Promise.resolve();
+                }
+
+                const reducedMotion = prefersReducedMotion();
+                const leap = Boolean(options.leap);
+                const targets = path.map(toPlacement);
+                const committed = placementsRef.current.get(id);
+                const from = committed?.placement ?? targets[0];
+                const stepMs = leap ? LEAP_MS : WALK_STEP_MS;
+                const iterations = leap ? 1 : targets.length;
+                const motion = startMotion(id);
+                const walk = element.animate(
+                    walkKeyframes(from, targets, reducedMotion),
+                    { duration: stepMs * iterations, fill: 'forwards' },
+                );
+
+                motion.animations.push(walk);
+
+                if (!reducedMotion) {
+                    const figure =
+                        element.querySelector<HTMLElement>('.pion-motion');
+                    const shadow =
+                        element.querySelector<HTMLElement>('.pion-shadow');
+                    const timing = { duration: stepMs, iterations };
+
+                    if (figure) {
+                        motion.animations.push(
+                            figure.animate(
+                                leap ? LEAP_KEYFRAMES : HOP_KEYFRAMES,
+                                timing,
+                            ),
+                        );
+                    }
+
+                    if (shadow) {
+                        motion.animations.push(
+                            shadow.animate(SHADOW_HOP_KEYFRAMES, timing),
+                        );
+                    }
+                }
+
+                targets.forEach((_, index) => {
+                    motion.timers.push(
+                        window.setTimeout(
+                            () => options.onStep?.(index),
+                            index * stepMs,
+                        ),
+                    );
+                });
+
+                return settled(walk).then(() => {
+                    if (
+                        leap &&
+                        !reducedMotion &&
+                        committed &&
+                        isCurrent(id, motion) &&
+                        walk.playState === 'finished'
+                    ) {
+                        const landing = targets[targets.length - 1];
+
+                        addEffect({
+                            kind: 'dust',
+                            x: landing.x,
+                            y: landing.y + feetOffset,
+                            color: committed.color,
+                        });
+                    }
+                });
+            },
+
+            async knockTokens(targets) {
+                if (prefersReducedMotion()) {
+                    return;
+                }
+
+                await Promise.all(
+                    targets.map(({ id, to }) => {
+                        const element = elementsRef.current.get(id);
+                        const committed = placementsRef.current.get(id);
+
+                        if (!element || !committed) {
+                            return Promise.resolve();
+                        }
+
+                        const destination = toPlacement(to);
+                        const duration = launchDuration(
+                            committed.placement,
+                            destination,
+                        );
+                        const motion = startMotion(id);
+                        const flight = element.animate(
+                            launchKeyframes(committed.placement, destination),
+                            {
+                                duration,
+                                delay: HIT_STOP_MS,
+                                fill: 'both',
+                            },
+                        );
+                        const figure =
+                            element.querySelector<HTMLElement>('.pion-motion');
+                        const shadow =
+                            element.querySelector<HTMLElement>('.pion-shadow');
+
+                        motion.animations.push(flight);
+
+                        if (figure) {
+                            motion.animations.push(
+                                figure.animate(HIT_KEYFRAMES, {
+                                    duration: HIT_STOP_MS,
+                                }),
+                                figure.animate(SPIN_KEYFRAMES, {
+                                    duration,
+                                    delay: HIT_STOP_MS,
+                                    easing: 'cubic-bezier(0.3, 0.6, 0.4, 1)',
+                                }),
+                            );
+                        }
+
+                        if (shadow) {
+                            motion.animations.push(
+                                shadow.animate(FLIGHT_SHADOW_KEYFRAMES, {
+                                    duration,
+                                    delay: HIT_STOP_MS,
+                                }),
+                            );
+                        }
+
+                        return settled(flight).then(() => {
+                            if (
+                                isCurrent(id, motion) &&
+                                flight.playState === 'finished'
+                            ) {
+                                addEffect({
+                                    kind: 'dust',
+                                    x: destination.x,
+                                    y: destination.y + feetOffset,
+                                    color: committed.color,
+                                });
+                            }
+                        });
+                    }),
+                );
+            },
+
+            impact(point, color) {
+                const { x, y } = toBoardPercent(spec, point);
+
+                addEffect({ kind: 'impact', x, y, color });
+
+                if (!prefersReducedMotion()) {
+                    rootRef.current?.animate(SHAKE_KEYFRAMES, {
+                        duration: 360,
+                        easing: 'ease-out',
+                    });
+                }
+            },
+
+            stopAll() {
+                for (const id of [...motionsRef.current.keys()]) {
+                    stopMotion(id);
+                }
+            },
+        };
+    }, [spec, tokenWidth, stopMotion, addEffect]);
+
+    const dustEffects = effects.filter((effect) => effect.kind === 'dust');
+    const impactEffects = effects.filter((effect) => effect.kind === 'impact');
+
+    return (
+        <div
+            ref={rootRef}
+            className={`relative aspect-square w-full select-none ${className}`}
+            role="group"
+            aria-label={`Papan Ludo ${spec.arms} pemain`}
+            style={{ containerType: 'inline-size' }}
+        >
+            <BoardSurface
+                spec={spec}
+                playerNames={playerNames}
+                activeColor={activeColor}
+                activeLabel={activeLabel}
+            />
 
             <div className="pointer-events-none absolute inset-0 z-[20]">
                 {(spec.isRadial
                     ? spec.wedges.map((wedge) => ({
                           color: wedge.color,
-                          x: wedge.basePads.reduce((sum, pad) => sum + pad.x, 0) / wedge.basePads.length,
-                          y: Math.min(...wedge.basePads.map((pad) => pad.y)) - 10,
+                          x:
+                              wedge.basePads.reduce(
+                                  (sum, pad) => sum + pad.x,
+                                  0,
+                              ) / wedge.basePads.length,
+                          y:
+                              Math.min(...wedge.basePads.map((pad) => pad.y)) -
+                              10,
                       }))
                     : QUADRANTS.map(({ color, row, col }) => ({
                           color,
                           x: (col + 3) * CELL_SIZE,
                           y: row * CELL_SIZE + 2,
-                      })))
-                    .map(({ color, x, y }) => {
-                        const bubble = chatBubbles[color];
-                        if (!bubble) return null;
-
-                        return (
-                            <div
-                                key={`${color}-${bubble.id}`}
-                                className="home-chat-bubble"
-                                style={{ left: `${Math.max(24, Math.min(76, x))}%`, top: `${Math.max(2, Math.min(66, y))}%` }}
-                            >
-                                <div className="home-chat-bubble__message" tabIndex={0}>{bubble.message}</div>
-                            </div>
-                        );
-                    })}
-            </div>
-
-            {/* Tokens live outside the clipped board so tall pions on the top row keep their crowns. */}
-            <div className="pointer-events-none absolute inset-0 z-[5]">
-                {renderedTokens.map((token) => {
-                    const config = PLAYER_CONFIG[token.color];
-                    const palette = config.palette;
-                    const charConfig = getCharacterConfig(
-                        token.character ?? playerCharacters[token.color],
-                        token.color,
-                    );
-                    const { index, slot, count, raised } = layout.get(
-                        token.id,
-                    ) ?? {
-                        index: 0,
-                        slot: 0,
-                        count: 1,
-                        raised: false,
-                    };
-                    const [dx, dy] = groupOffset(slot, count);
-                    const leftPercent = spec.isRadial
-                        ? token.point.col
-                        : (token.point.col / BOARD_SIZE) * 100;
-                    const topPercent = spec.isRadial
-                        ? token.point.row
-                        : (token.point.row / BOARD_SIZE) * 100;
-                    const depth =
-                        Math.round(topPercent * 4) +
-                        (dy > 0 ? 2 : dy < 0 ? 0 : 1);
-                    const zIndex = token.returning
-                        ? 1500 + depth
-                        : token.moving
-                          ? 1000 + depth
-                          : token.legal
-                            ? 500 + depth
-                            : raised
-                              ? 250 + depth
-                              : 10 + depth;
-                    const positionStyle = {
-                        left: `${leftPercent}%`,
-                        top: `${topPercent}%`,
-                        width: `${spec.tokenSizePercent * 1.12}%`,
-                        aspectRatio: '1 / 1',
-                        transform: `translate(-50%, -50%) translate(${dx}%, ${dy}%)`,
-                        zIndex,
-                    } as CSSProperties;
-
-                    const tokenStyle = {
-                        '--token-light': palette.light,
-                        '--token-base': palette.base,
-                        '--token-dark': palette.dark,
-                    } as CSSProperties;
-
-                    const label =
-                        token.label ?? `Bidak ${config.label} ${index + 1}`;
-                    const motion: PionMotion = token.returning
-                        ? 'knocked'
-                        : token.moving
-                          ? 'hop'
-                          : 'idle';
-                    const hopPhase = (Math.abs(token.step ?? 0) % 2) as 0 | 1;
-                    const figure = (
-                        <PionFigure
-                            pionImage={charConfig.pion}
-                            legal={token.legal}
-                            busy={token.busy}
-                            motion={motion}
-                            hopPhase={hopPhase}
-                            stacked={count > 1}
-                            stackCount={token.stackCount}
-                        />
-                    );
+                      }))
+                ).map(({ color, x, y }) => {
+                    const bubble = chatBubbles[color];
+                    if (!bubble) return null;
 
                     return (
                         <div
-                            key={token.id}
-                            className={`absolute transition-[left,top,transform] ${
-                                token.returning
-                                    ? 'duration-[50ms] ease-linear'
-                                    : 'duration-[140ms] ease-[cubic-bezier(0.37,0,0.63,1)]'
-                            }`}
-                            style={positionStyle}
+                            key={`${color}-${bubble.id}`}
+                            className="home-chat-bubble"
+                            style={{
+                                left: `${Math.max(24, Math.min(76, x))}%`,
+                                top: `${Math.max(2, Math.min(66, y))}%`,
+                            }}
                         >
-                            {token.onClick ? (
-                                <button
-                                    type="button"
-                                    onClick={token.onClick}
-                                    disabled={token.busy || !token.legal}
-                                    aria-busy={token.busy || undefined}
-                                    aria-label={
-                                        token.legal
-                                            ? `${label} (${charConfig.name}) siap digerakkan`
-                                            : `${label} (${charConfig.name})`
-                                    }
-                                    className={`pion-hit relative block h-full w-full after:absolute after:-inset-2 after:rounded-full after:content-[''] disabled:cursor-not-allowed ${
-                                        token.legal
-                                            ? 'cursor-pointer'
-                                            : 'cursor-default'
-                                    } ${
-                                        token.moving || token.returning
-                                            ? 'pointer-events-none'
-                                            : 'pointer-events-auto'
-                                    }`}
-                                    style={tokenStyle}
-                                >
-                                    {figure}
-                                </button>
-                            ) : (
-                                <div
-                                    className="relative h-full w-full"
-                                    style={tokenStyle}
-                                >
-                                    {figure}
-                                </div>
-                            )}
+                            <div
+                                className="home-chat-bubble__message"
+                                tabIndex={0}
+                            >
+                                {bubble.message}
+                            </div>
                         </div>
                     );
                 })}
             </div>
 
-            {skillBursts.length > 0 && (
+            {dustEffects.length > 0 && (
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-[5]"
+                >
+                    {dustEffects.map((effect) => (
+                        <BoardEffectView
+                            key={effect.id}
+                            effect={effect}
+                            onDone={removeEffect}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Tokens live outside the clipped board so tall pions on the top row keep their crowns. */}
+            <div className="pointer-events-none absolute inset-0 z-[5]">
+                {placements.map((item) => {
+                    const { token } = item;
+                    const charConfig = getCharacterConfig(
+                        token.character ?? playerCharacters[token.color],
+                        token.color,
+                    );
+
+                    return (
+                        <TokenView
+                            key={token.id}
+                            id={token.id}
+                            color={token.color}
+                            pionImage={charConfig.pion}
+                            characterName={charConfig.name}
+                            label={
+                                token.label ??
+                                `Bidak ${PLAYER_CONFIG[token.color].label} ${item.ordinal + 1}`
+                            }
+                            transform={placementTransform(item.placement)}
+                            widthPercent={tokenWidth}
+                            zIndex={item.zIndex}
+                            hidden={item.hidden}
+                            legal={item.legal}
+                            busy={item.busy}
+                            motion={
+                                token.returning
+                                    ? 'knocked'
+                                    : token.moving
+                                      ? 'hop'
+                                      : 'idle'
+                            }
+                            fanned={item.fanned}
+                            stackCount={item.stackCount}
+                            clickable={Boolean(item.onClick)}
+                            onActivate={onActivate}
+                            registerElement={registerElement}
+                        />
+                    );
+                })}
+            </div>
+
+            {(skillBursts.length > 0 || impactEffects.length > 0) && (
                 <div
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-0 z-[6]"
                 >
-                    {skillBursts.map((burst) => (
-                        <CharacterSkillBurst
-                            key={burst.id}
-                            burst={burst}
-                            leftPercent={
-                                spec.isRadial
-                                    ? burst.point.col
-                                    : (burst.point.col / BOARD_SIZE) * 100
-                            }
-                            topPercent={
-                                spec.isRadial
-                                    ? burst.point.row
-                                    : (burst.point.row / BOARD_SIZE) * 100
-                            }
-                            onEnd={onSkillBurstEnd}
+                    {impactEffects.map((effect) => (
+                        <BoardEffectView
+                            key={effect.id}
+                            effect={effect}
+                            onDone={removeEffect}
                         />
                     ))}
+                    {skillBursts.map((burst) => {
+                        const { x, y } = toBoardPercent(spec, burst.point);
+
+                        return (
+                            <CharacterSkillBurst
+                                key={burst.id}
+                                burst={burst}
+                                leftPercent={x}
+                                topPercent={y}
+                                onEnd={onSkillBurstEnd}
+                            />
+                        );
+                    })}
                 </div>
             )}
         </div>

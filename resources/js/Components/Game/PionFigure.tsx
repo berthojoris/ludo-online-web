@@ -7,7 +7,6 @@ type PionFigureProps = {
     legal?: boolean;
     busy?: boolean;
     motion?: PionMotion;
-    hopPhase?: 0 | 1;
     stacked?: boolean;
     stackCount?: number;
     style?: CSSProperties;
@@ -24,7 +23,6 @@ export default function PionFigure({
     legal = false,
     busy = false,
     motion = 'idle',
-    hopPhase = 0,
     stacked = false,
     stackCount = 1,
     style,
@@ -37,7 +35,6 @@ export default function PionFigure({
             className="pion"
             data-legal={legal || undefined}
             data-motion={motion}
-            data-hop={motion === 'hop' ? hopPhase : undefined}
             data-stacked={stacked || undefined}
             data-has-count={hasCount || undefined}
             style={style}

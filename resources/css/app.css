@@ -669,7 +669,7 @@
 
 .pion-shadow {
     position: absolute;
-    left: 50%;
+    left: 7%;
     bottom: 6%;
     width: 86%;
     height: 34%;
@@ -680,7 +680,7 @@
         rgb(20 32 52 / 16%) 60%,
         transparent
     );
-    transform: translateX(-50%) scale(var(--pion-scale));
+    transform: scale(var(--pion-scale));
     transition:
         transform 160ms ease-out,
         opacity 160ms ease-out;
@@ -736,33 +736,29 @@
     -webkit-user-drag: none;
 }
 
-/* Lets the visible head of a clickable pion receive taps, not only its cell footprint. */
-.pion-hit .pion-figure {
-    pointer-events: auto;
-}
-
+/* The hit button is a sibling drawn over the figure (see LudoBoard TokenView). */
 .pion-hit:focus-visible {
     outline: none;
 }
 
-.pion-hit:focus-visible .pion-base {
+.pion-hit:focus-visible ~ .pion .pion-base {
     box-shadow:
         0 0 0 2px #fff,
         0 0 0 4px var(--color-brand);
 }
 
 @media (hover: hover) {
-    .pion-hit:enabled:hover .pion {
+    .pion-hit:enabled:hover ~ .pion {
         --pion-lift: -9%;
     }
 
-    .pion-hit:enabled:hover .pion-shadow {
-        transform: translateX(-50%) scale(calc(var(--pion-scale) * 0.8));
+    .pion-hit:enabled:hover ~ .pion .pion-shadow {
+        transform: scale(calc(var(--pion-scale) * 0.8));
         opacity: 0.7;
     }
 }
 
-.pion-hit:enabled:active .pion {
+.pion-hit:enabled:active ~ .pion {
     --pion-lift: -2%;
 }
 
@@ -861,32 +857,7 @@
     animation: pion-spin 0.8s linear infinite;
 }
 
-.pion[data-motion='hop'] .pion-motion,
-.pion[data-motion='knocked'] .pion-motion {
-    will-change: transform;
-}
-
-/* Two identical hop keyframes: swapping the name each step restarts the hop for every cell. */
-.pion[data-hop='0'] .pion-motion {
-    animation: pion-hop-a 140ms linear both;
-}
-
-.pion[data-hop='1'] .pion-motion {
-    animation: pion-hop-b 140ms linear both;
-}
-
-.pion[data-hop='0'] .pion-shadow {
-    animation: pion-shadow-hop-a 140ms linear both;
-}
-
-.pion[data-hop='1'] .pion-shadow {
-    animation: pion-shadow-hop-b 140ms linear both;
-}
-
-.pion[data-motion='knocked'] .pion-motion {
-    animation: pion-knocked 0.32s ease-in-out infinite;
-}
-
+/* Walk, leap and knock-back motion run as Web Animations (lib/boardMotion.ts). */
 .pion[data-motion='knocked'] .pion-art {
     filter: drop-shadow(0 0 3px rgb(240 68 82 / 80%));
 }
@@ -1128,88 +1099,119 @@
 @keyframes pion-shadow-bob {
     0%,
     100% {
-        transform: translateX(-50%) scale(var(--pion-scale));
+        transform: scale(var(--pion-scale));
         opacity: 1;
     }
     50% {
-        transform: translateX(-50%) scale(calc(var(--pion-scale) * 0.84));
+        transform: scale(calc(var(--pion-scale) * 0.84));
         opacity: 0.7;
     }
 }
 
-@keyframes pion-hop-a {
+/* Board hit effects (see LudoBoard BoardEffectView). Sized in board percent. */
+.board-impact,
+.board-dust {
+    position: absolute;
+    width: 11%;
+    aspect-ratio: 1 / 1;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.board-dust {
+    width: 9%;
+    aspect-ratio: 2 / 1;
+}
+
+.board-impact-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: clamp(2px, 0.6cqw, 4px) solid var(--fx-light);
+    box-shadow: 0 0 10px 1px var(--fx-base);
+    animation: board-impact-ring 480ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.board-spark {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 26%;
+    aspect-ratio: 1 / 1;
+    background: var(--fx-light);
+    clip-path: polygon(
+        50% 0,
+        62% 38%,
+        100% 50%,
+        62% 62%,
+        50% 100%,
+        38% 62%,
+        0 50%,
+        38% 38%
+    );
+    filter: drop-shadow(0 0 2px var(--fx-base));
+    opacity: 0;
+    animation: board-spark 620ms cubic-bezier(0.15, 0.7, 0.35, 1)
+        var(--spark-delay) both;
+}
+
+.board-spark:nth-child(odd) {
+    background: #fff;
+}
+
+.board-dust-puff {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 30%;
+    aspect-ratio: 1 / 1;
+    border-radius: 9999px;
+    background: radial-gradient(
+        circle,
+        rgb(255 255 255 / 95%),
+        color-mix(in srgb, var(--fx-light) 55%, rgb(214 222 232)) 70%
+    );
+    opacity: 0;
+    animation: board-dust 500ms ease-out var(--puff-delay) both;
+}
+
+@keyframes board-impact-ring {
     0% {
-        transform: translateY(0) scale(1);
-    }
-    22% {
-        transform: translateY(-15%) scale(0.97, 1.04);
-    }
-    50% {
-        transform: translateY(-22%) scale(0.97, 1.04);
-    }
-    78% {
-        transform: translateY(-14%) scale(1);
-    }
-    92% {
-        transform: translateY(0) scale(1.05, 0.94);
+        opacity: 1;
+        transform: scale(0.3);
     }
     100% {
-        transform: translateY(0) scale(1);
+        opacity: 0;
+        transform: scale(1.9);
     }
 }
 
-@keyframes pion-hop-b {
+@keyframes board-spark {
     0% {
-        transform: translateY(0) scale(1);
+        opacity: 1;
+        transform: translate(-50%, -50%) rotate(var(--spark-angle))
+            translateY(0) scale(0.4);
     }
-    22% {
-        transform: translateY(-15%) scale(0.97, 1.04);
-    }
-    50% {
-        transform: translateY(-22%) scale(0.97, 1.04);
-    }
-    78% {
-        transform: translateY(-14%) scale(1);
-    }
-    92% {
-        transform: translateY(0) scale(1.05, 0.94);
-    }
-    100% {
-        transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes pion-shadow-hop-a {
-    0%,
-    100% {
-        transform: translateX(-50%) scale(var(--pion-scale));
+    35% {
         opacity: 1;
     }
-    50% {
-        transform: translateX(-50%) scale(calc(var(--pion-scale) * 0.62));
-        opacity: 0.5;
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) rotate(var(--spark-angle))
+            translateY(calc(var(--spark-distance) * -1)) rotate(90deg)
+            scale(0.9);
     }
 }
 
-@keyframes pion-shadow-hop-b {
-    0%,
+@keyframes board-dust {
+    0% {
+        opacity: 0.9;
+        transform: translate(-50%, -50%) translateX(0) scale(0.4);
+    }
     100% {
-        transform: translateX(-50%) scale(var(--pion-scale));
-        opacity: 1;
-    }
-    50% {
-        transform: translateX(-50%) scale(calc(var(--pion-scale) * 0.62));
-        opacity: 0.5;
-    }
-}
-
-@keyframes pion-knocked {
-    0%,
-    100% {
-        transform: translateY(-6%) rotate(-10deg) scale(0.92);
-    }
-    50% {
-        transform: translateY(-16%) rotate(10deg) scale(0.88);
+        opacity: 0;
+        transform: translate(-50%, -50%) translateX(var(--puff-x))
+            translateY(-40%) scale(1.15);
     }
 }
 
