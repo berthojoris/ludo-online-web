@@ -44,7 +44,11 @@ function usePreviewBoardSize() {
 
         const measure = () => {
             const rect = element.getBoundingClientRect();
-            const next = Math.floor(Math.min(rect.width, rect.height));
+            // Reserve horizontal space for floating badges (-left-3 / -right-4) on sm+ viewports so they never clip.
+            const horizontalReserve = window.innerWidth >= 640 ? 32 : 0;
+            const next = Math.floor(
+                Math.min(rect.width - horizontalReserve, rect.height),
+            );
 
             setSize(next > 0 ? Math.max(140, next) : 0);
         };
@@ -246,7 +250,7 @@ export default function Home() {
                                 <span className="bg-ludo-yellow h-1.5 w-1.5 rounded-full" />
                                 <span className="bg-ludo-blue h-1.5 w-1.5 rounded-full" />
                             </span>
-                            MULTIPEMAIN ONLINE · 2–4 PEMAIN
+                            MULTIPEMAIN ONLINE · 2–7 PEMAIN
                         </span>
 
                         <h1 className="text-ink mt-[clamp(6px,1.4dvh,20px)] text-[clamp(1.45rem,5.4vmin,3.75rem)] leading-[1.05] font-semibold tracking-[-0.035em] [@media(max-height:520px)_and_(orientation:landscape)]:mt-2 [@media(max-height:520px)_and_(orientation:landscape)]:text-[clamp(1.25rem,7.5dvh,2rem)]">
@@ -348,28 +352,28 @@ export default function Home() {
                                             className="h-full w-full"
                                         />
                                     </div>
+                                </div>
 
-                                    <div className="animate-float-soft border-line/80 shadow-card absolute top-8 -left-3 z-30 hidden items-center gap-2.5 rounded-2xl border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
-                                        <Dice value={6} className="h-9 w-9" />
-                                        <div>
-                                            <p className="text-ink text-[11px] font-semibold">
-                                                Dapat 6
-                                            </p>
-                                            <p className="text-ink-muted text-[10px]">
-                                                Lemparan tambahan
-                                            </p>
-                                        </div>
+                                <div className="animate-float-soft border-line/80 shadow-card absolute top-8 -left-3 z-30 hidden items-center gap-2.5 rounded-2xl border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
+                                    <Dice value={6} className="h-9 w-9" />
+                                    <div>
+                                        <p className="text-ink text-[11px] font-semibold">
+                                            Dapat 6
+                                        </p>
+                                        <p className="text-ink-muted text-[10px]">
+                                            Lemparan tambahan
+                                        </p>
                                     </div>
+                                </div>
 
-                                    <div className="border-line/80 shadow-card absolute -right-4 bottom-12 z-30 hidden items-center gap-2 rounded-full border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
-                                        <span className="relative flex h-2 w-2">
-                                            <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
-                                            <span className="bg-ludo-green relative inline-flex h-2 w-2 rounded-full" />
-                                        </span>
-                                        <span className="text-ink text-[11px] font-semibold">
-                                            Giliran Hijau
-                                        </span>
-                                    </div>
+                                <div className="border-line/80 shadow-card absolute -right-4 bottom-12 z-30 hidden items-center gap-2 rounded-full border bg-white/95 px-3 py-2 sm:flex [@media(max-height:520px)_and_(orientation:landscape)]:hidden">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="bg-ludo-green absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" />
+                                        <span className="bg-ludo-green relative inline-flex h-2 w-2 rounded-full" />
+                                    </span>
+                                    <span className="text-ink text-[11px] font-semibold">
+                                        Giliran Hijau
+                                    </span>
                                 </div>
                             </div>
                         )}
