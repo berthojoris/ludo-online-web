@@ -138,6 +138,57 @@ function tokenGroups(tokens: BoardToken[]) {
     return groups;
 }
 
+type RenderedToken = BoardToken & {
+    stackCount: number;
+};
+
+function collapseSameColorTokens(tokens: BoardToken[]): RenderedToken[] {
+    const collapsed: RenderedToken[] = [];
+
+    for (const cellGroup of tokenGroups(tokens).values()) {
+        const byColor = new Map<PlayerColor, BoardToken[]>();
+
+        for (const token of cellGroup) {
+            const list = byColor.get(token.color) ?? [];
+            list.push(token);
+            byColor.set(token.color, list);
+        }
+
+        for (const colorTokens of byColor.values()) {
+            if (colorTokens.length === 1) {
+                collapsed.push({ ...colorTokens[0], stackCount: 1 });
+                continue;
+            }
+
+            const primary =
+                colorTokens.find((t) => t.returning) ??
+                colorTokens.find((t) => t.moving) ??
+                colorTokens.find((t) => t.legal) ??
+                colorTokens.find((t) => t.busy) ??
+                colorTokens[0];
+            const legal = colorTokens.some((t) => t.legal);
+            const busy = colorTokens.some((t) => t.busy);
+            const moving = colorTokens.some((t) => t.moving);
+            const returning = colorTokens.some((t) => t.returning);
+            const onClick =
+                colorTokens.find((t) => t.legal && t.onClick)?.onClick ??
+                colorTokens.find((t) => t.onClick)?.onClick;
+
+            collapsed.push({
+                ...primary,
+                legal,
+                busy,
+                moving,
+                returning,
+                onClick,
+                stackCount: colorTokens.length,
+            });
+        }
+    }
+
+    return collapsed;
+}
+
 export default function LudoBoard({
     tokens = [],
     chatBubbles = {},
@@ -159,13 +210,14 @@ export default function LudoBoard({
     const spec = getBoardSpec(inferredOrder, arms);
     const cellBox = spec.cellSizePercent * 0.9;
     const cellRx = cellBox * 0.2;
+    const renderedTokens = collapseSameColorTokens(tokens);
 
     const layout = new Map<
         string,
         { index: number; slot: number; count: number; raised: boolean }
     >();
 
-    for (const group of tokenGroups(tokens).values()) {
+    for (const group of tokenGroups(renderedTokens).values()) {
         const count = group.length;
         const slots = frontToBackSlots(count);
         // The turn player's pions take the front fan slots so they are not buried under opponents.
@@ -709,7 +761,7 @@ export default function LudoBoard({
 
             {/* Tokens live outside the clipped board so tall pions on the top row keep their crowns. */}
             <div className="pointer-events-none absolute inset-0 z-[5]">
-                {tokens.map((token) => {
+                {renderedTokens.map((token) => {
                     const config = PLAYER_CONFIG[token.color];
                     const palette = config.palette;
                     const charConfig = getCharacterConfig(
@@ -774,6 +826,7 @@ export default function LudoBoard({
                             motion={motion}
                             hopPhase={hopPhase}
                             stacked={count > 1}
+                            stackCount={token.stackCount}
                         />
                     );
 

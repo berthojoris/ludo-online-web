@@ -9,6 +9,7 @@ type PionFigureProps = {
     motion?: PionMotion;
     hopPhase?: 0 | 1;
     stacked?: boolean;
+    stackCount?: number;
     style?: CSSProperties;
 };
 
@@ -25,8 +26,11 @@ export default function PionFigure({
     motion = 'idle',
     hopPhase = 0,
     stacked = false,
+    stackCount = 1,
     style,
 }: PionFigureProps) {
+    const hasCount = stackCount > 1;
+
     return (
         <span
             aria-hidden="true"
@@ -35,6 +39,7 @@ export default function PionFigure({
             data-motion={motion}
             data-hop={motion === 'hop' ? hopPhase : undefined}
             data-stacked={stacked || undefined}
+            data-has-count={hasCount || undefined}
             style={style}
         >
             {legal && <span className="pion-aura" />}
@@ -44,6 +49,9 @@ export default function PionFigure({
             <span className="pion-figure">
                 <span className="pion-motion">
                     {legal && <span className="pion-cue" />}
+                    {hasCount && (
+                        <span className="pion-count">{stackCount}</span>
+                    )}
                     <img
                         src={pionImage}
                         alt=""

@@ -2964,50 +2964,52 @@ export default function Play() {
                                     </div>
                                 )}
 
-                                <div
-                                    ref={boardRef}
-                                    className="flex min-h-0 min-w-0 flex-1 items-center justify-center"
-                                >
-                                    {boardSize > 0 && (
-                                        <div
-                                            className="shrink-0"
-                                            style={{
-                                                width: boardSize,
-                                                height: boardSize,
-                                            }}
-                                        >
-                                            <LudoBoard
-                                                tokens={boardTokens}
-                                                 chatBubbles={chatBubbles}
-                                                order={state.order}
-                                                arms={state.arms}
-                                                playerNames={Object.fromEntries(
-                                                    state.order.map((color) => [
-                                                        color,
-                                                        state.names[color],
-                                                    ]),
-                                                )}
-                                                playerCharacters={
-                                                    state.characters
-                                                }
-                                                skillBursts={skillBursts}
-                                                onSkillBurstEnd={
-                                                    removeSkillBurst
-                                                }
-                                                activeColor={
-                                                    state.winner
-                                                        ? undefined
-                                                        : state.turn
-                                                }
-                                                activeLabel={
-                                                    state.winner
-                                                        ? undefined
-                                                        : turnLabel
-                                                }
-                                                className="h-full w-full"
-                                            />
-                                        </div>
-                                    )}
+                                <div className="flex min-h-0 min-w-0 flex-1 pt-2 sm:pt-3 md:pt-[clamp(24px,4.5dvh,40px)]">
+                                    <div
+                                        ref={boardRef}
+                                        className="flex h-full min-h-0 w-full min-w-0 items-center justify-center"
+                                    >
+                                        {boardSize > 0 && (
+                                            <div
+                                                className="shrink-0"
+                                                style={{
+                                                    width: boardSize,
+                                                    height: boardSize,
+                                                }}
+                                            >
+                                                <LudoBoard
+                                                    tokens={boardTokens}
+                                                    chatBubbles={chatBubbles}
+                                                    order={state.order}
+                                                    arms={state.arms}
+                                                    playerNames={Object.fromEntries(
+                                                        state.order.map((color) => [
+                                                            color,
+                                                            state.names[color],
+                                                        ]),
+                                                    )}
+                                                    playerCharacters={
+                                                        state.characters
+                                                    }
+                                                    skillBursts={skillBursts}
+                                                    onSkillBurstEnd={
+                                                        removeSkillBurst
+                                                    }
+                                                    activeColor={
+                                                        state.winner
+                                                            ? undefined
+                                                            : state.turn
+                                                    }
+                                                    activeLabel={
+                                                        state.winner
+                                                            ? undefined
+                                                            : turnLabel
+                                                    }
+                                                    className="h-full w-full"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </section>
 
