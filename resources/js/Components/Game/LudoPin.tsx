@@ -20,7 +20,7 @@ export default function LudoPin({
                 width={192}
                 height={320}
                 draggable={false}
-                decoding="async"
+                decoding="sync"
                 className={`object-contain object-bottom drop-shadow-[0_1px_1.5px_rgba(20,32,52,0.3)] select-none ${className}`}
                 style={style}
             />

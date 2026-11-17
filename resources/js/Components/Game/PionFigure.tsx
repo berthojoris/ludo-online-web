@@ -55,7 +55,7 @@ export default function PionFigure({
                         width={192}
                         height={320}
                         draggable={false}
-                        decoding="async"
+                        decoding="sync"
                         className="pion-art"
                     />
                 </span>
