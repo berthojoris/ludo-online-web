@@ -510,8 +510,10 @@ class RoomController extends Controller
             $state['stats'][$index]['rolls'] = ($state['stats'][$index]['rolls'] ?? 0) + 1;
             if (MatchRules::moves($state, $index, $value)) {
                 $state['dice'] = $value;
+                $state['afk_auto_move'] = $isTimeout;
             } else {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
+                $state['afk_auto_move'] = false;
             }
             $nowMs = now()->getTimestampMs();
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
@@ -576,17 +578,20 @@ class RoomController extends Controller
                 $player = $players->get($state['turn'] ?? -1);
                 abort_unless($player !== null, 422, 'Pemain giliran tidak ditemukan.');
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
+                $afkAutoMove = ! empty($state['afk_auto_move']);
                 $turnStartedAt = (int) ($state['turn_started_at'] ?? ($room->updated_at?->getTimestampMs() ?? 0));
                 $elapsedMs = now()->getTimestampMs() - $turnStartedAt;
-                abort_unless($turnStartedAt > 0 && $elapsedMs >= 28500, 422, 'Waktu giliran belum habis.');
+                abort_unless($afkAutoMove || ($turnStartedAt > 0 && $elapsedMs >= 28500), 422, 'Waktu giliran belum habis.');
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
-            $tokenIndex = ($player->is_computer || $isTimeout) ? MatchRules::computerMove($state, $index) : (int) $validated['token_index'];
             $moves = MatchRules::moves($state, $index, $state['dice']);
+            $tokenIndex = $player->is_computer
+                ? MatchRules::computerMove($state, $index)
+                : ($isTimeout && $moves ? array_rand($moves) : (int) $validated['token_index']);
             abort_unless(array_key_exists($tokenIndex, $moves), 422, 'Langkah tidak sah.');
             $target = $moves[$tokenIndex];
             $state['tokens'][$index][$tokenIndex] = $target;
@@ -627,6 +632,7 @@ class RoomController extends Controller
             }
             $nowMs = now()->getTimestampMs();
             $state['dice'] = null;
+            $state['afk_auto_move'] = false;
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
             $state['turn_started_at'] = $matchOver ? null : $nowMs;
             $room->match_state = $state;

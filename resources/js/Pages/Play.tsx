@@ -130,6 +130,7 @@ type MatchSnapshot = {
     state_version?: number;
     last_roll?: LastRoll | null;
     turn_started_at?: number | null;
+    afk_auto_move?: boolean;
 };
 
 type MatchActionData = {
@@ -1127,6 +1128,7 @@ export default function Play() {
         state_version: 0,
     });
     const timeoutPendingRef = useRef(false);
+    const autoPlayAfterTimeoutRollRef = useRef(false);
     const serverClockOffsetRef = useRef(0);
     const connectionStatus = useConnectionStatus();
     const movingRef = useRef(false);
@@ -1936,6 +1938,12 @@ export default function Play() {
             serverClockOffsetRef.current = action.server_now - Date.now();
         }
 
+        if (snapshot.afk_auto_move) {
+            autoPlayAfterTimeoutRollRef.current = true;
+        } else if (action.type === 'move' || snapshot.dice === null) {
+            autoPlayAfterTimeoutRollRef.current = false;
+        }
+
         if (version <= currentState.version) {
             rememberAction(seenActionsRef.current, action.action_id);
 
@@ -2146,20 +2154,81 @@ export default function Play() {
             state.legalMoves.length === 0 ||
             state.winner
         ) {
+            if (state.phase === 'idle' || state.winner) {
+                autoPlayAfterTimeoutRollRef.current = false;
+            }
+
             return;
         }
+
+        const isAfkAutoMove =
+            autoPlayAfterTimeoutRollRef.current ||
+            Boolean(room?.match_state?.afk_auto_move);
 
         if (room && state.turn !== state.human) {
-            return;
+            if (!isAfkAutoMove || isComputerTurn || timeoutPendingRef.current) {
+                return;
+            }
+
+            const graceMs =
+                1200 + (myRoomIndex >= 0 ? myRoomIndex * 250 : 0);
+            const timer = window.setTimeout(async () => {
+                const latest = stateRef.current;
+                const activeRoom = roomRef.current;
+                if (
+                    !activeRoom ||
+                    latest.winner ||
+                    movingRef.current ||
+                    latest.phase !== 'choosing' ||
+                    latest.version !== state.version ||
+                    latest.turn === latest.human ||
+                    timeoutPendingRef.current
+                ) {
+                    return;
+                }
+                timeoutPendingRef.current = true;
+                try {
+                    const csrf =
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') ?? '';
+                    timeoutHttp.transform(() => ({
+                        timeout: true,
+                        state_version: latest.version,
+                    }));
+                    const data = await timeoutHttp.post(
+                        route('rooms.match.move', { code: activeRoom.code }),
+                        { headers: { 'X-CSRF-TOKEN': csrf } },
+                    );
+                    if (data?.action) {
+                        processMatchActionRef.current(data.action);
+                    }
+                } catch {
+                    syncRoomState('afk-auto-move-race');
+                } finally {
+                    timeoutPendingRef.current = false;
+                    autoPlayAfterTimeoutRollRef.current = false;
+                }
+            }, graceMs);
+
+            return () => window.clearTimeout(timer);
         }
 
-        if (state.turn === state.human && state.legalMoves.length !== 1) {
+        if (
+            state.turn === state.human &&
+            state.legalMoves.length !== 1 &&
+            !isAfkAutoMove
+        ) {
             return;
         }
 
         const tokenIndex =
             state.turn === state.human
-                ? state.legalMoves[0].tokenIndex
+                ? isAfkAutoMove
+                    ? state.legalMoves[
+                          Math.floor(Math.random() * state.legalMoves.length)
+                      ]?.tokenIndex
+                    : state.legalMoves[0].tokenIndex
                 : chooseAiMove(state)?.tokenIndex;
 
         if (tokenIndex === undefined) {
@@ -2177,13 +2246,14 @@ export default function Play() {
         const timeout = window.setTimeout(
             () => {
                 autoMoveAttemptRef.current = attemptKey;
+                autoPlayAfterTimeoutRollRef.current = false;
                 void animateMove(tokenIndex);
             },
-            state.turn === state.human ? 600 : 800,
+            state.turn === state.human ? (isAfkAutoMove ? 450 : 600) : 800,
         );
 
         return () => window.clearTimeout(timeout);
-    }, [room, state, animateMove]);
+    }, [room, state, animateMove, isComputerTurn, myRoomIndex, syncRoomState]);
 
     const boardTokens = useMemo<BoardToken[]>(() => {
         return state.order.flatMap((color) =>
@@ -2511,12 +2581,18 @@ export default function Play() {
         ? Boolean(activeRoomPlayer?.is_computer)
         : state.turn !== state.human;
 
+    const isAfkAutoMove =
+        autoPlayAfterTimeoutRollRef.current ||
+        Boolean(room?.match_state?.afk_auto_move);
+
     const turnTimerActive =
         screen === 'game' &&
         !blockedByRoom &&
         !state.winner &&
         (state.phase === 'idle' ||
-            (state.phase === 'choosing' && state.legalMoves.length > 0)) &&
+            (state.phase === 'choosing' &&
+                state.legalMoves.length > 0 &&
+                !isAfkAutoMove)) &&
         !movingToken &&
         returningTokens.length === 0;
 
@@ -2585,16 +2661,20 @@ export default function Play() {
 
             if (!activeRoom || current.turn === current.human) {
                 if (current.phase === 'idle') {
+                    autoPlayAfterTimeoutRollRef.current = true;
                     void handleRollRef.current();
                 } else if (
                     current.phase === 'choosing' &&
                     current.legalMoves.length > 0
                 ) {
-                    const aiPick = chooseAiMove(current)?.tokenIndex;
-                    const fallback = current.legalMoves[0]?.tokenIndex;
-                    const chosen = aiPick ?? fallback;
-                    if (chosen !== undefined) {
-                        void animateMoveRef.current(chosen);
+                    const randomMove =
+                        current.legalMoves[
+                            Math.floor(
+                                Math.random() * current.legalMoves.length,
+                            )
+                        ];
+                    if (randomMove) {
+                        void animateMoveRef.current(randomMove.tokenIndex);
                     }
                 }
                 return;
@@ -2604,6 +2684,10 @@ export default function Play() {
                 activeRoom.players[current.order.indexOf(current.turn)];
             if (turnPlayer?.is_computer || timeoutPendingRef.current) {
                 return;
+            }
+
+            if (current.phase === 'idle') {
+                autoPlayAfterTimeoutRollRef.current = true;
             }
 
             const graceMs =
@@ -2954,19 +3038,21 @@ export default function Play() {
                                     Demo lokal
                                 </span>
                             )}
-                            {screen === 'game' && !blockedByRoom && (
-                                <button
-                                    type="button"
-                                    onClick={openSetup}
-                                    className="border-line text-ink-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-[11px] font-semibold transition"
-                                    aria-label="Atur nama dan warna pemain"
-                                >
-                                    <UsersIcon className="h-3.5 w-3.5" />
-                                    <span className="hidden sm:inline">
-                                        Atur pemain
-                                    </span>
-                                </button>
-                            )}
+                            {screen === 'game' &&
+                                !blockedByRoom &&
+                                canRestartMatch && (
+                                    <button
+                                        type="button"
+                                        onClick={openSetup}
+                                        className="border-line text-ink-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-[11px] font-semibold transition"
+                                        aria-label="Atur nama dan warna pemain"
+                                    >
+                                        <UsersIcon className="h-3.5 w-3.5" />
+                                        <span className="hidden sm:inline">
+                                            Atur pemain
+                                        </span>
+                                    </button>
+                                )}
                         </div>
                     </div>
                     {turnSecondsLeft !== null && (
