@@ -88,7 +88,7 @@ export default function CreateRoomPasswordModal({
 
     return (
         <div
-            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            className="modal-overlay bg-ink/20"
             style={overlayStyle}
             role="dialog"
             aria-modal="true"
@@ -103,131 +103,172 @@ export default function CreateRoomPasswordModal({
             <div
                 ref={panelRef}
                 tabIndex={-1}
-                className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)] outline-none"
+                className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
                 onClick={(event) => event.stopPropagation()}
             >
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                        <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
-                            <LockIcon className="h-5 w-5" />
-                        </span>
-                        <div className="min-w-0">
-                            <h2
-                                id="create-room-password-title"
-                                className="text-ink text-base font-semibold"
-                            >
-                                Buat ruang baru?
-                            </h2>
-                            <p
-                                id="create-room-password-description"
-                                className="text-ink-muted mt-1 text-xs leading-relaxed"
-                            >
-                                {passwordRequired ? 'Masukkan kata sandi akses dan pilih lawan.' : 'Pilih lawan untuk ruang baru.'}
-                            </p>
+                <div className="modal-bezel-card">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                            <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                <LockIcon className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2
+                                    id="create-room-password-title"
+                                    className="text-ink text-base font-semibold"
+                                >
+                                    Buat ruang baru?
+                                </h2>
+                                <p
+                                    id="create-room-password-description"
+                                    className="text-ink-muted mt-1 text-xs leading-relaxed"
+                                >
+                                    {passwordRequired
+                                        ? 'Masukkan kata sandi akses dan pilih lawan.'
+                                        : 'Pilih lawan untuk ruang baru.'}
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    <button
-                        type="button"
-                        disabled={processing}
-                        onClick={onCancel}
-                        aria-label="Tutup konfirmasi"
-                        className="btn btn-quiet btn-sm btn-icon shrink-0"
-                    >
-                        <CloseIcon className="h-4 w-4" />
-                    </button>
-                </div>
-
-                <form onSubmit={handleSubmit}>
-                    <fieldset className="mt-4" disabled={processing}>
-                        <legend className="text-ink text-xs font-semibold">Lawan</legend>
-                        <div className="segmented mt-1.5 grid grid-cols-2">
-                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => setVsComputer(false)}>MANUSIA</button>
-                            <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => setVsComputer(true)}>VS COMPUTER</button>
-                        </div>
-                        {vsComputer && <p className="text-ink-muted mt-1 text-xs">Level Computer: MEDIUM</p>}
-                    </fieldset>
-                    {passwordRequired && <>
-                    <label
-                        htmlFor="create-room-password"
-                        className="text-ink mt-4 block text-xs font-semibold"
-                    >
-                        Kata sandi
-                    </label>
-                    <div className="relative mt-1.5">
-                        <input
-                            ref={inputRef}
-                            id="create-room-password"
-                            type={showPassword ? 'text' : 'password'}
-                            name="password"
-                            value={password}
-                            autoComplete="off"
-                            enterKeyHint="done"
-                            disabled={processing}
-                            onChange={(event) => setPassword(event.target.value)}
-                            aria-invalid={error ? true : undefined}
-                            aria-describedby={
-                                error ? 'create-room-password-error' : undefined
-                            }
-                            className={`text-ink focus-visible:ring-brand/60 h-11 w-full rounded-xl border bg-white pr-12 pl-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
-                                error ? 'border-danger' : 'border-line'
-                            }`}
-                        />
-                        <button
-                            type="button"
-                            disabled={processing}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => setShowPassword((visible) => !visible)}
-                            aria-label={
-                                showPassword
-                                    ? 'Sembunyikan kata sandi'
-                                    : 'Tampilkan kata sandi'
-                            }
-                            aria-pressed={showPassword}
-                            aria-controls="create-room-password"
-                            title={
-                                showPassword
-                                    ? 'Sembunyikan kata sandi'
-                                    : 'Tampilkan kata sandi'
-                            }
-                            className="text-ink-muted hover:text-ink focus-visible:ring-brand/60 absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl transition outline-none focus-visible:ring-2 disabled:opacity-50"
-                        >
-                            {showPassword ? (
-                                <EyeOffIcon className="h-5 w-5" />
-                            ) : (
-                                <EyeIcon className="h-5 w-5" />
-                            )}
-                        </button>
-                    </div>
-                    {error && (
-                        <p
-                            id="create-room-password-error"
-                            role="alert"
-                            className="text-danger mt-1.5 text-xs leading-relaxed"
-                        >
-                            {error}
-                        </p>
-                    )}
-                    </>}
-
-                    <div className="mt-5 flex items-center gap-2">
                         <button
                             type="button"
                             disabled={processing}
                             onClick={onCancel}
-                            className="btn btn-secondary flex-1"
+                            aria-label="Tutup konfirmasi"
+                            className="btn btn-quiet btn-sm btn-icon shrink-0"
                         >
-                            Batal
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={processing || (passwordRequired && password === '')}
-                            aria-busy={processing}
-                            className="btn btn-primary flex-1"
-                        >
-                            {processing ? 'Memeriksa…' : 'Buat ruang'}
+                            <CloseIcon className="h-4 w-4" />
                         </button>
                     </div>
-                </form>
+
+                    <form onSubmit={handleSubmit}>
+                        <fieldset className="mt-4" disabled={processing}>
+                            <legend className="text-ink text-xs font-semibold">
+                                Lawan
+                            </legend>
+                            <div className="segmented mt-1.5 grid grid-cols-2">
+                                <button
+                                    type="button"
+                                    className="segmented-item min-h-11 px-2 text-xs"
+                                    aria-pressed={!vsComputer}
+                                    onClick={() => setVsComputer(false)}
+                                >
+                                    MANUSIA
+                                </button>
+                                <button
+                                    type="button"
+                                    className="segmented-item min-h-11 px-2 text-xs"
+                                    aria-pressed={vsComputer}
+                                    onClick={() => setVsComputer(true)}
+                                >
+                                    VS COMPUTER
+                                </button>
+                            </div>
+                            {vsComputer && (
+                                <p className="text-ink-muted mt-1 text-xs">
+                                    Level Computer: MEDIUM
+                                </p>
+                            )}
+                        </fieldset>
+                        {passwordRequired && (
+                            <>
+                                <label
+                                    htmlFor="create-room-password"
+                                    className="text-ink mt-4 block text-xs font-semibold"
+                                >
+                                    Kata sandi
+                                </label>
+                                <div className="relative mt-1.5">
+                                    <input
+                                        ref={inputRef}
+                                        id="create-room-password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        name="password"
+                                        value={password}
+                                        autoComplete="off"
+                                        enterKeyHint="done"
+                                        disabled={processing}
+                                        onChange={(event) =>
+                                            setPassword(event.target.value)
+                                        }
+                                        aria-invalid={error ? true : undefined}
+                                        aria-describedby={
+                                            error
+                                                ? 'create-room-password-error'
+                                                : undefined
+                                        }
+                                        className={`text-ink focus-visible:ring-brand/60 h-11 w-full rounded-xl border bg-white pr-12 pl-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
+                                            error
+                                                ? 'border-danger'
+                                                : 'border-line'
+                                        }`}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={processing}
+                                        onMouseDown={(event) =>
+                                            event.preventDefault()
+                                        }
+                                        onClick={() =>
+                                            setShowPassword(
+                                                (visible) => !visible,
+                                            )
+                                        }
+                                        aria-label={
+                                            showPassword
+                                                ? 'Sembunyikan kata sandi'
+                                                : 'Tampilkan kata sandi'
+                                        }
+                                        aria-pressed={showPassword}
+                                        aria-controls="create-room-password"
+                                        title={
+                                            showPassword
+                                                ? 'Sembunyikan kata sandi'
+                                                : 'Tampilkan kata sandi'
+                                        }
+                                        className="text-ink-muted hover:text-ink focus-visible:ring-brand/60 absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl transition outline-none focus-visible:ring-2 disabled:opacity-50"
+                                    >
+                                        {showPassword ? (
+                                            <EyeOffIcon className="h-5 w-5" />
+                                        ) : (
+                                            <EyeIcon className="h-5 w-5" />
+                                        )}
+                                    </button>
+                                </div>
+                                {error && (
+                                    <p
+                                        id="create-room-password-error"
+                                        role="alert"
+                                        className="text-danger mt-1.5 text-xs leading-relaxed"
+                                    >
+                                        {error}
+                                    </p>
+                                )}
+                            </>
+                        )}
+
+                        <div className="mt-5 flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                disabled={processing}
+                                onClick={onCancel}
+                                className="btn btn-secondary min-w-[6.5rem] flex-1"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={
+                                    processing ||
+                                    (passwordRequired && password === '')
+                                }
+                                aria-busy={processing}
+                                className="btn btn-primary min-w-[6.5rem] flex-1"
+                            >
+                                {processing ? 'Memeriksa…' : 'Buat ruang'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     );
