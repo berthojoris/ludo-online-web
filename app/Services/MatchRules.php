@@ -155,6 +155,7 @@ class MatchRules
             'total_moves' => 0,
             'state_version' => 0,
             'last_roll' => null,
+            'turn_started_at' => now()->getTimestampMs(),
         ];
     }
 

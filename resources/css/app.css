@@ -1037,7 +1037,7 @@
     0% {
         opacity: 0;
         transform: translate(-50%, -50%)
-            translate(var(--burst-dx), var(--burst-dy)) scale(0.12);
+            translate(var(--burst-dx), var(--burst-dy)) scale(0.08);
     }
     8% {
         opacity: 1;
@@ -1054,13 +1054,23 @@
         opacity: 1;
         transform: translate(-50%, -54%) translate(0, 0) scale(1);
     }
-    82% {
+    74% {
         opacity: 1;
         transform: translate(-50%, -54%) translate(0, 0) scale(1.04);
     }
+    88% {
+        opacity: 0.9;
+        transform: translate(-50%, -60%)
+            translate(
+                calc(var(--burst-dx) * 0.55),
+                calc(var(--burst-dy) * 0.55)
+            )
+            scale(0.45);
+    }
     100% {
         opacity: 0;
-        transform: translate(-50%, -56%) translate(0, 0) scale(1.28);
+        transform: translate(-50%, -50%)
+            translate(var(--burst-dx), var(--burst-dy)) scale(0.08);
     }
 }
 

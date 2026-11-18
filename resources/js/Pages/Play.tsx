@@ -24,7 +24,7 @@ import MatchResultModal, {
     MatchStanding,
 } from '@/Components/Game/MatchResultModal';
 import PlayerCard from '@/Components/Game/PlayerCard';
-import RoomChat from '@/Components/Game/RoomChat';
+import RoomChat, { RoomChatPanel } from '@/Components/Game/RoomChat';
 import { reportClientIssue } from '@/lib/clientIssues';
 import {
     ALL_CHARACTER_IDS,
@@ -64,6 +64,7 @@ import {
 } from '@/lib/sound';
 import { preloadImages } from '@/lib/preloadImages';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 import { useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
 import { HttpResponseError, ReloadOptions } from '@inertiajs/core';
@@ -81,6 +82,7 @@ import {
     useConnectionStatus,
 } from '@laravel/echo-react';
 import {
+    CSSProperties,
     FormEvent,
     useCallback,
     useEffect,
@@ -127,6 +129,7 @@ type MatchSnapshot = {
     total_moves?: number;
     state_version?: number;
     last_roll?: LastRoll | null;
+    turn_started_at?: number | null;
 };
 
 type MatchActionData = {
@@ -136,6 +139,7 @@ type MatchActionData = {
     value?: number;
     token_index?: number;
     state_version?: number;
+    server_now?: number;
     match_state?: MatchSnapshot;
 };
 
@@ -192,13 +196,102 @@ type Action =
     | { type: 'MOVE'; tokenIndex: number; now: number; version?: number }
     | { type: 'RESET'; now: number; turn?: PlayerId };
 
-const TURN_TIMEOUT_SECONDS = 60;
+const TURN_TIMEOUT_SECONDS = 30;
 
 function formatTurnTimer(seconds: number): string {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
 
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function TurnCountdownHud({
+    secondsLeft,
+    totalSeconds,
+    phase,
+    playerName,
+    isMyTurn,
+    accentColor,
+}: {
+    secondsLeft: number;
+    totalSeconds: number;
+    phase: Phase;
+    playerName: string;
+    isMyTurn: boolean;
+    accentColor: string;
+}) {
+    const progress = Math.max(0, Math.min(1, secondsLeft / totalSeconds));
+    const radius = 8;
+    const circumference = 2 * Math.PI * radius;
+    const dashOffset = circumference * (1 - progress);
+    const isCritical = secondsLeft <= 5;
+    const isWarning = secondsLeft > 5 && secondsLeft <= 10;
+
+    const ringColor = isCritical
+        ? '#dc2626'
+        : isWarning
+          ? '#d97706'
+          : accentColor;
+
+    const pillTone = isCritical
+        ? 'border-red-300 bg-red-50/95 text-red-700 animate-pulse'
+        : isWarning
+          ? 'border-amber-300 bg-amber-50/95 text-amber-800'
+          : 'border-slate-200/90 bg-white/95 text-ink';
+
+    const phaseText = phase === 'choosing' ? 'Pilih Bidak' : 'Lempar Dadu';
+    const actorText = isMyTurn ? 'Giliranmu' : playerName;
+
+    return (
+        <div
+            role="timer"
+            aria-live="off"
+            aria-label={`Sisa waktu ${phaseText} ${actorText}: ${secondsLeft} detik`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 shadow-xs backdrop-blur-md transition-colors sm:gap-2 sm:px-3 sm:py-1 ${pillTone}`}
+        >
+            <svg
+                viewBox="0 0 20 20"
+                className="h-4.5 w-4.5 shrink-0 -rotate-90 sm:h-5 sm:w-5"
+                aria-hidden="true"
+            >
+                <circle
+                    cx="10"
+                    cy="10"
+                    r={radius}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeOpacity={0.14}
+                    strokeWidth="2.4"
+                />
+                <circle
+                    cx="10"
+                    cy="10"
+                    r={radius}
+                    fill="none"
+                    stroke={ringColor}
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={dashOffset}
+                    className="transition-[stroke-dashoffset,stroke] duration-300 ease-linear"
+                />
+            </svg>
+            <span
+                className="hidden h-2 w-2 shrink-0 rounded-full sm:inline-block"
+                style={{ backgroundColor: accentColor }}
+                aria-hidden="true"
+            />
+            <span className="hidden max-w-[110px] truncate text-[11px] font-semibold lg:inline">
+                {actorText}
+            </span>
+            <span className="text-ink-muted hidden text-[10px] font-medium sm:inline lg:before:mr-1 lg:before:content-['·']">
+                {phaseText}
+            </span>
+            <span className="text-[11px] font-extrabold tracking-tight tabular-nums sm:text-xs">
+                {formatTurnTimer(secondsLeft)}
+            </span>
+        </div>
+    );
 }
 
 const PLAYER_IDS: PlayerId[] = ['blue', 'green'];
@@ -963,6 +1056,7 @@ export default function Play() {
             status: string;
             starting_player_id?: number | null;
             started_at?: string | null;
+            server_now?: number;
             match_state?: MatchSnapshot | null;
             players: {
                 id: number;
@@ -1028,6 +1122,12 @@ export default function Play() {
     const computerHttp = useHttp<{ computer: boolean; state_version: number }, MatchCommandResponse>({ computer: true, state_version: 0 });
     const computerPendingRef = useRef(false);
     const [computerRetry, setComputerRetry] = useState(0);
+    const timeoutHttp = useHttp<{ timeout: boolean; state_version: number }, MatchCommandResponse>({
+        timeout: true,
+        state_version: 0,
+    });
+    const timeoutPendingRef = useRef(false);
+    const serverClockOffsetRef = useRef(0);
     const connectionStatus = useConnectionStatus();
     const movingRef = useRef(false);
     const previousTurnRef = useRef<PlayerId | null>(null);
@@ -1296,6 +1396,13 @@ export default function Play() {
         screen === 'game' &&
         serverWinner === null &&
         !state.winner;
+    // The desktop side panel swaps the full player list for a compact
+    // current-turn strip plus an always-open chat card; small screens keep
+    // the floating chat toggle.
+    const isDesktopChat = useMediaQuery('(min-width: 768px)');
+    const chatMounted =
+        Boolean(room) && Boolean(me) && screen === 'game' && !state.winner;
+    const compactPlayers = chatMounted && isDesktopChat;
     const exitGuard = useGameExitGuard(
         matchRunning,
         route('home'),
@@ -1825,6 +1932,10 @@ export default function Play() {
             return false;
         }
 
+        if (typeof action.server_now === 'number') {
+            serverClockOffsetRef.current = action.server_now - Date.now();
+        }
+
         if (version <= currentState.version) {
             rememberAction(seenActionsRef.current, action.action_id);
 
@@ -2301,6 +2412,10 @@ export default function Play() {
         : state.message;
 
     const rollPalette = PLAYER_CONFIG[state.turn].palette;
+    const turnCharacter = getCharacterConfig(
+        state.characters[state.turn],
+        state.turn,
+    );
     const rollButtonStyle = {
         background: canRoll ? rollPalette.dark : rollPalette.soft,
         color: canRoll ? '#ffffff' : rollPalette.text,
@@ -2389,10 +2504,17 @@ export default function Play() {
     const handleRollRef = useRef(handleRoll);
     handleRollRef.current = handleRoll;
 
+    const activeRoomPlayer = room
+        ? room.players[state.order.indexOf(state.turn)]
+        : undefined;
+    const isComputerTurn = room
+        ? Boolean(activeRoomPlayer?.is_computer)
+        : state.turn !== state.human;
+
     const turnTimerActive =
         screen === 'game' &&
+        !blockedByRoom &&
         !state.winner &&
-        state.turn === state.human &&
         (state.phase === 'idle' ||
             (state.phase === 'choosing' && state.legalMoves.length > 0)) &&
         !movingToken &&
@@ -2405,15 +2527,138 @@ export default function Play() {
     const [turnSecondsLeft, setTurnSecondsLeft] = useState<number | null>(null);
 
     useEffect(() => {
+        if (room?.server_now) {
+            serverClockOffsetRef.current = room.server_now - Date.now();
+        }
+    }, [room?.server_now]);
+
+    useEffect(() => {
         if (!turnTimerKey) {
             setTurnSecondsLeft(null);
+            timeoutPendingRef.current = false;
 
             return;
         }
 
-        const deadline = Date.now() + TURN_TIMEOUT_SECONDS * 1000;
+        const snapshot = roomRef.current?.match_state;
+        const serverTurnStartedAt =
+            snapshot &&
+            snapshot.state_version === stateRef.current.version &&
+            typeof snapshot.turn_started_at === 'number' &&
+            snapshot.turn_started_at > 0 &&
+            stateRef.current.phase === 'idle'
+                ? snapshot.turn_started_at
+                : null;
+
+        const estimatedServerNow = Date.now() + serverClockOffsetRef.current;
+        const elapsedMs =
+            serverTurnStartedAt !== null
+                ? Math.max(0, estimatedServerNow - serverTurnStartedAt)
+                : 0;
+        const initialRemainingMs = Math.max(
+            0,
+            TURN_TIMEOUT_SECONDS * 1000 - elapsedMs,
+        );
+        const deadline = Date.now() + initialRemainingMs;
+
         let triggered = false;
-        setTurnSecondsLeft(TURN_TIMEOUT_SECONDS);
+        let graceTimer: number | undefined;
+        setTurnSecondsLeft(
+            Math.min(
+                TURN_TIMEOUT_SECONDS,
+                Math.max(0, Math.ceil(initialRemainingMs / 1000)),
+            ),
+        );
+
+        const executeTimeout = () => {
+            const current = stateRef.current;
+            const activeRoom = roomRef.current;
+            const activePlayer = activeRoom
+                ? activeRoom.players[current.order.indexOf(current.turn)]
+                : undefined;
+            const computerTurn = activeRoom
+                ? Boolean(activePlayer?.is_computer)
+                : current.turn !== current.human;
+            if (current.winner || movingRef.current || computerTurn) {
+                return;
+            }
+
+            if (!activeRoom || current.turn === current.human) {
+                if (current.phase === 'idle') {
+                    void handleRollRef.current();
+                } else if (
+                    current.phase === 'choosing' &&
+                    current.legalMoves.length > 0
+                ) {
+                    const aiPick = chooseAiMove(current)?.tokenIndex;
+                    const fallback = current.legalMoves[0]?.tokenIndex;
+                    const chosen = aiPick ?? fallback;
+                    if (chosen !== undefined) {
+                        void animateMoveRef.current(chosen);
+                    }
+                }
+                return;
+            }
+
+            const turnPlayer =
+                activeRoom.players[current.order.indexOf(current.turn)];
+            if (turnPlayer?.is_computer || timeoutPendingRef.current) {
+                return;
+            }
+
+            const graceMs =
+                1500 + (myRoomIndex >= 0 ? myRoomIndex * 250 : 0);
+            graceTimer = window.setTimeout(async () => {
+                const latest = stateRef.current;
+                if (
+                    latest.winner ||
+                    movingRef.current ||
+                    latest.version !== current.version ||
+                    latest.turn === latest.human ||
+                    timeoutPendingRef.current
+                ) {
+                    return;
+                }
+                timeoutPendingRef.current = true;
+                try {
+                    const csrf =
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute('content') ?? '';
+                    timeoutHttp.transform(() => ({
+                        timeout: true,
+                        state_version: latest.version,
+                    }));
+                    const data = await timeoutHttp.post(
+                        route(
+                            latest.phase === 'idle'
+                                ? 'rooms.match.roll'
+                                : 'rooms.match.move',
+                            { code: activeRoom.code },
+                        ),
+                        { headers: { 'X-CSRF-TOKEN': csrf } },
+                    );
+                    if (data?.action) {
+                        processMatchActionRef.current(data.action);
+                    }
+                } catch {
+                    syncRoomState('timeout-race');
+                } finally {
+                    timeoutPendingRef.current = false;
+                }
+            }, graceMs);
+        };
+
+        if (initialRemainingMs <= 0) {
+            triggered = true;
+            executeTimeout();
+
+            return () => {
+                if (graceTimer !== undefined) {
+                    window.clearTimeout(graceTimer);
+                }
+            };
+        }
 
         const interval = window.setInterval(() => {
             const remaining = Math.max(
@@ -2425,36 +2670,16 @@ export default function Play() {
             if (remaining <= 0 && !triggered) {
                 triggered = true;
                 window.clearInterval(interval);
-
-                const current = stateRef.current;
-                if (
-                    current.winner ||
-                    current.turn !== current.human ||
-                    movingRef.current
-                ) {
-                    return;
-                }
-
-                if (current.phase === 'idle') {
-                    void handleRollRef.current();
-                } else if (
-                    current.phase === 'choosing' &&
-                    current.legalMoves.length > 0
-                ) {
-                    const randomMove =
-                        current.legalMoves[
-                            Math.floor(
-                                Math.random() * current.legalMoves.length,
-                            )
-                        ];
-                    if (randomMove) {
-                        void animateMoveRef.current(randomMove.tokenIndex);
-                    }
-                }
+                executeTimeout();
             }
         }, 250);
 
-        return () => window.clearInterval(interval);
+        return () => {
+            window.clearInterval(interval);
+            if (graceTimer !== undefined) {
+                window.clearTimeout(graceTimer);
+            }
+        };
     }, [turnTimerKey]);
 
     const handleConfirmEndGame = () => {
@@ -2613,7 +2838,7 @@ export default function Play() {
 
                 <header className="relative z-20 shrink-0 border-b border-white/60 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
                     <div className="mx-auto flex h-12 max-w-6xl items-center justify-between gap-2 px-3 sm:h-14 sm:px-6">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                             <Link
                                 href={route('home')}
                                 onClick={exitGuard.blockLink}
@@ -2625,7 +2850,7 @@ export default function Play() {
                             <Link
                                 href={route('home')}
                                 onClick={exitGuard.blockLink}
-                                className="rounded-lg"
+                                className="shrink-0 rounded-lg"
                             >
                                 <Logo
                                     className="h-7 w-7"
@@ -2638,7 +2863,22 @@ export default function Play() {
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
+                        {turnSecondsLeft !== null && (
+                            <div className="flex min-w-0 items-center justify-center px-1">
+                                <TurnCountdownHud
+                                    secondsLeft={turnSecondsLeft}
+                                    totalSeconds={TURN_TIMEOUT_SECONDS}
+                                    phase={state.phase}
+                                    playerName={state.names[state.turn]}
+                                    isMyTurn={state.turn === state.human}
+                                    accentColor={
+                                        PLAYER_CONFIG[state.turn].palette.base
+                                    }
+                                />
+                            </div>
+                        )}
+
+                        <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
                             {screen === 'game' && !blockedByRoom && (
                                 <span
                                     className="border-line hidden items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-bold sm:inline-flex"
@@ -2729,6 +2969,26 @@ export default function Play() {
                             )}
                         </div>
                     </div>
+                    {turnSecondsLeft !== null && (
+                        <div
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-x-0 bottom-0 h-[2.5px] overflow-hidden bg-slate-900/5"
+                        >
+                            <div
+                                className="h-full transition-[width,background-color] duration-300 ease-linear"
+                                style={{
+                                    width: `${Math.max(0, Math.min(100, (turnSecondsLeft / TURN_TIMEOUT_SECONDS) * 100))}%`,
+                                    backgroundColor:
+                                        turnSecondsLeft <= 5
+                                            ? '#dc2626'
+                                            : turnSecondsLeft <= 10
+                                              ? '#d97706'
+                                              : PLAYER_CONFIG[state.turn]
+                                                    .palette.base,
+                                }}
+                            />
+                        </div>
+                    )}
                 </header>
 
                 {blockedByRoom || (roomNotice && !room) ? (
@@ -3087,9 +3347,12 @@ export default function Play() {
                                                             color: palette.text,
                                                         }}
                                                     >
-                                                        {winRank !== -1
-                                                            ? `#${winRank + 1}`
-                                                            : `${finished(color)}/4`}
+                                                        {isTurn &&
+                                                        turnSecondsLeft !== null
+                                                            ? `${String(turnSecondsLeft).padStart(2, '0')}s`
+                                                            : winRank !== -1
+                                                              ? `#${winRank + 1}`
+                                                              : `${finished(color)}/4`}
                                                     </span>
                                                 </div>
                                             );
@@ -3117,6 +3380,12 @@ export default function Play() {
                                                     !state.winner
                                                 }
                                                 finished={finished(color)}
+                                                countdownSeconds={
+                                                    state.turn === color &&
+                                                    !state.winner
+                                                        ? turnSecondsLeft
+                                                        : null
+                                                }
                                                 className="min-w-0 flex-1"
                                             />
                                         ))}
@@ -3212,10 +3481,12 @@ export default function Play() {
                                                 {turnSecondsLeft !== null && (
                                                     <span
                                                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold tabular-nums ${
-                                                            turnSecondsLeft <=
-                                                            10
+                                                            turnSecondsLeft <= 5
                                                                 ? 'bg-danger/12 text-danger animate-pulse'
-                                                                : 'bg-surface-muted text-ink-muted'
+                                                                : turnSecondsLeft <=
+                                                                    10
+                                                                  ? 'bg-amber-500/15 text-amber-700'
+                                                                  : 'bg-surface-muted text-ink-muted'
                                                         }`}
                                                         aria-label={`Sisa waktu giliran ${turnSecondsLeft} detik`}
                                                     >
@@ -3282,74 +3553,163 @@ export default function Play() {
                                     )}
                                 </section>
 
-                                <section className="shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/85 bg-white/95 backdrop-blur-md">
-                                    <div className="shrink-0 px-4 pt-3.5 pb-2">
-                                        <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">
-                                            PEMAIN
-                                        </h2>
-                                    </div>
-                                    <div
-                                        className={`flex min-h-0 flex-1 flex-col ${
-                                            state.order.length >= 5
-                                                ? 'divide-line/50 divide-y overflow-y-auto'
-                                                : ''
-                                        }`}
-                                    >
-                                        {state.order.map((color) => (
-                                            <PlayerCard
-                                                key={color}
-                                                size={
-                                                    state.order.length >= 5
-                                                        ? 'sm'
-                                                        : 'md'
-                                                }
-                                                color={color}
-                                                name={state.names[color]}
-                                                character={
-                                                    state.characters[color]
-                                                }
-                                                role={
-                                                    color === state.human
-                                                        ? 'Kamu'
-                                                        : 'Lawan'
-                                                }
-                                                subtitle={activeSubtitle(color)}
-                                                active={
-                                                    state.turn === color &&
-                                                    !state.winner
-                                                }
-                                                finished={finished(color)}
-                                                className={
-                                                    state.order.length >= 5
-                                                        ? 'shrink-0'
-                                                        : 'min-h-0 flex-1'
-                                                }
-                                            />
-                                        ))}
-                                    </div>
-                                    <div className="border-line/60 mt-auto flex shrink-0 items-center border-t bg-white/70 px-4 py-3 [@media(max-height:640px)]:hidden">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
-                                                Bidakmu keluar
-                                            </p>
-                                            <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
-                                                {outOfBase(state.human)}/4
-                                            </p>
+                                {compactPlayers && room && me ? (
+                                    <>
+                                        <section className="shadow-card shrink-0 overflow-hidden rounded-[22px] border border-white/85 bg-white/95 backdrop-blur-md">
+                                            <div className="shrink-0 px-4 pt-3.5 pb-2">
+                                                <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">
+                                                    PEMAIN
+                                                </h2>
+                                            </div>
+                                            <div className="px-2 pb-2">
+                                                <div
+                                                    className="flex min-w-0 items-center gap-2.5 rounded-2xl px-2 py-1.5 transition-colors"
+                                                    style={{
+                                                        background:
+                                                            rollPalette.soft,
+                                                        boxShadow: `inset 0 0 0 1.5px ${rollPalette.base}`,
+                                                    }}
+                                                >
+                                                    <img
+                                                        src={turnCharacter.image}
+                                                        alt={turnCharacter.name}
+                                                        width={32}
+                                                        height={32}
+                                                        className="h-8 w-8 shrink-0 rounded-full object-cover ring-1"
+                                                        style={{
+                                                            borderColor:
+                                                                rollPalette.base,
+                                                        }}
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-ink truncate text-sm font-bold">
+                                                            {
+                                                                state.names[
+                                                                    state.turn
+                                                                ]
+                                                            }
+                                                        </p>
+                                                        <p className="text-ink-muted truncate text-[10px] font-semibold">
+                                                            {activeSubtitle(
+                                                                state.turn,
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                    <span
+                                                        className="shrink-0 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-extrabold tabular-nums"
+                                                        style={{
+                                                            color: rollPalette.text,
+                                                        }}
+                                                    >
+                                                        {finished(state.turn)}/4
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="border-line/60 flex shrink-0 items-center border-t bg-white/70 px-4 py-2.5 [@media(max-height:640px)]:hidden">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
+                                                        Bidakmu keluar
+                                                    </p>
+                                                    <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
+                                                        {outOfBase(state.human)}/4
+                                                    </p>
+                                                </div>
+                                                <div
+                                                    className="bg-line/60 mx-3 h-7 w-px shrink-0"
+                                                    aria-hidden="true"
+                                                />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
+                                                        Total langkah
+                                                    </p>
+                                                    <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
+                                                        {state.totalMoves}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </section>
+                                        <RoomChatPanel
+                                            code={room.code}
+                                            playerId={me.id}
+                                            onMessage={showChatBubble}
+                                        />
+                                    </>
+                                ) : (
+                                    <section className="shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/85 bg-white/95 backdrop-blur-md">
+                                        <div className="shrink-0 px-4 pt-3.5 pb-2">
+                                            <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">
+                                                PEMAIN
+                                            </h2>
                                         </div>
                                         <div
-                                            className="bg-line/60 mx-3 h-7 w-px shrink-0"
-                                            aria-hidden="true"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
-                                                Total langkah
-                                            </p>
-                                            <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
-                                                {state.totalMoves}
-                                            </p>
+                                            className={`flex min-h-0 flex-1 flex-col ${
+                                                state.order.length >= 5
+                                                    ? 'divide-line/50 divide-y overflow-y-auto'
+                                                    : ''
+                                            }`}
+                                        >
+                                            {state.order.map((color) => (
+                                                <PlayerCard
+                                                    key={color}
+                                                    size={
+                                                        state.order.length >= 5
+                                                            ? 'sm'
+                                                            : 'md'
+                                                    }
+                                                    color={color}
+                                                    name={state.names[color]}
+                                                    character={
+                                                        state.characters[color]
+                                                    }
+                                                    role={
+                                                        color === state.human
+                                                            ? 'Kamu'
+                                                            : 'Lawan'
+                                                    }
+                                                    subtitle={activeSubtitle(color)}
+                                                    active={
+                                                        state.turn === color &&
+                                                        !state.winner
+                                                    }
+                                                    finished={finished(color)}
+                                                    countdownSeconds={
+                                                        state.turn === color &&
+                                                        !state.winner
+                                                            ? turnSecondsLeft
+                                                            : null
+                                                    }
+                                                    className={
+                                                        state.order.length >= 5
+                                                            ? 'shrink-0'
+                                                            : 'min-h-0 flex-1'
+                                                    }
+                                                />
+                                            ))}
                                         </div>
-                                    </div>
-                                </section>
+                                        <div className="border-line/60 mt-auto flex shrink-0 items-center border-t bg-white/70 px-4 py-3 [@media(max-height:640px)]:hidden">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
+                                                    Bidakmu keluar
+                                                </p>
+                                                <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
+                                                    {outOfBase(state.human)}/4
+                                                </p>
+                                            </div>
+                                            <div
+                                                className="bg-line/60 mx-3 h-7 w-px shrink-0"
+                                                aria-hidden="true"
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-ink-muted text-[9px] font-bold tracking-[0.12em] uppercase">
+                                                    Total langkah
+                                                </p>
+                                                <p className="text-ink mt-0.5 text-sm font-extrabold tabular-nums">
+                                                    {state.totalMoves}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </section>
+                                )}
                             </aside>
                         </div>
 
@@ -3387,9 +3747,11 @@ export default function Play() {
                                         {turnSecondsLeft !== null && (
                                             <span
                                                 className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold tabular-nums ${
-                                                    turnSecondsLeft <= 10
+                                                    turnSecondsLeft <= 5
                                                         ? 'bg-danger/12 text-danger animate-pulse'
-                                                        : 'bg-surface-muted text-ink-muted'
+                                                        : turnSecondsLeft <= 10
+                                                          ? 'bg-amber-500/15 text-amber-700'
+                                                          : 'bg-surface-muted text-ink-muted'
                                                 }`}
                                                 aria-label={`Sisa waktu giliran ${turnSecondsLeft} detik`}
                                             >
@@ -3540,9 +3902,17 @@ export default function Play() {
                 </div>
             )}
 
-            {room && me && screen === 'game' && !state.winner && (
-                <RoomChat code={room.code} playerId={me.id} onMessage={showChatBubble} />
-            )}
+            {room &&
+                me &&
+                screen === 'game' &&
+                !state.winner &&
+                !isDesktopChat && (
+                    <RoomChat
+                        code={room.code}
+                        playerId={me.id}
+                        onMessage={showChatBubble}
+                    />
+                )}
 
             <ConfirmLeaveModal
                 open={exitGuard.open}

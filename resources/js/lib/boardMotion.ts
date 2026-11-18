@@ -144,6 +144,97 @@ export const FLIGHT_SHADOW_KEYFRAMES: Keyframe[] = [
     { offset: 1, opacity: 1 },
 ];
 
+/** Cubic ease-in-out curve shared by drag keyframes and skid dust timing. */
+export function dragProgress(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** Sampled ground-level drag path from the capture cell back to the base pad. */
+export function dragKeyframes(
+    from: BoardPlacement,
+    to: BoardPlacement,
+): Keyframe[] {
+    const dxTotal = to.x - from.x;
+    const dyTotal = to.y - from.y;
+    const distance = Math.hypot(dxTotal, dyTotal) || 1;
+    const nx = -dyTotal / distance;
+    const ny = dxTotal / distance;
+    const samples = 16;
+
+    return Array.from({ length: samples + 1 }, (_, index) => {
+        const t = index / samples;
+        const progress = dragProgress(t);
+        const jitter =
+            index === 0 || index === samples
+                ? 0
+                : Math.sin(t * Math.PI * 5) * (1 - t) * 0.85;
+
+        return {
+            offset: t,
+            transform: placementTransform({
+                x: from.x + dxTotal * progress + nx * jitter,
+                y: from.y + dyTotal * progress + ny * jitter,
+                dx: from.dx + (to.dx - from.dx) * progress,
+                dy: from.dy + (to.dy - from.dy) * progress,
+            }),
+        };
+    });
+}
+
+export function dragDuration(from: BoardPlacement, to: BoardPlacement) {
+    const distance = Math.hypot(to.x - from.x, to.y - from.y);
+
+    return Math.round(Math.max(580, Math.min(920, 500 + distance * 5.8)));
+}
+
+/** Victim leans back and scrapes along the board while being dragged to base. */
+export function dragFigureKeyframes(
+    from: BoardPlacement,
+    to: BoardPlacement,
+): Keyframe[] {
+    const lean = to.x >= from.x ? -26 : 26;
+
+    return [
+        {
+            offset: 0,
+            transformOrigin: '50% 85%',
+            transform: 'rotate(0deg) scale(1)',
+        },
+        {
+            offset: 0.14,
+            transformOrigin: '50% 85%',
+            transform: `rotate(${lean * 1.15}deg) scale(1.06, 0.9)`,
+        },
+        {
+            offset: 0.45,
+            transformOrigin: '50% 85%',
+            transform: `rotate(${lean * 0.9}deg) scale(1.04, 0.92)`,
+        },
+        {
+            offset: 0.78,
+            transformOrigin: '50% 85%',
+            transform: `rotate(${lean * 1.05}deg) scale(1.05, 0.91)`,
+        },
+        {
+            offset: 0.92,
+            transformOrigin: '50% 85%',
+            transform: `rotate(${-lean * 0.22}deg) scale(0.96, 1.04)`,
+        },
+        {
+            offset: 1,
+            transformOrigin: '50% 85%',
+            transform: 'rotate(0deg) scale(1)',
+        },
+    ];
+}
+
+export const DRAG_SHADOW_KEYFRAMES: Keyframe[] = [
+    { offset: 0, opacity: 1, transform: 'scale(1)' },
+    { offset: 0.18, opacity: 0.82, transform: 'scale(1.18, 0.92)' },
+    { offset: 0.78, opacity: 0.78, transform: 'scale(1.15, 0.92)' },
+    { offset: 1, opacity: 1, transform: 'scale(1)' },
+];
+
 export const SHAKE_KEYFRAMES: Keyframe[] = [
     { transform: 'translate(0, 0)' },
     { transform: 'translate(-1.1%, 0.5%) rotate(-0.5deg)' },

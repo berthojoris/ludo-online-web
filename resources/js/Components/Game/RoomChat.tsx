@@ -10,21 +10,29 @@ type ChatMessage = {
     message: string;
 };
 
-export default function RoomChat({ code, playerId, onMessage }: {
+type RoomChatProps = {
     code: string;
     playerId: number;
     onMessage: (message: ChatMessage) => void;
+};
+
+/**
+ * Shared chat state and polling for both chat presentations (floating
+ * overlay on small screens, embedded panel on wide screens).
+ */
+function useRoomChat({
+    code,
+    playerId,
+    onMessage,
+    onIncoming,
+}: RoomChatProps & {
+    onIncoming?: (messages: ChatMessage[]) => void;
 }) {
-    const [open, setOpen] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [unread, setUnread] = useState(0);
     const [error, setError] = useState('');
     const cursor = useRef(0);
     const loaded = useRef(false);
-    const openRef = useRef(open);
-    const listRef = useRef<HTMLDivElement>(null);
     const chat = useHttp<{ message: string }, { message: ChatMessage }>({ message: '' });
-    openRef.current = open;
 
     const refresh = useCallback(async () => {
         try {
@@ -40,7 +48,7 @@ export default function RoomChat({ code, playerId, onMessage }: {
                 const others = fresh.filter((item) => item.room_player_id !== playerId);
                 if (loaded.current) {
                     others.forEach(onMessage);
-                    if (!openRef.current) setUnread((count) => count + others.length);
+                    onIncoming?.(others);
                 }
             }
             loaded.current = true;
@@ -48,7 +56,7 @@ export default function RoomChat({ code, playerId, onMessage }: {
         } catch {
             setError('Chat belum terhubung. Mencoba lagi…');
         }
-    }, [code, playerId, onMessage]);
+    }, [code, playerId, onMessage, onIncoming]);
 
     useEffect(() => {
         let active = true;
@@ -60,10 +68,6 @@ export default function RoomChat({ code, playerId, onMessage }: {
         void poll();
         return () => { active = false; window.clearTimeout(timer); };
     }, [refresh]);
-
-    useEffect(() => {
-        if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-    }, [messages, open]);
 
     const submit = async (event: FormEvent) => {
         event.preventDefault();
@@ -78,6 +82,49 @@ export default function RoomChat({ code, playerId, onMessage }: {
         }
     };
 
+    return { messages, error, chat, submit };
+}
+
+function ChatMessageList({ messages, playerId }: {
+    messages: ChatMessage[];
+    playerId: number;
+}) {
+    return (
+        <>
+            {messages.length === 0 && <p className="game-chat-empty">Belum ada pesan. Sapa pemain lain!</p>}
+            {messages.map((item) => (
+                <div key={item.id} className={`game-chat-message ${item.room_player_id === playerId ? 'is-mine' : ''}`}>
+                    <strong>{item.room_player_id === playerId ? 'Kamu' : item.name}</strong>
+                    <p>{item.message}</p>
+                </div>
+            ))}
+        </>
+    );
+}
+
+export default function RoomChat({ code, playerId, onMessage }: RoomChatProps) {
+    const [open, setOpen] = useState(false);
+    const [unread, setUnread] = useState(0);
+    const openRef = useRef(open);
+    const listRef = useRef<HTMLDivElement>(null);
+
+    const onIncoming = useCallback((incoming: ChatMessage[]) => {
+        if (!openRef.current) setUnread((count) => count + incoming.length);
+    }, []);
+
+    const { messages, error, chat, submit } = useRoomChat({
+        code,
+        playerId,
+        onMessage,
+        onIncoming,
+    });
+
+    openRef.current = open;
+
+    useEffect(() => {
+        if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    }, [messages, open]);
+
     return (
         <div className="game-chat">
             {open && (
@@ -87,13 +134,7 @@ export default function RoomChat({ code, playerId, onMessage }: {
                         <button type="button" className="game-chat-close" onClick={() => setOpen(false)} aria-label="Minimalkan chat">−</button>
                     </header>
                     <div ref={listRef} className="game-chat-messages" aria-live="polite">
-                        {messages.length === 0 && <p className="game-chat-empty">Belum ada pesan. Sapa pemain lain!</p>}
-                        {messages.map((item) => (
-                            <div key={item.id} className={`game-chat-message ${item.room_player_id === playerId ? 'is-mine' : ''}`}>
-                                <strong>{item.room_player_id === playerId ? 'Kamu' : item.name}</strong>
-                                <p>{item.message}</p>
-                            </div>
-                        ))}
+                        <ChatMessageList messages={messages} playerId={playerId} />
                     </div>
                     {error && <p className="game-chat-error" role="status">{error}</p>}
                     <form className="game-chat-form" onSubmit={submit}>
@@ -107,5 +148,38 @@ export default function RoomChat({ code, playerId, onMessage }: {
                 {unread > 0 && <span className="game-chat-badge">{unread > 99 ? '99+' : unread}</span>}
             </button>
         </div>
+    );
+}
+
+/**
+ * Always-open chat card for the desktop side panel. Fills the remaining
+ * height of its flex parent instead of floating above the board.
+ */
+export function RoomChatPanel({ code, playerId, onMessage }: RoomChatProps) {
+    const listRef = useRef<HTMLDivElement>(null);
+    const { messages, error, chat, submit } = useRoomChat({ code, playerId, onMessage });
+
+    useEffect(() => {
+        if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+    }, [messages]);
+
+    return (
+        <section
+            className="shadow-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/85 bg-white/95 backdrop-blur-md"
+            aria-label="Chat permainan"
+        >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line/60 px-4 pb-2 pt-3.5">
+                <h2 className="text-brand-ink text-[10px] font-extrabold tracking-[0.14em]">CHAT PEMAIN</h2>
+                <p className="text-ink-muted text-[10px] font-semibold tabular-nums">Ruang {code}</p>
+            </div>
+            <div ref={listRef} className="game-chat-messages" aria-live="polite">
+                <ChatMessageList messages={messages} playerId={playerId} />
+            </div>
+            {error && <p className="game-chat-error" role="status">{error}</p>}
+            <form className="game-chat-form" onSubmit={submit}>
+                <input aria-label="Tulis pesan" placeholder="Tulis pesan…" maxLength={200} value={chat.data.message} onChange={(event) => chat.setData('message', event.target.value)} />
+                <button type="submit" disabled={chat.processing || !chat.data.message.trim()} aria-busy={chat.processing}>{chat.processing ? '…' : 'Kirim'}</button>
+            </form>
+        </section>
     );
 }

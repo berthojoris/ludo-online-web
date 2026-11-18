@@ -111,6 +111,7 @@ class Room extends Model
             'starting_player_id' => $this->starting_player_id,
             'started_at' => $this->started_at?->toIso8601String(),
             'match_state' => $this->match_state,
+            'server_now' => now()->getTimestampMs(),
             'players' => $this->players->map(function (RoomPlayer $player) {
                 $character = $player->character;
                 if ($character === null && $this->status === 'started' && $player->seat_color) {

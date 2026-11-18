@@ -13,6 +13,7 @@ type PlayerCardProps = {
     subtitle: string;
     active: boolean;
     finished: number;
+    countdownSeconds?: number | null;
     size?: 'md' | 'sm';
     className?: string;
 };
@@ -25,6 +26,7 @@ export default function PlayerCard({
     subtitle,
     active,
     finished,
+    countdownSeconds,
     size = 'md',
     className = '',
 }: PlayerCardProps) {
@@ -137,15 +139,35 @@ export default function PlayerCard({
                         />
                     ))}
                 </div>
-                <p
-                    className={`font-extrabold tabular-nums ${
-                        compact ? 'text-[9px]' : 'text-[10px]'
-                    }`}
-                    aria-hidden="true"
-                >
-                    <span style={{ color: palette.text }}>{finished}</span>
-                    <span className="text-ink-muted">/4</span>
-                </p>
+                <div className="flex items-center gap-1">
+                    {active &&
+                        countdownSeconds !== null &&
+                        countdownSeconds !== undefined && (
+                            <span
+                                className={`rounded-full px-1.5 py-0.5 font-extrabold tabular-nums ${
+                                    compact ? 'text-[9px]' : 'text-[10px]'
+                                } ${
+                                    countdownSeconds <= 5
+                                        ? 'bg-danger/12 text-danger animate-pulse'
+                                        : countdownSeconds <= 10
+                                          ? 'bg-amber-500/15 text-amber-700'
+                                          : 'bg-white/90 text-ink shadow-2xs'
+                                }`}
+                                aria-label={`Sisa waktu ${countdownSeconds} detik`}
+                            >
+                                00:{String(countdownSeconds).padStart(2, '0')}
+                            </span>
+                        )}
+                    <p
+                        className={`font-extrabold tabular-nums ${
+                            compact ? 'text-[9px]' : 'text-[10px]'
+                        }`}
+                        aria-hidden="true"
+                    >
+                        <span style={{ color: palette.text }}>{finished}</span>
+                        <span className="text-ink-muted">/4</span>
+                    </p>
+                </div>
             </div>
         </div>
     );

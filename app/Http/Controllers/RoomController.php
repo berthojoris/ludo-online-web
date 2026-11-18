@@ -469,7 +469,10 @@ class RoomController extends Controller
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
 
-        if ($request->boolean('computer')) {
+        $isComputer = $request->boolean('computer');
+        $isTimeout = $request->boolean('timeout');
+
+        if ($isComputer || $isTimeout) {
             $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
         }
 
@@ -477,20 +480,27 @@ class RoomController extends Controller
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, &$player, $request) {
+        $action = DB::transaction(function () use ($room, &$player, $isComputer, $isTimeout, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $state = $room->match_state;
-            if ($request->boolean('computer')) {
+            if ($isComputer) {
                 $player = $players->get($state['turn'] ?? -1);
                 abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
+            } elseif ($isTimeout) {
+                $player = $players->get($state['turn'] ?? -1);
+                abort_unless($player !== null, 422, 'Pemain giliran tidak ditemukan.');
+                abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
+                $turnStartedAt = (int) ($state['turn_started_at'] ?? ($room->updated_at?->getTimestampMs() ?? 0));
+                $elapsedMs = now()->getTimestampMs() - $turnStartedAt;
+                abort_unless($turnStartedAt > 0 && $elapsedMs >= 28500, 422, 'Waktu giliran belum habis.');
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && ! in_array($index, $state['winners'] ?? [], true) && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
-            $value = $player->is_computer ? random_int(1, 6) : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
+            $value = ($player->is_computer || $isTimeout) ? random_int(1, 6) : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
             if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
                 $state['had_six'] = array_fill(0, count($state['tokens']), false);
             }
@@ -503,7 +513,9 @@ class RoomController extends Controller
             } else {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
+            $nowMs = now()->getTimestampMs();
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
+            $state['turn_started_at'] = $nowMs;
             $state['last_roll'] = [
                 'player' => $index,
                 'value' => $value,
@@ -518,6 +530,7 @@ class RoomController extends Controller
                 'player_id' => $player->id,
                 'value' => $value,
                 'state_version' => $state['state_version'],
+                'server_now' => $nowMs,
                 'match_state' => $state,
             ];
         });
@@ -529,8 +542,11 @@ class RoomController extends Controller
 
     public function move(Request $request, string $code): JsonResponse
     {
+        $isComputer = $request->boolean('computer');
+        $isTimeout = $request->boolean('timeout');
+
         $validated = $request->validate([
-            'token_index' => [$request->boolean('computer') ? 'sometimes' : 'required', 'integer', 'min:0', 'max:3'],
+            'token_index' => [($isComputer || $isTimeout) ? 'sometimes' : 'required', 'integer', 'min:0', 'max:3'],
         ]);
 
         self::playerToken($request);
@@ -541,7 +557,7 @@ class RoomController extends Controller
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
 
-        if ($request->boolean('computer')) {
+        if ($isComputer || $isTimeout) {
             $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
         }
 
@@ -549,20 +565,27 @@ class RoomController extends Controller
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, &$player, $validated, $request) {
+        $action = DB::transaction(function () use ($room, &$player, $validated, $isComputer, $isTimeout, $request) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $state = $room->match_state;
-            if ($request->boolean('computer')) {
+            if ($isComputer) {
                 $player = $players->get($state['turn'] ?? -1);
                 abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
+            } elseif ($isTimeout) {
+                $player = $players->get($state['turn'] ?? -1);
+                abort_unless($player !== null, 422, 'Pemain giliran tidak ditemukan.');
+                abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
+                $turnStartedAt = (int) ($state['turn_started_at'] ?? ($room->updated_at?->getTimestampMs() ?? 0));
+                $elapsedMs = now()->getTimestampMs() - $turnStartedAt;
+                abort_unless($turnStartedAt > 0 && $elapsedMs >= 28500, 422, 'Waktu giliran belum habis.');
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
-            $tokenIndex = $player->is_computer ? MatchRules::computerMove($state, $index) : (int) $validated['token_index'];
+            $tokenIndex = ($player->is_computer || $isTimeout) ? MatchRules::computerMove($state, $index) : (int) $validated['token_index'];
             $moves = MatchRules::moves($state, $index, $state['dice']);
             abort_unless(array_key_exists($tokenIndex, $moves), 422, 'Langkah tidak sah.');
             $target = $moves[$tokenIndex];
@@ -602,8 +625,10 @@ class RoomController extends Controller
             if (! $matchOver && ($playerFinished || ($state['dice'] !== 6 && ! $captured && $target !== $finishPosition))) {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
             }
+            $nowMs = now()->getTimestampMs();
             $state['dice'] = null;
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
+            $state['turn_started_at'] = $matchOver ? null : $nowMs;
             $room->match_state = $state;
             $room->save();
 
@@ -613,6 +638,7 @@ class RoomController extends Controller
                 'player_id' => $player->id,
                 'token_index' => $tokenIndex,
                 'state_version' => $state['state_version'],
+                'server_now' => $nowMs,
                 'match_state' => $state,
             ];
         });

@@ -1,5 +1,10 @@
 import {
     BoardPlacement,
+    DRAG_SHADOW_KEYFRAMES,
+    dragDuration,
+    dragFigureKeyframes,
+    dragKeyframes,
+    dragProgress,
     FLIGHT_SHADOW_KEYFRAMES,
     HIT_KEYFRAMES,
     HIT_STOP_MS,
@@ -70,7 +75,10 @@ export type LudoBoardHandle = {
         path: Cell[],
         options?: { leap?: boolean; onStep?: (index: number) => void },
     ) => Promise<void>;
-    knockTokens: (targets: { id: string; to: Cell }[]) => Promise<void>;
+    knockTokens: (
+        targets: { id: string; to: Cell }[],
+        options?: { mode?: 'drag' | 'throw' },
+    ) => Promise<void>;
     impact: (point: Cell, color: PlayerColor) => void;
     stopAll: () => void;
 };
@@ -1352,10 +1360,12 @@ export default function LudoBoard({
                 });
             },
 
-            async knockTokens(targets) {
+            async knockTokens(targets, options = {}) {
                 if (prefersReducedMotion()) {
                     return;
                 }
+
+                const mode = options.mode ?? 'drag';
 
                 await Promise.all(
                     targets.map(({ id, to }) => {
@@ -1367,13 +1377,18 @@ export default function LudoBoard({
                         }
 
                         const destination = toPlacement(to);
-                        const duration = launchDuration(
-                            committed.placement,
-                            destination,
-                        );
+                        const isDrag = mode === 'drag';
+                        const duration = isDrag
+                            ? dragDuration(committed.placement, destination)
+                            : launchDuration(committed.placement, destination);
                         const motion = startMotion(id);
                         const flight = element.animate(
-                            launchKeyframes(committed.placement, destination),
+                            isDrag
+                                ? dragKeyframes(committed.placement, destination)
+                                : launchKeyframes(
+                                      committed.placement,
+                                      destination,
+                                  ),
                             {
                                 duration,
                                 delay: HIT_STOP_MS,
@@ -1392,21 +1407,66 @@ export default function LudoBoard({
                                 figure.animate(HIT_KEYFRAMES, {
                                     duration: HIT_STOP_MS,
                                 }),
-                                figure.animate(SPIN_KEYFRAMES, {
-                                    duration,
-                                    delay: HIT_STOP_MS,
-                                    easing: 'cubic-bezier(0.3, 0.6, 0.4, 1)',
-                                }),
+                                figure.animate(
+                                    isDrag
+                                        ? dragFigureKeyframes(
+                                              committed.placement,
+                                              destination,
+                                          )
+                                        : SPIN_KEYFRAMES,
+                                    {
+                                        duration,
+                                        delay: HIT_STOP_MS,
+                                        easing: isDrag
+                                            ? 'linear'
+                                            : 'cubic-bezier(0.3, 0.6, 0.4, 1)',
+                                    },
+                                ),
                             );
                         }
 
                         if (shadow) {
                             motion.animations.push(
-                                shadow.animate(FLIGHT_SHADOW_KEYFRAMES, {
-                                    duration,
-                                    delay: HIT_STOP_MS,
-                                }),
+                                shadow.animate(
+                                    isDrag
+                                        ? DRAG_SHADOW_KEYFRAMES
+                                        : FLIGHT_SHADOW_KEYFRAMES,
+                                    {
+                                        duration,
+                                        delay: HIT_STOP_MS,
+                                    },
+                                ),
                             );
+                        }
+
+                        if (isDrag) {
+                            [0.24, 0.52, 0.78].forEach((t) => {
+                                const progress = dragProgress(t);
+
+                                motion.timers.push(
+                                    window.setTimeout(() => {
+                                        if (!isCurrent(id, motion)) {
+                                            return;
+                                        }
+
+                                        addEffect({
+                                            kind: 'dust',
+                                            x:
+                                                committed.placement.x +
+                                                (destination.x -
+                                                    committed.placement.x) *
+                                                    progress,
+                                            y:
+                                                committed.placement.y +
+                                                (destination.y -
+                                                    committed.placement.y) *
+                                                    progress +
+                                                feetOffset,
+                                            color: committed.color,
+                                        });
+                                    }, HIT_STOP_MS + Math.round(duration * t)),
+                                );
+                            });
                         }
 
                         return settled(flight).then(() => {
