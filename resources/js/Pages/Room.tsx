@@ -5,6 +5,7 @@ import RequiredPlayerNameModal from '@/Components/Game/RequiredPlayerNameModal';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ArrowRightIcon,
+    ChatBubbleIcon,
     CheckIcon,
     ChevronLeftIcon,
     CloseIcon,
@@ -19,6 +20,7 @@ import {
 } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
+import RoomChat from '@/Components/Game/RoomChat';
 import {
     ALL_PLAYER_COLORS,
     ARENA_BACKGROUND_IMAGE,
@@ -204,6 +206,8 @@ function RoomContent() {
     const [characterModalOpen, setCharacterModalOpen] = useState(false);
     const [characterModalSeat, setCharacterModalSeat] =
         useState<PlayerColor | null>(null);
+    const [chatOpen, setChatOpen] = useState(false);
+    const [chatUnread, setChatUnread] = useState(0);
     const advancedOverlayStyle = useModalViewport(advancedModalOpen);
     const hostRenameOverlayStyle = useModalViewport(hostEditingPlayer !== null);
 
@@ -213,10 +217,14 @@ function RoomContent() {
         if (serverRoom?.code) {
             setJoinCode(serverRoom.code);
         }
-        if (serverMe?.name) {
+        // Partial reloads (fallback poll / broadcast) recreate the prop
+        // identities every few seconds. Never let them clobber the draft
+        // while the player is typing a new name — re-sync only once the
+        // editor closes, using whatever name the server returned then.
+        if (!editingName && serverMe?.name) {
             setNameDraft(serverMe.name);
         }
-    }, [initialMode, serverRoom, serverMe]);
+    }, [initialMode, serverRoom, serverMe, editingName]);
 
     useEffect(() => {
         setActionError(roomError ?? null);
@@ -288,9 +296,33 @@ function RoomContent() {
         };
     }, [roomCode]);
 
-    // Lightweight fallback sync while waiting in lobby
+    const currentMe: RoomPlayerData | null =
+        liveRoom?.players.find((p) => p.id === serverMe?.id) ??
+        serverMe ??
+        null;
+    const isHost = Boolean(currentMe?.is_host);
+    const requiredNameModalOpen =
+        Boolean(
+            liveRoom &&
+                currentMe?.seat_color &&
+                !currentMe.name_confirmed &&
+                liveRoom.status === 'waiting',
+        ) && !characterModalOpen;
+
+    // Lightweight fallback sync while waiting in lobby. Paused whenever a
+    // mutating request is in flight or the required-name modal is open: a
+    // reload cancels Inertia's pending request, so an in-flight name save
+    // (or seat/ready/patch action) would be silently dropped and the lobby
+    // would snap back to the old server state.
     useEffect(() => {
-        if (!roomCode || roomStatus !== 'waiting' || viewMode !== 'lobby') {
+        if (
+            !roomCode ||
+            roomStatus !== 'waiting' ||
+            viewMode !== 'lobby' ||
+            pendingAction ||
+            renamingPlayerId !== null ||
+            requiredNameModalOpen
+        ) {
             return;
         }
 
@@ -303,7 +335,14 @@ function RoomContent() {
         }, 4000);
 
         return () => window.clearInterval(interval);
-    }, [roomCode, roomStatus, viewMode]);
+    }, [
+        roomCode,
+        roomStatus,
+        viewMode,
+        pendingAction,
+        renamingPlayerId,
+        requiredNameModalOpen,
+    ]);
 
     // Auto-redirect all players when host starts the match
     useEffect(() => {
@@ -315,12 +354,6 @@ function RoomContent() {
     const cue = () => {
         void unlockAudio().then(playUiSound);
     };
-
-    const currentMe: RoomPlayerData | null =
-        liveRoom?.players.find((p) => p.id === serverMe?.id) ??
-        serverMe ??
-        null;
-    const isHost = Boolean(currentMe?.is_host);
 
     const seatedInLobby =
         viewMode === 'lobby' &&
@@ -785,7 +818,7 @@ function RoomContent() {
                         </div>
 
                         <div className="flex shrink-0 items-center gap-1.5">
-                            {viewMode === 'lobby' && liveRoom && (
+                            {viewMode === 'lobby' && liveRoom && isHost && (
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -1821,30 +1854,61 @@ function RoomContent() {
                                             </button>
                                         </div>
 
-                                        {isHost ? (
+                                        <div className="flex min-w-0 items-center gap-2">
+                                            {isHost ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={
+                                                        !allReady || pendingAction
+                                                    }
+                                                    onClick={handleStartMatch}
+                                                    aria-busy={pendingAction}
+                                                    className="btn btn-primary min-w-0 flex-1"
+                                                >
+                                                    <DiceIcon
+                                                        className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
+                                                    />
+                                                    {pendingAction
+                                                        ? 'Memulai…'
+                                                        : 'Start'}
+                                                </button>
+                                            ) : (
+                                                <div className="bg-surface-muted text-ink-muted inline-flex h-11 min-w-0 flex-1 items-center justify-center rounded-xl px-2.5 text-center text-xs font-semibold">
+                                                    <span className="truncate">
+                                                        {allReady
+                                                            ? 'Semua siap · Menunggu host'
+                                                            : 'Menunggu host memulai'}
+                                                    </span>
+                                                </div>
+                                            )}
+
                                             <button
                                                 type="button"
-                                                disabled={
-                                                    !allReady || pendingAction
+                                                onClick={() => {
+                                                    cue();
+                                                    setChatOpen(
+                                                        (current) => !current,
+                                                    );
+                                                }}
+                                                aria-label={
+                                                    chatOpen
+                                                        ? 'Tutup chat'
+                                                        : 'Buka chat'
                                                 }
-                                                onClick={handleStartMatch}
-                                                aria-busy={pendingAction}
-                                                className="btn btn-primary"
+                                                aria-expanded={chatOpen}
+                                                className="btn btn-secondary relative shrink-0 px-3"
                                             >
-                                                <DiceIcon
-                                                    className={`h-4 w-4 ${pendingAction ? 'animate-spin' : ''}`}
-                                                />
-                                                {pendingAction
-                                                    ? 'Memulai…'
-                                                    : 'Start'}
+                                                <ChatBubbleIcon className="h-4 w-4" />
+                                                <span>Chat</span>
+                                                {chatUnread > 0 && (
+                                                    <span className="game-chat-badge">
+                                                        {chatUnread > 99
+                                                            ? '99+'
+                                                            : chatUnread}
+                                                    </span>
+                                                )}
                                             </button>
-                                        ) : (
-                                            <div className="bg-surface-muted text-ink-muted inline-flex h-11 items-center justify-center rounded-xl px-3 text-center text-xs font-semibold">
-                                                {allReady
-                                                    ? 'Semua siap · Menunggu host'
-                                                    : 'Menunggu host memulai'}
-                                            </div>
-                                        )}
+                                        </div>
 
                                         <p className="text-ink-muted pt-0.5 text-center text-[11px] leading-4">
                                             {startBlockedReason ??
@@ -1926,7 +1990,7 @@ function RoomContent() {
             </div>
 
             <RequiredPlayerNameModal
-                open={Boolean(liveRoom && currentMe?.seat_color && !currentMe.name_confirmed && liveRoom.status === 'waiting') && !characterModalOpen}
+                open={requiredNameModalOpen}
                 roomCode={liveRoom?.code ?? ''}
             />
 
@@ -1951,7 +2015,7 @@ function RoomContent() {
                 onConfirm={handleConfirmCharacter}
             />
 
-            {advancedModalOpen && liveRoom && (
+            {advancedModalOpen && liveRoom && isHost && (
                 <div
                     className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
                     style={advancedOverlayStyle}
@@ -2182,6 +2246,20 @@ function RoomContent() {
                     postRoomCreation(password || undefined, vsComputer);
                 }}
             />
+
+            {viewMode === 'lobby' &&
+                liveRoom &&
+                currentMe &&
+                liveRoom.status === 'waiting' && (
+                    <RoomChat
+                        code={liveRoom.code}
+                        playerId={currentMe.id}
+                        open={chatOpen}
+                        onOpenChange={setChatOpen}
+                        onUnreadChange={setChatUnread}
+                        containerClassName="game-chat-room"
+                    />
+                )}
 
             <ConfirmLeaveModal
                 open={exitGuard.open}

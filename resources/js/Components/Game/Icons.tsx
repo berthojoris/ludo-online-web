@@ -329,3 +329,11 @@ export function SlidersIcon(props: IconProps) {
         </svg>
     );
 }
+
+export function ChatBubbleIcon(props: IconProps) {
+    return (
+        <svg {...base} strokeWidth={2} {...props}>
+            <path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.5-.8L4 20l1.3-4A7.5 7.5 0 1 1 20 11.5Z" />
+        </svg>
+    );
+}

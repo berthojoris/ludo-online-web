@@ -16,8 +16,11 @@ class RoomChatController extends Controller
         RoomController::playerToken($request);
         $room = Room::where('code', strtoupper($code))->firstOrFail();
         $player = PlayerResume::find($request, $room);
-        abort_unless($player && $player->seat_color && ! $player->is_computer, 403);
-        abort_unless($room->status === 'started', 422, 'Permainan belum dimulai atau sudah berakhir.');
+        abort_unless($player && ! $player->is_computer, 403);
+        abort_unless(in_array($room->status, ['waiting', 'started'], true), 422, 'Permainan sudah berakhir.');
+        if ($room->status === 'started') {
+            abort_unless($player->seat_color, 403);
+        }
 
         return [$room, $player];
     }
@@ -45,7 +48,7 @@ class RoomChatController extends Controller
             'room_id' => $room->id,
             'room_player_id' => $player->id,
             'name' => $player->name,
-            'seat_color' => $player->seat_color,
+            'seat_color' => $player->seat_color ?? '',
             'message' => $message,
             'created_at' => now(),
             'updated_at' => now(),

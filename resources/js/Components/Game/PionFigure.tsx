@@ -52,8 +52,11 @@ export default function PionFigure({
                     {hasCount && (
                         <span className="pion-count">{stackCount}</span>
                     )}
-                    {art.failed && <LudoPin className="pion-art-fallback" />}
+                    {(!art.loaded || art.failed) && (
+                        <LudoPin className="pion-art-fallback" />
+                    )}
                     <img
+                        ref={art.ref}
                         src={art.src}
                         alt=""
                         width={192}
@@ -62,7 +65,7 @@ export default function PionFigure({
                         decoding="sync"
                         onError={art.onError}
                         onLoad={art.onLoad}
-                        data-failed={art.failed || undefined}
+                        data-failed={!art.loaded || art.failed || undefined}
                         className="pion-art"
                     />
                 </span>

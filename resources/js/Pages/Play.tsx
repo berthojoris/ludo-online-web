@@ -1041,11 +1041,15 @@ function useBoardSize(active: boolean) {
 
 export default function Play() {
     const [chatBubbles, setChatBubbles] = useState<Partial<Record<PlayerColor, { id: number; message: string }>>>({});
-    const showChatBubble = useCallback((item: { id: number; seat_color: PlayerColor; message: string }) => {
-        setChatBubbles((current) => ({ ...current, [item.seat_color]: { id: item.id, message: item.message } }));
+    const showChatBubble = useCallback((item: { id: number; seat_color?: PlayerColor | string | null; message: string }) => {
+        if (!item.seat_color || !(item.seat_color in PLAYER_CONFIG)) {
+            return;
+        }
+        const color = item.seat_color as PlayerColor;
+        setChatBubbles((current) => ({ ...current, [color]: { id: item.id, message: item.message } }));
         window.setTimeout(() => {
-            setChatBubbles((current) => current[item.seat_color]?.id === item.id
-                ? { ...current, [item.seat_color]: undefined }
+            setChatBubbles((current) => current[color]?.id === item.id
+                ? { ...current, [color]: undefined }
                 : current);
         }, 7000);
     }, []);
@@ -1116,7 +1120,10 @@ export default function Play() {
     const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const boardHandleRef = useRef<LudoBoardHandle>(null);
-    const rollHttp = useHttp<Record<string, never>, MatchCommandResponse>();
+    const rollHttp = useHttp<
+        { timeout?: boolean; state_version?: number },
+        MatchCommandResponse
+    >();
     const moveHttp = useHttp<{ token_index: number }, MatchCommandResponse>({
         token_index: 0,
     });
@@ -2161,7 +2168,12 @@ export default function Play() {
             state.legalMoves.length === 0 ||
             state.winner
         ) {
-            if (state.phase === 'idle' || state.winner) {
+            if (
+                (state.phase === 'idle' &&
+                    !rollPendingRef.current &&
+                    !timeoutPendingRef.current) ||
+                state.winner
+            ) {
                 autoPlayAfterTimeoutRollRef.current = false;
             }
 
@@ -2170,7 +2182,10 @@ export default function Play() {
 
         const isAfkAutoMove =
             autoPlayAfterTimeoutRollRef.current ||
-            Boolean(room?.match_state?.afk_auto_move);
+            Boolean(
+                room?.match_state?.state_version === state.version &&
+                    room?.match_state?.afk_auto_move,
+            );
 
         if (room && state.turn !== state.human) {
             if (!isAfkAutoMove || isComputerTurn || timeoutPendingRef.current) {
@@ -2367,6 +2382,20 @@ export default function Play() {
         state.tokens[color].filter((position) => position !== BASE_POSITION)
             .length;
 
+    const boardWinners = useMemo<PlayerId[]>(() => {
+        const finishedWinners = state.winners.filter((color) =>
+            state.tokens[color].every(
+                (position) => position === activeSpec.finishPosition,
+            ),
+        );
+
+        if (finishedWinners.length > 0) {
+            return finishedWinners;
+        }
+
+        return state.winner ? [state.winner] : [];
+    }, [state.winners, state.winner, state.tokens, activeSpec.finishPosition]);
+
     const standings = useMemo<MatchStanding[]>(() => {
         if (!state.winner) {
             return [];
@@ -2501,7 +2530,7 @@ export default function Play() {
             : `inset 0 0 0 1px ${rollPalette.base}2e`,
     };
 
-    const handleRoll = async () => {
+    const executeRoll = async (isTimeout = false) => {
         if (!canRoll) {
             return;
         }
@@ -2523,6 +2552,14 @@ export default function Play() {
                 document
                     .querySelector('meta[name="csrf-token"]')
                     ?.getAttribute('content') ?? '';
+            rollHttp.transform(() =>
+                isTimeout
+                    ? {
+                          timeout: true,
+                          state_version: stateRef.current.version,
+                      }
+                    : {},
+            );
             const data = await rollHttp.post(
                 route('rooms.match.roll', { code: room.code }),
                 { headers: { 'X-CSRF-TOKEN': csrf } },
@@ -2578,12 +2615,17 @@ export default function Play() {
         }
     };
 
-    const handleRollRef = useRef(handleRoll);
-    handleRollRef.current = handleRoll;
+    const handleRoll = () => executeRoll(false);
+
+    const executeRollRef = useRef(executeRoll);
+    executeRollRef.current = executeRoll;
 
     const isAfkAutoMove =
         autoPlayAfterTimeoutRollRef.current ||
-        Boolean(room?.match_state?.afk_auto_move);
+        Boolean(
+            room?.match_state?.state_version === state.version &&
+                room?.match_state?.afk_auto_move,
+        );
 
     const turnTimerActive =
         screen === 'game' &&
@@ -2662,7 +2704,7 @@ export default function Play() {
             if (!activeRoom || current.turn === current.human) {
                 if (current.phase === 'idle') {
                     autoPlayAfterTimeoutRollRef.current = true;
-                    void handleRollRef.current();
+                    void executeRollRef.current(true);
                 } else if (
                     current.phase === 'choosing' &&
                     current.legalMoves.length > 0
@@ -3518,10 +3560,9 @@ export default function Play() {
                                                             : turnLabel
                                                     }
                                                     firstWinner={
-                                                        state.winners[0] ??
-                                                        state.winner ??
-                                                        null
+                                                        boardWinners[0] ?? null
                                                     }
+                                                    winners={boardWinners}
                                                     className="h-full w-full"
                                                 />
                                             </div>

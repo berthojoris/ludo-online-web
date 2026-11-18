@@ -1,19 +1,25 @@
+import { ChatBubbleIcon } from '@/Components/Game/Icons';
 import { PlayerColor } from '@/lib/ludo';
 import { useHttp } from '@inertiajs/react';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
-type ChatMessage = {
+export type ChatMessage = {
     id: number;
     room_player_id: number;
     name: string;
-    seat_color: PlayerColor;
+    seat_color?: PlayerColor | string | null;
     message: string;
 };
 
 type RoomChatProps = {
     code: string;
     playerId: number;
-    onMessage: (message: ChatMessage) => void;
+    onMessage?: (message: ChatMessage) => void;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    onUnreadChange?: (unread: number) => void;
+    toggleClassName?: string;
+    containerClassName?: string;
 };
 
 /**
@@ -47,7 +53,7 @@ function useRoomChat({
                 setMessages((current) => [...current, ...fresh]);
                 const others = fresh.filter((item) => item.room_player_id !== playerId);
                 if (loaded.current) {
-                    others.forEach(onMessage);
+                    others.forEach((item) => onMessage?.(item));
                     onIncoming?.(others);
                 }
             }
@@ -102,11 +108,35 @@ function ChatMessageList({ messages, playerId }: {
     );
 }
 
-export default function RoomChat({ code, playerId, onMessage }: RoomChatProps) {
-    const [open, setOpen] = useState(false);
+export default function RoomChat({
+    code,
+    playerId,
+    onMessage,
+    open: controlledOpen,
+    onOpenChange,
+    onUnreadChange,
+    toggleClassName = '',
+    containerClassName = '',
+}: RoomChatProps) {
+    const [internalOpen, setInternalOpen] = useState(false);
     const [unread, setUnread] = useState(0);
+    const isControlled = controlledOpen !== undefined;
+    const open = isControlled ? controlledOpen : internalOpen;
     const openRef = useRef(open);
     const listRef = useRef<HTMLDivElement>(null);
+
+    const setOpen = useCallback(
+        (next: boolean) => {
+            if (!isControlled) {
+                setInternalOpen(next);
+            }
+            onOpenChange?.(next);
+            if (next) {
+                setUnread(0);
+            }
+        },
+        [isControlled, onOpenChange],
+    );
 
     const onIncoming = useCallback((incoming: ChatMessage[]) => {
         if (!openRef.current) setUnread((count) => count + incoming.length);
@@ -122,11 +152,36 @@ export default function RoomChat({ code, playerId, onMessage }: RoomChatProps) {
     openRef.current = open;
 
     useEffect(() => {
-        if (open && listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+        if (open) {
+            setUnread(0);
+            if (listRef.current) {
+                listRef.current.scrollTop = listRef.current.scrollHeight;
+            }
+        }
     }, [messages, open]);
 
+    useEffect(() => {
+        onUnreadChange?.(unread);
+    }, [unread, onUnreadChange]);
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && !document.querySelector('[role="dialog"]')) {
+                setOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [open, setOpen]);
+
     return (
-        <div className="game-chat">
+        <div className={`game-chat ${containerClassName}`.trim()}>
             {open && (
                 <section className="game-chat-panel" aria-label="Chat permainan">
                     <header className="game-chat-header">
@@ -143,8 +198,14 @@ export default function RoomChat({ code, playerId, onMessage }: RoomChatProps) {
                     </form>
                 </section>
             )}
-            <button type="button" className="game-chat-toggle" aria-label={open ? 'Minimalkan chat' : 'Buka chat'} aria-expanded={open} onClick={() => { setOpen(!open); setUnread(0); }}>
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5 8 8 0 0 1-3.5-.8L4 20l1.3-4A7.5 7.5 0 1 1 20 11.5Z" /></svg>
+            <button
+                type="button"
+                className={`game-chat-toggle ${toggleClassName}`.trim()}
+                aria-label={open ? 'Minimalkan chat' : 'Buka chat'}
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+            >
+                <ChatBubbleIcon />
                 {unread > 0 && <span className="game-chat-badge">{unread > 99 ? '99+' : unread}</span>}
             </button>
         </div>

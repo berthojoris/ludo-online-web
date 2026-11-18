@@ -109,6 +109,7 @@ type LudoBoardProps = {
     activeColor?: PlayerColor;
     activeLabel?: string;
     firstWinner?: PlayerColor | null;
+    winners?: PlayerColor[];
     order?: PlayerColor[];
     arms?: number;
     skillBursts?: SkillBurst[];
@@ -366,6 +367,7 @@ type BoardSurfaceProps = {
     activeColor?: PlayerColor;
     activeLabel?: string;
     firstWinner?: PlayerColor | null;
+    winners?: PlayerColor[];
 };
 
 function sameRecord<T>(
@@ -380,6 +382,36 @@ function sameRecord<T>(
     );
 }
 
+function sameArray<T>(a?: T[], b?: T[]): boolean {
+    if (a === b) {
+        return true;
+    }
+
+    if (!a || !b || a.length !== b.length) {
+        return false;
+    }
+
+    return a.every((item, index) => item === b[index]);
+}
+
+function radialMedalColors(rank: number): {
+    fill: string;
+    stroke: string;
+    text: string;
+} {
+    if (rank === 1) {
+        return { fill: '#fde047', stroke: '#b45309', text: '#78350f' };
+    }
+    if (rank === 2) {
+        return { fill: '#e2e8f0', stroke: '#475569', text: '#1e293b' };
+    }
+    if (rank === 3) {
+        return { fill: '#fdba74', stroke: '#7c2d12', text: '#431407' };
+    }
+
+    return { fill: '#cbd5e1', stroke: '#334155', text: '#1e293b' };
+}
+
 /** The static board art. It only re-renders when the turn or names change. */
 const BoardSurface = memo(
     function BoardSurface({
@@ -389,9 +421,19 @@ const BoardSurface = memo(
         activeColor,
         activeLabel,
         firstWinner,
+        winners,
     }: BoardSurfaceProps) {
         const cellBox = spec.cellSizePercent * 0.9;
         const cellRx = cellBox * 0.2;
+        const resolvedWinners =
+            winners && winners.length > 0
+                ? winners
+                : firstWinner
+                  ? [firstWinner]
+                  : [];
+        const winnerRankMap = new Map<PlayerColor, number>(
+            resolvedWinners.map((color, index) => [color, index + 1]),
+        );
 
         return (
             <div className="absolute inset-0 overflow-hidden rounded-[5.5%] border-[3px] border-white/90 bg-white shadow-[0_22px_55px_-20px_rgba(20,32,52,0.55)]">
@@ -451,7 +493,27 @@ const BoardSurface = memo(
                             {spec.wedges.map((wedge) => {
                                 const palette =
                                     PLAYER_CONFIG[wedge.color].palette;
-                                const isActive = wedge.color === activeColor;
+                                const winRank = winnerRankMap.get(wedge.color);
+                                const isWinner = winRank !== undefined;
+                                const isActive =
+                                    !isWinner && wedge.color === activeColor;
+                                const medalCenter = isWinner
+                                    ? {
+                                          x:
+                                              wedge.basePads.reduce(
+                                                  (sum, pad) => sum + pad.x,
+                                                  0,
+                                              ) / wedge.basePads.length,
+                                          y:
+                                              wedge.basePads.reduce(
+                                                  (sum, pad) => sum + pad.y,
+                                                  0,
+                                              ) / wedge.basePads.length,
+                                      }
+                                    : null;
+                                const medal = isWinner
+                                    ? radialMedalColors(winRank)
+                                    : null;
 
                                 return (
                                     <g key={`wedge-${wedge.color}`}>
@@ -466,23 +528,57 @@ const BoardSurface = memo(
                                         />
                                         <path
                                             d={wedge.innerPath}
-                                            fill="rgba(255,255,255,0.95)"
-                                            stroke="rgba(255,255,255,0.75)"
-                                            strokeWidth="0.22"
+                                            fill={
+                                                isWinner
+                                                    ? palette.soft
+                                                    : 'rgba(255,255,255,0.95)'
+                                            }
+                                            stroke={
+                                                medal
+                                                    ? medal.fill
+                                                    : 'rgba(255,255,255,0.75)'
+                                            }
+                                            strokeWidth={isWinner ? '0.45' : '0.22'}
                                             strokeLinejoin="round"
                                         />
-                                        {wedge.basePads.map((pad, idx) => (
-                                            <circle
-                                                key={`pad-${wedge.color}-${idx}`}
-                                                cx={pad.x}
-                                                cy={pad.y}
-                                                r={spec.padSizePercent / 2}
-                                                fill="rgba(255,255,255,0.65)"
-                                                stroke={`${palette.base}75`}
-                                                strokeWidth="0.45"
-                                            />
-                                        ))}
-                                        {activeColor && !isActive && (
+                                        {!isWinner &&
+                                            wedge.basePads.map((pad, idx) => (
+                                                <circle
+                                                    key={`pad-${wedge.color}-${idx}`}
+                                                    cx={pad.x}
+                                                    cy={pad.y}
+                                                    r={spec.padSizePercent / 2}
+                                                    fill="rgba(255,255,255,0.65)"
+                                                    stroke={`${palette.base}75`}
+                                                    strokeWidth="0.45"
+                                                />
+                                            ))}
+                                        {isWinner && medalCenter && medal && (
+                                            <g>
+                                                <circle
+                                                    cx={medalCenter.x}
+                                                    cy={medalCenter.y}
+                                                    r={spec.padSizePercent * 0.68}
+                                                    fill={medal.fill}
+                                                    stroke={medal.stroke}
+                                                    strokeWidth="0.55"
+                                                />
+                                                <text
+                                                    x={medalCenter.x}
+                                                    y={medalCenter.y}
+                                                    textAnchor="middle"
+                                                    dominantBaseline="central"
+                                                    fill={medal.text}
+                                                    fontSize={
+                                                        spec.padSizePercent * 0.78
+                                                    }
+                                                    fontWeight="900"
+                                                >
+                                                    {winRank}
+                                                </text>
+                                            </g>
+                                        )}
+                                        {activeColor && !isActive && !isWinner && (
                                             <path
                                                 d={wedge.outerPath}
                                                 fill="rgba(255,255,255,0.26)"
@@ -606,16 +702,12 @@ const BoardSurface = memo(
                         </svg>
 
                         {spec.wedges.map((wedge) => {
-                            const charConfig = getCharacterConfig(
-                                playerCharacters[wedge.color],
-                                wedge.color,
-                            );
-                            const palette =
-                                wedge.color === firstWinner
-                                    ? PLAYER_CONFIG[charConfig.accentColor]
-                                          .palette
-                                    : PLAYER_CONFIG[wedge.color].palette;
-                            const isWinner = wedge.color === firstWinner;
+                            const palette = PLAYER_CONFIG[wedge.color].palette;
+                            const winRank = winnerRankMap.get(wedge.color);
+                            const isWinner = winRank !== undefined;
+                            const medal = isWinner
+                                ? radialMedalColors(winRank)
+                                : null;
                             const isActive =
                                 !isWinner && wedge.color === activeColor;
                             const name = playerNames[wedge.color];
@@ -635,15 +727,17 @@ const BoardSurface = memo(
                                 >
                                     {isWinner && (
                                         <span
-                                            className="max-w-full truncate rounded-full border border-[#fde047] px-1.5 py-px font-black tracking-[0.07em] text-white uppercase shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
+                                            className="max-w-full truncate rounded-full border px-1.5 py-px font-black tracking-[0.07em] text-white uppercase shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
                                             style={{
                                                 background: `linear-gradient(180deg, ${palette.base} 0%, ${palette.dark} 100%)`,
+                                                borderColor:
+                                                    medal?.fill ?? '#fde047',
                                                 fontSize:
                                                     'clamp(6px, 1.65cqw, 10px)',
                                                 lineHeight: 1.25,
                                             }}
                                         >
-                                            ★ WINNER
+                                            ★ JUARA {winRank}
                                         </span>
                                     )}
                                     {isActive && activeLabel && (
@@ -683,7 +777,8 @@ const BoardSurface = memo(
                             const { row, col } = QUADRANT_POSITIONS[slotColor];
                             const config = PLAYER_CONFIG[playerColor];
                             const palette = config.palette;
-                            const isWinner = playerColor === firstWinner;
+                            const winRank = winnerRankMap.get(playerColor);
+                            const isWinner = winRank !== undefined;
                             const isActive =
                                 !isWinner && playerColor === activeColor;
 
@@ -702,6 +797,7 @@ const BoardSurface = memo(
                                     {isWinner ? (
                                         <WinnerQuadrantStage
                                             color={playerColor}
+                                            rank={winRank}
                                             character={
                                                 playerCharacters[playerColor]
                                             }
@@ -785,7 +881,7 @@ const BoardSurface = memo(
                         })}
 
                         {spec.classicSlots.map(({ slotColor, playerColor }) => {
-                            if (playerColor === firstWinner) {
+                            if (winnerRankMap.has(playerColor)) {
                                 return null;
                             }
 
@@ -961,6 +1057,7 @@ const BoardSurface = memo(
         previous.activeColor === next.activeColor &&
         previous.activeLabel === next.activeLabel &&
         previous.firstWinner === next.firstWinner &&
+        sameArray(previous.winners, next.winners) &&
         sameRecord(previous.playerNames, next.playerNames) &&
         sameRecord(previous.playerCharacters, next.playerCharacters),
 );
@@ -1141,6 +1238,7 @@ export default function LudoBoard({
     activeColor,
     activeLabel,
     firstWinner = null,
+    winners,
     order,
     arms,
     skillBursts = [],
@@ -1525,6 +1623,7 @@ export default function LudoBoard({
                 activeColor={activeColor}
                 activeLabel={activeLabel}
                 firstWinner={firstWinner}
+                winners={winners}
             />
 
             <div className="pointer-events-none absolute inset-0 z-[20]">

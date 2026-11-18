@@ -14,11 +14,13 @@ export default function LudoPin({
 }: LudoPinProps) {
     const art = useRetryingImage(pionImage ?? '');
 
-    if (pionImage && !art.failed) {
+    if (pionImage && art.loaded && !art.failed) {
         return (
             <img
+                ref={art.ref}
                 src={art.src}
                 onError={art.onError}
+                onLoad={art.onLoad}
                 alt=""
                 aria-hidden="true"
                 width={192}
@@ -36,6 +38,7 @@ export default function LudoPin({
             {/* Keeps retrying the art in the background while the pin shows. */}
             {pionImage && (
                 <img
+                    ref={art.ref}
                     src={art.src}
                     alt=""
                     aria-hidden="true"
