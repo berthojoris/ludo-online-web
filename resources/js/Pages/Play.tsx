@@ -2148,6 +2148,13 @@ export default function Play() {
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [endGameModalOpen, endingGame]);
 
+    const activeRoomPlayer = room
+        ? room.players[state.order.indexOf(state.turn)]
+        : undefined;
+    const isComputerTurn = room
+        ? Boolean(activeRoomPlayer?.is_computer)
+        : state.turn !== state.human;
+
     useEffect(() => {
         if (
             state.phase !== 'choosing' ||
@@ -2573,13 +2580,6 @@ export default function Play() {
 
     const handleRollRef = useRef(handleRoll);
     handleRollRef.current = handleRoll;
-
-    const activeRoomPlayer = room
-        ? room.players[state.order.indexOf(state.turn)]
-        : undefined;
-    const isComputerTurn = room
-        ? Boolean(activeRoomPlayer?.is_computer)
-        : state.turn !== state.human;
 
     const isAfkAutoMove =
         autoPlayAfterTimeoutRollRef.current ||
