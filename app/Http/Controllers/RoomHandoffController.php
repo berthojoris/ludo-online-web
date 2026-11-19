@@ -57,7 +57,7 @@ class RoomHandoffController extends Controller
                     ->where('handoff_code_hash', $hash)
                     ->where('handoff_expires_at', '>', now())
                     ->exists();
-            } while ($taken);
+            } while ($taken || self::codePendingInAnotherRoom($candidate));
 
             $locked->forceFill([
                 'handoff_code_hash' => $hash,
@@ -161,6 +161,136 @@ class RoomHandoffController extends Controller
             ]);
         }
 
+        return $this->bindToSession($request, $room, $player);
+    }
+
+    /**
+     * Standalone pairing entry opened from the home screen. The visitor does
+     * not know the room code, so the typed code alone finds the pending seat.
+     */
+    public function showSwitch(): Response
+    {
+        return Inertia::render('SwitchDevice', [
+            'codeLength' => 6,
+        ]);
+    }
+
+    /**
+     * Claims a pairing code without knowing which room it belongs to, so a
+     * player can move a session from any active room to this device.
+     */
+    public function claimByCode(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'pairing_code' => ['required', 'digits:6'],
+        ], [
+            'pairing_code.required' => 'Masukkan 6 digit kode dari perangkat yang sedang bermain.',
+            'pairing_code.digits' => 'Kode harus terdiri dari 6 angka.',
+        ]);
+
+        $limiterKey = 'room-handoff:switch:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($limiterKey, self::MAX_FAILED_ATTEMPTS)) {
+            throw ValidationException::withMessages([
+                'pairing_code' => 'Terlalu banyak percobaan. Buat kode baru di perangkat yang sedang bermain, lalu coba lagi nanti.',
+            ]);
+        }
+
+        /** @var array{0: Room, 1: RoomPlayer}|null $match */
+        $match = DB::transaction(function () use ($validated): ?array {
+            $roomIds = RoomPlayer::query()
+                ->whereNotNull('handoff_code_hash')
+                ->where('handoff_expires_at', '>', now())
+                ->distinct()
+                ->pluck('room_id');
+
+            if ($roomIds->isEmpty()) {
+                return null;
+            }
+
+            $rooms = Room::whereIn('id', $roomIds)
+                ->whereIn('status', self::ACTIVE_STATUSES)
+                ->get();
+
+            foreach ($rooms as $room) {
+                $hash = self::hashCode($room, $validated['pairing_code']);
+
+                $player = $room->players()
+                    ->where('is_computer', false)
+                    ->where('handoff_code_hash', $hash)
+                    ->where('handoff_expires_at', '>', now())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $player) {
+                    continue;
+                }
+
+                // Single use and "seen" on claim, exactly like the room scoped
+                // continue route.
+                $player->forceFill([
+                    'handoff_code_hash' => null,
+                    'handoff_expires_at' => null,
+                    'last_seen_at' => now(),
+                ])->save();
+
+                return [$room, $player];
+            }
+
+            return null;
+        });
+
+        if (! $match) {
+            RateLimiter::hit($limiterKey, self::LOCKOUT_SECONDS);
+
+            throw ValidationException::withMessages([
+                'pairing_code' => 'Kode tidak cocok atau sudah kedaluwarsa. Buat kode baru di perangkat yang sedang bermain.',
+            ]);
+        }
+
+        [$room, $player] = $match;
+
+        return $this->bindToSession($request, $room, $player);
+    }
+
+    public static function hashCode(Room $room, string $pairingCode): string
+    {
+        return hash_hmac('sha256', $room->id.'|'.$pairingCode, (string) config('app.key'));
+    }
+
+    /**
+     * Codes are looked up across every room, so a freshly generated one must
+     * not be pending in another room at the same time.
+     */
+    private static function codePendingInAnotherRoom(string $pairingCode): bool
+    {
+        $roomIds = RoomPlayer::query()
+            ->whereNotNull('handoff_code_hash')
+            ->where('handoff_expires_at', '>', now())
+            ->distinct()
+            ->pluck('room_id');
+
+        if ($roomIds->isEmpty()) {
+            return false;
+        }
+
+        foreach (Room::whereIn('id', $roomIds)->get() as $otherRoom) {
+            $pending = RoomPlayer::query()
+                ->where('room_id', $otherRoom->id)
+                ->where('handoff_code_hash', self::hashCode($otherRoom, $pairingCode))
+                ->where('handoff_expires_at', '>', now())
+                ->exists();
+
+            if ($pending) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function bindToSession(Request $request, Room $room, RoomPlayer $player): RedirectResponse
+    {
         $request->session()->regenerate();
         $request->session()->put(PlayerResume::SESSION_TOKEN, $player->player_token);
 
@@ -171,11 +301,6 @@ class RoomHandoffController extends Controller
         PlayerResume::remember($request, $player, $room->code);
 
         return $this->redirectToRoom($room);
-    }
-
-    public static function hashCode(Room $room, string $pairingCode): string
-    {
-        return hash_hmac('sha256', $room->id.'|'.$pairingCode, (string) config('app.key'));
     }
 
     private function redirectToRoom(Room $room): RedirectResponse

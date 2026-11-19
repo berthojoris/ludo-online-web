@@ -33,6 +33,8 @@ Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('
 Route::post('/rooms/{code}/handoff', [RoomHandoffController::class, 'store'])->middleware('throttle:20,1')->name('rooms.handoff.store');
 Route::get('/rooms/{code}/continue', [RoomHandoffController::class, 'show'])->name('rooms.continue');
 Route::post('/rooms/{code}/continue', [RoomHandoffController::class, 'claim'])->middleware('throttle:10,1')->name('rooms.continue.store');
+Route::get('/switch', [RoomHandoffController::class, 'showSwitch'])->name('switch');
+Route::post('/switch', [RoomHandoffController::class, 'claimByCode'])->middleware('throttle:10,1')->name('switch.store');
 Route::get('/rooms/{code}/chat', [RoomChatController::class, 'index'])->name('rooms.chat.index');
 Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->middleware('throttle:30,1')->name('rooms.chat.store');
 Route::post('/client-issues', [ClientIssueController::class, 'store'])

@@ -267,7 +267,7 @@ export default function Home() {
                             menghalangi permainanmu.
                         </p>
 
-                        <div className="mt-[clamp(8px,1.8dvh,32px)] flex w-full max-w-md gap-2 sm:max-w-lg sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
+                        <div className="mt-[clamp(8px,1.8dvh,32px)] grid w-full max-w-md grid-cols-2 gap-2 sm:max-w-lg sm:grid-cols-3 sm:gap-2.5 lg:w-auto lg:max-w-none [@media(max-height:520px)_and_(orientation:landscape)]:mt-2.5 [@media(max-height:520px)_and_(orientation:landscape)]:w-auto [@media(max-height:520px)_and_(orientation:landscape)]:gap-1.5">
                             <button
                                 type="button"
                                 onClick={openCreateRoom}
@@ -275,7 +275,7 @@ export default function Home() {
                                 aria-busy={creatingRoom}
                                 aria-haspopup="dialog"
                                 aria-expanded={createRoomOpen}
-                                className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-2xl px-5 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
+                                className="bg-brand hover:bg-brand-dark col-span-2 inline-flex h-11 min-w-0 items-center justify-center rounded-2xl px-4 text-sm font-semibold whitespace-nowrap text-white shadow-[0_14px_30px_-12px_rgba(47,107,239,0.8)] transition active:scale-[0.985] sm:col-span-1 sm:h-14 sm:px-5 [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
                             >
                                 {creatingRoom ? (
                                     <>
@@ -283,17 +283,23 @@ export default function Home() {
                                             aria-hidden="true"
                                             className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                                         />
-                                        Membuat ruang…
+                                        Creating room…
                                     </>
                                 ) : (
-                                    'Buat ruang'
+                                    'Create Room'
                                 )}
                             </button>
                             <Link
                                 href={`${route('room')}?join=1`}
-                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 flex-1 items-center justify-center rounded-2xl border bg-white px-5 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 lg:flex-none [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
+                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 min-w-0 items-center justify-center rounded-2xl border bg-white px-4 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 sm:px-5 [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
                             >
-                                Gabung ruang
+                                Join Room
+                            </Link>
+                            <Link
+                                href={route('switch')}
+                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 min-w-0 items-center justify-center rounded-2xl border bg-white px-4 text-sm font-semibold whitespace-nowrap shadow-sm transition active:scale-[0.985] sm:h-14 sm:px-5 [@media(max-height:520px)_and_(orientation:landscape)]:h-11 [@media(max-height:520px)_and_(orientation:landscape)]:px-4"
+                            >
+                                Switch
                             </Link>
                         </div>
 

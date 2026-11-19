@@ -54,6 +54,48 @@ class RoomHandoffTest extends TestCase
                 ->where('codeLength', 6));
     }
 
+    public function test_switch_page_renders_from_the_home_screen(): void
+    {
+        $this->get('/switch')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SwitchDevice')
+                ->where('codeLength', 6));
+    }
+
+    public function test_switch_page_binds_a_device_without_knowing_the_room(): void
+    {
+        [$room, $host] = $this->hostRoom();
+        $room->forceFill(['status' => 'started', 'match_state' => ['turn' => 0]])->save();
+
+        $code = $this->issueCode($room);
+
+        $this->flushSession();
+
+        $this->post('/switch', ['pairing_code' => $code])
+            ->assertRedirect(route('play', ['room' => $room->code]))
+            ->assertSessionHas(PlayerResume::SESSION_TOKEN, $host->player_token)
+            ->assertSessionHas('ludo_host_room_code', $room->code)
+            ->assertCookie(PlayerResume::cookieName($room->code), $host->resume_token);
+
+        $this->assertNull($host->fresh()->handoff_code_hash);
+        $this->assertSame(1, $room->players()->count());
+    }
+
+    public function test_switch_page_rejects_a_wrong_pairing_code(): void
+    {
+        [$room] = $this->hostRoom();
+        $code = $this->issueCode($room);
+        $wrong = $code === '000000' ? '111111' : '000000';
+
+        $this->flushSession();
+
+        $this->post('/switch', ['pairing_code' => $wrong])
+            ->assertSessionHasErrors('pairing_code');
+
+        $this->assertNull(session(PlayerResume::SESSION_TOKEN));
+    }
+
     public function test_continue_page_reports_an_unknown_room(): void
     {
         $this->get('/rooms/ZZZZZZ/continue')
