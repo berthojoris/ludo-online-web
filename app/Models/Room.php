@@ -15,6 +15,7 @@ class Room extends Model
         'purple',
         'orange',
         'teal',
+        'pink',
     ];
 
     public const ALL_CHARACTERS = [
@@ -35,6 +36,7 @@ class Room extends Model
         'purple' => 'umrax',
         'orange' => 'zephyira',
         'teal' => 'aqualon',
+        'pink' => 'umrax',
     ];
 
     public const CHARACTER_NAMES = [

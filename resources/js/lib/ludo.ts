@@ -5,7 +5,8 @@ export type PlayerColor =
     | 'blue'
     | 'purple'
     | 'orange'
-    | 'teal';
+    | 'teal'
+    | 'pink';
 
 export type CharacterId =
     | 'ignivar'
@@ -50,6 +51,7 @@ export const DEFAULT_CHARACTER_BY_COLOR: Record<PlayerColor, CharacterId> = {
     purple: 'umrax',
     orange: 'zephyira',
     teal: 'aqualon',
+    pink: 'umrax',
 };
 
 export const CHARACTER_CONFIG: Record<CharacterId, CharacterConfig> = {
@@ -178,6 +180,7 @@ export const ALL_PLAYER_COLORS: PlayerColor[] = [
     'purple',
     'orange',
     'teal',
+    'pink',
 ];
 
 export const SEATS_BY_COUNT: Record<PlayerCount, PlayerColor[]> = {
@@ -448,6 +451,30 @@ export const PLAYER_CONFIG: Record<PlayerColor, PlayerConfig> = {
             light: '#5eead4',
             soft: '#e6fbf8',
             text: '#115e59',
+        },
+    },
+    pink: {
+        label: 'Pink',
+        startIndex: 77,
+        lane: [
+            { row: 7, col: 1 },
+            { row: 7, col: 2 },
+            { row: 7, col: 3 },
+            { row: 7, col: 4 },
+        ],
+        base: [
+            { row: 1.75, col: 1.75 },
+            { row: 1.75, col: 4.25 },
+            { row: 4.25, col: 1.75 },
+            { row: 4.25, col: 4.25 },
+        ],
+        finish: { row: 7.5, col: 7.5 },
+        palette: {
+            base: '#ec4899',
+            dark: '#be185d',
+            light: '#f9a8d4',
+            soft: '#fdf2f8',
+            text: '#9d174d',
         },
     },
 };

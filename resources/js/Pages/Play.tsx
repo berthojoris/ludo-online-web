@@ -312,6 +312,7 @@ function createTokenMap(): Record<PlayerId, number[]> {
         purple: [-1, -1, -1, -1],
         orange: [-1, -1, -1, -1],
         teal: [-1, -1, -1, -1],
+        pink: [-1, -1, -1, -1],
     };
 }
 
@@ -324,6 +325,7 @@ function createNumberMap(): Record<PlayerId, number> {
         purple: 0,
         orange: 0,
         teal: 0,
+        pink: 0,
     };
 }
 
@@ -336,6 +338,7 @@ function createBoolMap(): Record<PlayerId, boolean> {
         purple: false,
         orange: false,
         teal: false,
+        pink: false,
     };
 }
 
@@ -347,6 +350,7 @@ const DEFAULT_NAMES: SetupNames = {
     purple: 'Ungu',
     orange: 'Oranye',
     teal: 'Toska',
+    pink: 'Pink',
 };
 
 const DEFAULT_CHARACTERS: SetupCharacters = {
