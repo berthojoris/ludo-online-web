@@ -10,6 +10,12 @@ import {
 /** Waits before each new attempt after a failed load. */
 const RETRY_DELAYS_MS = [700, 2000, 5000, 12000];
 
+/**
+ * A load that neither succeeds nor errors within this window is treated as
+ * stalled (common on mobile proxies) so the retry path can take over.
+ */
+const STALL_TIMEOUT_MS = 10_000;
+
 type RetryState = {
     src: string;
     attempt: number;
@@ -24,8 +30,9 @@ type RetryState = {
  * art request failed (a dropped connection, a proxy error such as Cloudflare's
  * 520, or an error that fired before hydration) used to leave only its CSS
  * shadow on the board. This tracks `loaded` (including cached `complete`
- * images), retries with a fresh URL on failure or network recovery, and reports
- * `loaded`/`failed` so callers can draw a fallback whenever the art is missing.
+ * images), retries with a fresh URL on failure, stall or network recovery, and
+ * only reports `loaded` once the frame is confirmed decoded, so callers can
+ * draw a fallback whenever the art cannot actually paint.
  */
 export function useRetryingImage(src: string) {
     const [state, setState] = useState<RetryState>({
@@ -86,21 +93,48 @@ export function useRetryingImage(src: string) {
         scheduleRetry(attempt);
     }, [src, current.attempt, scheduleRetry]);
 
+    const markLoaded = useCallback(() => {
+        clearTimer();
+        setState((previous) =>
+            previous.src === src
+                ? { ...previous, loaded: true, failed: false }
+                : { src, attempt: 0, loaded: true, failed: false },
+        );
+    }, [src, clearTimer]);
+
+    /**
+     * A `load` event only proves the bytes arrived. Engines can defer decoding
+     * images that have never been painted (ours paints transparently while
+     * `[data-failed]` is set), which leaves a "loaded" image drawing nothing.
+     * decode() forces the frame to be decoded before `loaded` is reported, and
+     * a decode failure routes back into the retry/fallback path instead.
+     */
+    const confirmDecoded = useCallback(
+        (img: HTMLImageElement) => {
+            if (typeof img.decode !== 'function') {
+                markLoaded();
+                return;
+            }
+
+            img.decode().then(markLoaded, () => onError());
+        },
+        [markLoaded, onError],
+    );
+
     const onLoad = useCallback(
         (event?: SyntheticEvent<HTMLImageElement>) => {
-            if (event && event.currentTarget.naturalWidth === 0) {
+            const img = event?.currentTarget ?? imgRef.current;
+
+            if (img && img.naturalWidth === 0) {
                 onError();
                 return;
             }
 
-            clearTimer();
-            setState((previous) =>
-                previous.src === src
-                    ? { ...previous, loaded: true, failed: false }
-                    : { src, attempt: 0, loaded: true, failed: false },
-            );
+            if (img) {
+                confirmDecoded(img);
+            }
         },
-        [src, clearTimer, onError],
+        [onError, confirmDecoded],
     );
 
     // Catch images that already finished loading or failed before React attached handlers.
@@ -114,17 +148,43 @@ export function useRetryingImage(src: string) {
         if (img.naturalWidth > 0) {
             if (!current.loaded || current.failed) {
                 clearTimer();
-                setState({
-                    src,
-                    attempt: current.attempt,
-                    loaded: true,
-                    failed: false,
-                });
+                confirmDecoded(img);
             }
         } else if (!current.failed) {
             onError();
         }
-    }, [src, current.attempt, current.loaded, current.failed, clearTimer, onError]);
+    }, [
+        src,
+        current.attempt,
+        current.loaded,
+        current.failed,
+        clearTimer,
+        onError,
+        confirmDecoded,
+    ]);
+
+    // A request stuck without a load or error event never retries on its own;
+    // nudge it into the failed state so the backoff schedule takes over.
+    useEffect(() => {
+        if (!src || current.loaded || current.failed) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setState((previous) =>
+                previous.src === src && !previous.loaded && !previous.failed
+                    ? {
+                          src,
+                          attempt: previous.attempt + 1,
+                          loaded: false,
+                          failed: true,
+                      }
+                    : previous,
+            );
+        }, STALL_TIMEOUT_MS);
+
+        return () => window.clearTimeout(timer);
+    }, [src, current.attempt, current.loaded, current.failed]);
 
     // If all backoff attempts were exhausted while offline, retry once the connection returns.
     useEffect(() => {

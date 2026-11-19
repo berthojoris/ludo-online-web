@@ -777,11 +777,16 @@
     object-position: 50% 100%;
     user-select: none;
     -webkit-user-drag: none;
+    transition: opacity 120ms ease-out;
 }
 
-/* While the art request is retried, the seat-colored pin stands in for it. */
+/*
+ * While the art request is retried, the seat-colored pin stands in for it.
+ * Opacity (not `visibility`) keeps the image painted — transparently — during
+ * load, so engines never defer decoding a figure they have not drawn yet.
+ */
 .pion-art[data-failed] {
-    visibility: hidden;
+    opacity: 0;
 }
 
 .pion-art-fallback {
