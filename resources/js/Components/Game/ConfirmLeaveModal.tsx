@@ -8,6 +8,7 @@ type Props = {
     description: ReactNode;
     confirmLabel?: string;
     cancelLabel?: string;
+    processing?: boolean;
     onCancel: () => void;
     onConfirm: () => void;
 };
@@ -15,6 +16,8 @@ type Props = {
 /**
  * Flat UI confirmation used when a player tries to leave a live room or match.
  * Closing (Escape, backdrop, X, or "Lanjut main") keeps the player on the board.
+ * While `processing` the whole dialog stays open and locked until the server
+ * answers the leave request.
  */
 export default function ConfirmLeaveModal({
     open,
@@ -22,6 +25,7 @@ export default function ConfirmLeaveModal({
     description,
     confirmLabel = 'Ya, keluar',
     cancelLabel = 'Lanjut main',
+    processing = false,
     onCancel,
     onConfirm,
 }: Props) {
@@ -30,6 +34,8 @@ export default function ConfirmLeaveModal({
     const openerRef = useRef<HTMLElement | null>(null);
     const onCancelRef = useRef(onCancel);
     onCancelRef.current = onCancel;
+    const processingRef = useRef(processing);
+    processingRef.current = processing;
     const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
@@ -53,7 +59,10 @@ export default function ConfirmLeaveModal({
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 event.preventDefault();
-                onCancelRef.current();
+
+                if (!processingRef.current) {
+                    onCancelRef.current();
+                }
             }
         };
 
@@ -92,7 +101,7 @@ export default function ConfirmLeaveModal({
             aria-labelledby="confirm-leave-title"
             aria-describedby="confirm-leave-description"
             onClick={(event) => {
-                if (event.target === event.currentTarget) {
+                if (event.target === event.currentTarget && !processing) {
                     onCancel();
                 }
             }}
@@ -127,6 +136,7 @@ export default function ConfirmLeaveModal({
                         <button
                             type="button"
                             onClick={onCancel}
+                            disabled={processing}
                             aria-label="Tutup konfirmasi"
                             className="btn btn-quiet btn-sm btn-icon shrink-0"
                         >
@@ -139,6 +149,7 @@ export default function ConfirmLeaveModal({
                             ref={cancelRef}
                             type="button"
                             onClick={onCancel}
+                            disabled={processing}
                             className="btn btn-secondary min-w-[6.5rem] flex-1"
                         >
                             {cancelLabel}
@@ -146,9 +157,17 @@ export default function ConfirmLeaveModal({
                         <button
                             type="button"
                             onClick={onConfirm}
+                            disabled={processing}
+                            aria-busy={processing}
                             className="btn btn-danger min-w-[6.5rem] flex-1"
                         >
-                            {confirmLabel}
+                            {processing && (
+                                <span
+                                    aria-hidden="true"
+                                    className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                />
+                            )}
+                            {processing ? 'Keluar…' : confirmLabel}
                         </button>
                     </div>
                 </div>

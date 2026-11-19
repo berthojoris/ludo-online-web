@@ -8,6 +8,7 @@ import {
     ARENA_BACKGROUND_IMAGE,
     DEFAULT_CHARACTER_BY_COLOR,
     PlayerColor,
+    PlayerCount,
     tokenPoint,
 } from '@/lib/ludo';
 import { User } from '@/types';
@@ -117,13 +118,13 @@ export default function Home() {
         setCreateRoomError(null);
     }, [creatingRoom]);
 
-    const submitCreateRoom = useCallback((password: string, vsComputer: boolean) => {
+    const submitCreateRoom = useCallback((password: string, vsComputer: boolean, playerCount: PlayerCount) => {
         setCreatingRoom(true);
         setCreateRoomError(null);
 
         router.post(
             route('rooms.store'),
-            { max_players: 4, password, vs_computer: vsComputer },
+            { max_players: playerCount, password, vs_computer: vsComputer },
             {
                 onError: (errors) => {
                     setCreateRoomError(

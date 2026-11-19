@@ -7,6 +7,7 @@ use App\Models\RoomPlayer;
 use App\Services\MatchRules;
 use App\Services\PlayerResume;
 use App\Services\RoomBroadcaster;
+use App\Services\RoomPresence;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ use Illuminate\Validation\ValidationException;
 
 class RoomController extends Controller
 {
-    public function __construct(private RoomBroadcaster $broadcaster) {}
+    public function __construct(
+        private RoomBroadcaster $broadcaster,
+        private RoomPresence $presence,
+    ) {}
 
     public static function playerToken(Request $request): string
     {
@@ -57,9 +61,14 @@ class RoomController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'password' => [$request->session()->get('ludo_room_access') ? 'nullable' : 'required', 'string'],
+            'max_players' => ['required', 'integer', Rule::in([2, 3, 4, 5, 6, 7])],
             'vs_computer' => ['sometimes', 'boolean'],
+        ], [
+            'max_players.required' => 'Pilih jumlah pemain terlebih dahulu.',
+            'max_players.integer' => 'Jumlah pemain harus 2 sampai 7.',
+            'max_players.in' => 'Jumlah pemain harus 2 sampai 7.',
         ]);
 
         if (! $request->session()->get('ludo_room_access') && ! hash_equals((string) config('ludo.room_password'), (string) $request->input('password'))) {
@@ -71,10 +80,7 @@ class RoomController extends Controller
         $request->session()->put('ludo_room_access', true);
         $request->session()->forget('ludo_player_name');
         $token = self::playerToken($request);
-        $maxPlayers = (int) $request->input('max_players', 4);
-        if (! in_array($maxPlayers, [2, 3, 4, 5, 6, 7], true)) {
-            $maxPlayers = 4;
-        }
+        $maxPlayers = (int) $validated['max_players'];
 
         $room = DB::transaction(function () use ($request, $token, $maxPlayers) {
             $room = Room::create([
@@ -93,6 +99,7 @@ class RoomController extends Controller
                 'character' => null,
                 'is_ready' => false,
                 'is_host' => true,
+                'last_seen_at' => now(),
             ]);
 
             if ($request->boolean('vs_computer')) {
@@ -139,15 +146,20 @@ class RoomController extends Controller
             $lockedRoom->host_advantage = $validated['host_advantage'] ?? $lockedRoom->host_advantage;
             $lockedRoom->save();
 
+            $capacityChanged = array_key_exists('max_players', $validated);
             $hasComputers = $lockedRoom->players()->where('is_computer', true)->exists();
             $computerMode = $validated['vs_computer'] ?? $hasComputers;
-            $refreshComputers = array_key_exists('vs_computer', $validated) || (array_key_exists('max_players', $validated) && $hasComputers);
+            $refreshComputers = array_key_exists('vs_computer', $validated) || ($capacityChanged && $hasComputers);
             if ($refreshComputers) {
                 $lockedRoom->players()->where('is_computer', true)->delete();
             }
 
+            if ($capacityChanged) {
+                self::resetGuestSeatsForNewCapacity($lockedRoom);
+            }
+
             if ($refreshComputers && $computerMode) {
-                if ($lockedRoom->players()->count() >= $lockedRoom->max_players) {
+                if (! $capacityChanged && $lockedRoom->players()->count() >= $lockedRoom->max_players) {
                     throw ValidationException::withMessages(['room' => 'Tidak ada kursi kosong untuk komputer.']);
                 }
                 self::fillComputerSeats($lockedRoom);
@@ -158,6 +170,24 @@ class RoomController extends Controller
         $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
 
         return back();
+    }
+
+    /**
+     * Prepare the lobby again after the host changes the capacity: every
+     * human guest loses their home-base colour, character and ready state and
+     * picks them again for the new player count. The host keeps their seat.
+     */
+    private static function resetGuestSeatsForNewCapacity(Room $room): void
+    {
+        $room->players()
+            ->reorder()
+            ->where('is_host', false)
+            ->where('is_computer', false)
+            ->update([
+                'seat_color' => null,
+                'character' => null,
+                'is_ready' => false,
+            ]);
     }
 
     private static function fillComputerSeats(Room $room): void
@@ -522,17 +552,25 @@ class RoomController extends Controller
             return redirect()->route('play', ['room' => $room->code]);
         }
 
-        $players = $room->players()->get();
+        if ($room->status === 'ended') {
+            return redirect()->route('home');
+        }
 
-        if ($players->count() < 2) {
+        // Only seated players take part in the match, and the host starts
+        // only when exactly the chosen number of players is seated.
+        $players = $room->players()->get()
+            ->filter(fn (RoomPlayer $p) => $p->seat_color !== null)
+            ->values();
+
+        if ($players->count() !== $room->max_players) {
             throw ValidationException::withMessages([
-                'start' => 'Minimal 2 pemain harus bergabung untuk memulai.',
+                'start' => "Tunggu tepat {$room->max_players} pemain memilih warna home base dan duduk ({$players->count()}/{$room->max_players}).",
             ]);
         }
 
-        if ($players->contains(fn (RoomPlayer $p) => $p->seat_color === null)) {
+        if (! $players->contains(fn (RoomPlayer $p) => $p->is_host)) {
             throw ValidationException::withMessages([
-                'start' => 'Semua pemain harus memilih warna home base dan duduk terlebih dahulu.',
+                'start' => 'Host harus memilih warna home base dan duduk terlebih dahulu.',
             ]);
         }
 
@@ -558,15 +596,36 @@ class RoomController extends Controller
         $seatColors = $players->pluck('seat_color')->all();
         $boardArms = $players->count() >= 5 ? min(7, $players->count()) : 4;
 
-        $room->status = 'started';
-        $room->starting_player_id = $startingPlayer->id;
-        $room->match_state = MatchRules::initial(
-            $players->search(fn ($player) => $player->id === $startingPlayer->id),
-            $seatColors,
-            $boardArms,
-        );
-        $room->started_at = now();
-        $room->save();
+        $status = DB::transaction(function () use ($room, $players, $startingPlayer, $seatColors, $boardArms) {
+            $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
+            if ($room->status !== 'waiting') {
+                return $room->status;
+            }
+
+            // Match turns index the room's player list, so guests left without
+            // a seat (for example after the capacity was lowered) leave the room.
+            $room->players()
+                ->whereNotIn('id', $players->pluck('id'))
+                ->where('is_host', false)
+                ->get()
+                ->each(fn (RoomPlayer $player) => $player->delete());
+
+            $room->status = 'started';
+            $room->starting_player_id = $startingPlayer->id;
+            $room->match_state = MatchRules::initial(
+                $players->search(fn ($player) => $player->id === $startingPlayer->id),
+                $seatColors,
+                $boardArms,
+            );
+            $room->started_at = now();
+            $room->save();
+
+            return $room->status;
+        });
+
+        if ($status === 'ended') {
+            return redirect()->route('home');
+        }
 
         $room->refresh()->load('players');
         $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
@@ -583,6 +642,9 @@ class RoomController extends Controller
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
+
+        $this->presence->touch($player);
+        $this->presence->closeIfHostGone($room);
 
         $isComputer = $request->boolean('computer');
         $isTimeout = $request->boolean('timeout');
@@ -673,6 +735,9 @@ class RoomController extends Controller
         if (! $player) {
             abort(403, 'Kamu bukan peserta ruang ini.');
         }
+
+        $this->presence->touch($player);
+        $this->presence->closeIfHostGone($room);
 
         if ($isComputer || $isTimeout) {
             $request->validate(['state_version' => ['required', 'integer', 'min:0']]);
@@ -781,22 +846,79 @@ class RoomController extends Controller
 
         abort_unless($player->is_host, 403, 'Hanya host yang dapat mengakhiri permainan.');
 
-        if ($room->status !== 'ended') {
-            $room->status = 'ended';
-            $room->save();
+        $this->closeRoom($room, $player, __FUNCTION__);
 
-            $room->refresh()->load('players');
-            $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
-            $this->broadcaster->publishMatchAction($room, [
-                'action_id' => (string) Str::uuid(),
-                'type' => 'end',
-                'player_id' => $player->id,
-                'ended_by' => $player->name,
-            ], $player);
+        PlayerResume::forget($room->code);
+
+        return redirect()->route('home');
+    }
+
+    /**
+     * A player leaving on purpose. The host leaving closes the room for
+     * everyone (the broadcast sends every remaining player back to the home
+     * page). A guest can return to the same seat.
+     */
+    public function leave(Request $request, string $code): RedirectResponse
+    {
+        self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        $player = PlayerResume::find($request, $room);
+        if (! $player) {
+            abort(403, 'Kamu bukan peserta ruang ini.');
+        }
+
+        if ($player->is_host) {
+            $this->closeRoom($room, $player, __FUNCTION__, 'host_left');
         }
 
         PlayerResume::forget($room->code);
 
         return redirect()->route('home');
+    }
+
+    private function closeRoom(Room $room, RoomPlayer $host, string $operation, ?string $reason = null): void
+    {
+        $closed = Room::whereKey($room->id)
+            ->whereIn('status', ['waiting', 'started'])
+            ->update(['status' => 'ended']);
+
+        if (! $closed) {
+            return;
+        }
+
+        $room->refresh()->load('players');
+        $this->broadcaster->publishRoomUpdated($room, $operation, $host);
+        $this->broadcaster->publishMatchAction($room, [
+            'action_id' => (string) Str::uuid(),
+            'type' => 'end',
+            'player_id' => $host->id,
+            'ended_by' => $host->name,
+            ...($reason === null ? [] : ['reason' => $reason]),
+        ], $host);
+    }
+
+    /**
+     * Keeps a seated player's presence stamp fresh while the tab is open,
+     * even in the background where the page polls are paused. A stale host
+     * stamp is what triggers the automatic room close.
+     */
+    public function heartbeat(Request $request, string $code): JsonResponse
+    {
+        self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        $player = PlayerResume::find($request, $room);
+        if (! $player) {
+            abort(403, 'Kamu bukan peserta ruang ini.');
+        }
+
+        $this->presence->touch($player);
+        $this->presence->closeIfHostGone($room);
+
+        return response()->json([
+            'ok' => true,
+            'room_status' => $room->status,
+        ]);
     }
 }

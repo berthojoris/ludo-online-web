@@ -26,6 +26,8 @@ Route::patch('/rooms/{code}/players/{player}/name', [RoomController::class, 'upd
 Route::post('/rooms/{code}/ready', [RoomController::class, 'toggleReady'])->name('rooms.ready');
 Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('rooms.start');
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
+Route::post('/rooms/{code}/leave', [RoomController::class, 'leave'])->name('rooms.leave');
+Route::post('/rooms/{code}/heartbeat', [RoomController::class, 'heartbeat'])->name('rooms.heartbeat');
 Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
 Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
 Route::post('/rooms/{code}/handoff', [RoomHandoffController::class, 'store'])->middleware('throttle:20,1')->name('rooms.handoff.store');

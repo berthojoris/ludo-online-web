@@ -37,13 +37,15 @@ import {
 import { copyText } from '@/lib/clipboard';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
+import { useRoomHeartbeat } from '@/lib/useRoomHeartbeat';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
 import {
     CSSProperties,
     FormEvent,
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -238,6 +240,9 @@ function RoomContent() {
     const [pendingAction, setPendingAction] = useState(false);
     const [randomizing, setRandomizing] = useState(false);
     const isBusy = pendingAction || randomizing;
+    // Leave request in flight. The lobby poll below pauses while it runs so
+    // it cannot cancel the pending POST that closes the room.
+    const leaveForm = useForm({});
     const [actionError, setActionError] = useState<string | null>(
         roomError ?? null,
     );
@@ -416,6 +421,7 @@ function RoomContent() {
             roomStatus !== 'waiting' ||
             viewMode !== 'lobby' ||
             isBusy ||
+            leaveForm.processing ||
             renamingPlayerId !== null ||
             requiredNameModalOpen
         ) {
@@ -436,6 +442,7 @@ function RoomContent() {
         roomStatus,
         viewMode,
         isBusy,
+        leaveForm.processing,
         renamingPlayerId,
         requiredNameModalOpen,
     ]);
@@ -447,6 +454,14 @@ function RoomContent() {
         }
     }, [liveRoom?.status, liveRoom?.code]);
 
+    // Auto-redirect all players when the room closes (host left or
+    // disconnected): everyone goes back to the home page.
+    useEffect(() => {
+        if (liveRoom?.status === 'ended' && !leaveForm.processing) {
+            router.visit(route('home'), { replace: true });
+        }
+    }, [liveRoom?.status, leaveForm.processing]);
+
     const cue = () => {
         void unlockAudio().then(playUiSound);
     };
@@ -456,31 +471,79 @@ function RoomContent() {
         Boolean(liveRoom) &&
         Boolean(currentMe) &&
         liveRoom?.status === 'waiting';
+
+    // A confirmed leave tells the server first. When the host leaves, the
+    // server closes the room and the broadcast sends every remaining player
+    // back to the home page; this browser follows the redirect home too.
+    const leaveRoom = useCallback((complete: () => void) => {
+        const code = liveRoom?.code;
+
+        if (!code) {
+            complete();
+            router.visit(route('home'));
+
+            return;
+        }
+
+        if (leaveForm.processing) {
+            return;
+        }
+
+        leaveForm.post(route('rooms.leave', { code }), {
+            replace: true,
+            onSuccess: complete,
+        });
+    }, [liveRoom?.code, leaveForm]);
+
     const exitGuard = useGameExitGuard(
         seatedInLobby,
         route('home'),
         `room:${liveRoom?.code ?? 'none'}`,
+        leaveRoom,
+    );
+    useRoomHeartbeat(
+        liveRoom?.code ?? null,
+        Boolean(liveRoom) && Boolean(currentMe) && !leaveForm.processing,
     );
     const playerCount: PlayerCount = liveRoom?.max_players ?? 4;
     const allColorSeats = ALL_PLAYER_COLORS;
     const players = liveRoom?.players ?? [];
     const vsComputer = players.some((player) => player.is_computer);
     const occupiedCount = players.length;
-    const seatedCount = players.filter((p) => p.seat_color !== null).length;
-    const readyCount = players.filter((p) => p.is_ready).length;
-    const allSeated =
-        players.length > 0 && players.every((p) => p.seat_color !== null);
+    // Only seated players take part in the match; the host can start once
+    // exactly `playerCount` players are seated, named and ready.
+    const seatedPlayers = players.filter((p) => p.seat_color !== null);
+    const seatedCount = seatedPlayers.length;
+    const readyCount = seatedPlayers.filter((p) => p.is_ready).length;
+    const allSeated = seatedCount === playerCount;
+    const hostSeated = seatedPlayers.some((p) => p.is_host);
     const allCharactersPicked =
-        players.length > 0 &&
-        players.every((p) => p.is_computer || Boolean(p.character));
-    const allReady =
-        players.length >= 2 &&
-        allSeated &&
-        allCharactersPicked &&
-        players.every((p) => p.is_ready && (p.is_computer || p.name_confirmed));
-    const waitingForNames = players.some(
+        seatedCount > 0 &&
+        seatedPlayers.every((p) => p.is_computer || Boolean(p.character));
+    const waitingForNames = seatedPlayers.some(
         (p) => !p.is_computer && !p.name_confirmed,
     );
+    const allReady =
+        allSeated &&
+        hostSeated &&
+        allCharactersPicked &&
+        !waitingForNames &&
+        seatedPlayers.every((p) => p.is_ready);
+
+    // When the host changes the player count, every guest picks their colour
+    // and character again; tell them why their seat was cleared.
+    const previousPlayerCountRef = useRef(playerCount);
+    useEffect(() => {
+        if (previousPlayerCountRef.current === playerCount) {
+            return;
+        }
+        previousPlayerCountRef.current = playerCount;
+        if (!isHost) {
+            setActionError(
+                `Host mengubah jumlah pemain menjadi ${playerCount}. Pilih ulang warna home base dan karakter.`,
+            );
+        }
+    }, [playerCount, isHost]);
 
     const takenCharacters = useMemo(() => {
         const map: Partial<Record<CharacterId, string>> = {};
@@ -492,18 +555,17 @@ function RoomContent() {
         return map;
     }, [players, currentMe?.id]);
 
-    const startBlockedReason =
-        players.length < 2
-            ? 'Menunggu minimal 2 pemain bergabung ke ruang.'
-            : !allSeated
-              ? 'Tunggu semua pemain memilih warna home base dan duduk.'
-              : !allCharactersPicked
-                ? 'Tunggu semua pemain memilih karakter.'
-                : waitingForNames
-                  ? 'Menunggu semua pemain mengisi nama.'
-                  : !allReady
-                    ? `Menunggu semua pemain siap (${readyCount}/${players.length} siap).`
-                    : null;
+    const startBlockedReason = !allSeated
+        ? `Menunggu tepat ${playerCount} pemain memilih warna home base dan duduk (${seatedCount}/${playerCount}).`
+        : !hostSeated
+          ? 'Host harus memilih warna home base dan duduk terlebih dahulu.'
+          : !allCharactersPicked
+            ? 'Tunggu semua pemain memilih karakter.'
+            : waitingForNames
+              ? 'Menunggu semua pemain mengisi nama.'
+              : !allReady
+                ? `Menunggu semua pemain siap (${readyCount}/${playerCount} siap).`
+                : null;
 
     const joinBlocked =
         !liveRoom && Boolean(actionError) && Boolean(attemptedCode);
@@ -795,14 +857,18 @@ function RoomContent() {
             );
     };
 
-    const postRoomCreation = (password?: string, vsComputer = false) => {
+    const postRoomCreation = (
+        maxPlayers: PlayerCount,
+        vsComputer: boolean,
+        password?: string,
+    ) => {
         setActionError(null);
         setCreatePasswordError(null);
         setPendingAction(true);
         router.post(
             route('rooms.store'),
             {
-                max_players: playerCount,
+                max_players: maxPlayers,
                 vs_computer: vsComputer,
                 ...(password === undefined ? {} : { password }),
             },
@@ -850,13 +916,11 @@ function RoomContent() {
     const switchMode = (next: ViewMode) => {
         cue();
         if (next === 'lobby' && !liveRoom) {
-            if (!canCreateRoom) {
-                setActionError(null);
-                setCreatePasswordError(null);
-                setCreatePasswordOpen(true);
-                return;
-            }
-            router.get(route('room'));
+            // New rooms always go through the modal so the host picks the
+            // player count instead of getting a 4-player room by default.
+            setActionError(null);
+            setCreatePasswordError(null);
+            setCreatePasswordOpen(true);
             return;
         }
         setViewMode(next);
@@ -963,7 +1027,7 @@ function RoomContent() {
                                 />
                                 {allReady
                                     ? 'Semua siap'
-                                    : `${readyCount}/${occupiedCount} Siap`}
+                                    : `${readyCount}/${playerCount} Siap`}
                             </span>
                             <FullscreenToggle className="btn btn-secondary btn-sm btn-icon" />
                         </div>
@@ -2454,9 +2518,13 @@ function RoomContent() {
                         setCreatePasswordError(null);
                     }
                 }}
-                onSubmit={(password, vsComputer) => {
+                onSubmit={(password, vsComputer, maxPlayers) => {
                     cue();
-                    postRoomCreation(password || undefined, vsComputer);
+                    postRoomCreation(
+                        maxPlayers,
+                        vsComputer,
+                        password || undefined,
+                    );
                 }}
             />
 
@@ -2484,14 +2552,25 @@ function RoomContent() {
 
             <ConfirmLeaveModal
                 open={exitGuard.open}
+                processing={leaveForm.processing}
                 title="Keluar dari ruang?"
                 description={
-                    <>
-                        Kamu masih duduk di ruang {liveRoom?.code ?? 'ini'}.
-                        Ruang tetap aktif, jadi kamu bisa kembali dengan membuka
-                        tautan atau memasukkan kode ruang yang sama. Yakin ingin
-                        keluar?
-                    </>
+                    isHost ? (
+                        <>
+                            Sebagai host, keluar dari ruang{' '}
+                            {liveRoom?.code ?? 'ini'} akan menutup ruang dan
+                            mengembalikan semua pemain lain ke halaman utama.
+                            Yakin ingin keluar?
+                        </>
+                    ) : (
+                        <>
+                            Kamu masih duduk di ruang{' '}
+                            {liveRoom?.code ?? 'ini'}. Ruang tetap aktif, jadi
+                            kamu bisa kembali dengan membuka tautan atau
+                            memasukkan kode ruang yang sama. Yakin ingin
+                            keluar?
+                        </>
+                    )
                 }
                 cancelLabel="Tetap di ruang"
                 confirmLabel="Ya, keluar"

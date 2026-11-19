@@ -136,9 +136,12 @@ class RoomHandoffController extends Controller
                 ->first();
 
             // Single use: the code is gone as soon as one device claims it.
+            // The claiming device also counts as "seen" so a device handoff
+            // never looks like a host disconnect to the auto-close check.
             $player?->forceFill([
                 'handoff_code_hash' => null,
                 'handoff_expires_at' => null,
+                'last_seen_at' => now(),
             ])->save();
 
             return $player;

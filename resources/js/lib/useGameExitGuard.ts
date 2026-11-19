@@ -10,6 +10,8 @@ import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
  * - Refresh and tab close are caught with `beforeunload`, which the browser
  *   always shows with its own native confirm dialog.
  * - In-app links call `blockLink` so they go through the same dialog.
+ * - A confirmed leave goes through `onLeave` when provided, so the page can
+ *   tell the server it is leaving before navigating.
  *
  * Inertia remounts the page component when it restores a history entry, so the
  * "dialog is open" flag lives outside React state. Otherwise the confirmation
@@ -41,6 +43,7 @@ export function useGameExitGuard(
     active: boolean,
     destination: string,
     guardKey: string = destination,
+    onLeave?: (complete: () => void) => void,
 ) {
     const [open, setOpen] = useState(
         store.key === guardKey ? store.open : false,
@@ -48,6 +51,8 @@ export function useGameExitGuard(
     const allowRef = useRef(false);
     const destinationRef = useRef(destination);
     destinationRef.current = destination;
+    const onLeaveRef = useRef(onLeave);
+    onLeaveRef.current = onLeave;
 
     useEffect(() => {
         const listener = () => {
@@ -159,11 +164,19 @@ export function useGameExitGuard(
 
     const cancel = useCallback(() => publish(false), []);
 
-    const leave = useCallback(() => {
+    const complete = useCallback(() => {
         allowRef.current = true;
         forget();
-        router.visit(destinationRef.current);
     }, []);
+
+    const leave = useCallback(() => {
+        if (onLeaveRef.current) {
+            onLeaveRef.current(complete);
+        } else {
+            complete();
+            router.visit(destinationRef.current);
+        }
+    }, [complete]);
 
     return { open, blockLink, requestLeave, cancel, leave };
 }

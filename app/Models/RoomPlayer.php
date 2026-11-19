@@ -38,6 +38,7 @@ class RoomPlayer extends Model
         'is_host',
         'is_computer',
         'name_confirmed',
+        'last_seen_at',
     ];
 
     /**
@@ -51,6 +52,7 @@ class RoomPlayer extends Model
     {
         return [
             'handoff_expires_at' => 'datetime',
+            'last_seen_at' => 'datetime',
             'is_ready' => 'boolean',
             'is_host' => 'boolean',
             'is_computer' => 'boolean',

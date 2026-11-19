@@ -69,12 +69,14 @@ import { preloadImages } from '@/lib/preloadImages';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
+import { useRoomHeartbeat } from '@/lib/useRoomHeartbeat';
 import { User } from '@/types';
 import { HttpResponseError, ReloadOptions } from '@inertiajs/core';
 import {
     Head,
     Link,
     router,
+    useForm,
     useHttp,
     usePage,
     usePoll,
@@ -1129,6 +1131,8 @@ export default function Play() {
     endingGameRef.current = endingGame;
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const boardHandleRef = useRef<LudoBoardHandle>(null);
+    const leaveForm = useForm({});
+    const leavePendingRef = useRef(false);
     const rollHttp = useHttp<
         { timeout?: boolean; state_version?: number },
         MatchCommandResponse
@@ -1206,6 +1210,7 @@ export default function Play() {
             showProgress: false,
             onBefore: () => {
                 if (
+                    leavePendingRef.current ||
                     roomSyncPendingRef.current ||
                     document.visibilityState === 'hidden' ||
                     !navigator.onLine
@@ -1414,6 +1419,29 @@ export default function Play() {
         screen === 'game' &&
         serverWinner === null &&
         !state.winner;
+    const leaveMatch = useCallback((complete: () => void) => {
+        const code = room?.code;
+
+        if (!code) {
+            complete();
+            router.visit(route('home'));
+
+            return;
+        }
+
+        if (leavePendingRef.current) {
+            return;
+        }
+
+        leavePendingRef.current = true;
+        leaveForm.post(route('rooms.leave', { code }), {
+            replace: true,
+            onSuccess: complete,
+            onFinish: () => {
+                leavePendingRef.current = false;
+            },
+        });
+    }, [room?.code, leaveForm]);
     // The desktop side panel swaps the full player list for a compact
     // current-turn strip plus an always-open chat card; small screens keep
     // the floating chat toggle.
@@ -1425,7 +1453,9 @@ export default function Play() {
         matchRunning,
         route('home'),
         `play:${room?.code ?? 'solo'}`,
+        leaveMatch,
     );
+    useRoomHeartbeat(room?.code ?? null, matchRunning && !leaveForm.processing);
     const canRoll =
         (!room || myRoomIndex >= 0) &&
         !rollHttp.processing &&
@@ -1912,7 +1942,9 @@ export default function Play() {
         if (action.type === 'end') {
             rememberAction(seenActionsRef.current, action.action_id);
             stopBackgroundMusic();
-            router.visit(route('home'));
+            if (!leavePendingRef.current) {
+                router.visit(route('home'), { replace: true });
+            }
 
             return true;
         }
@@ -4121,15 +4153,24 @@ export default function Play() {
 
             <ConfirmLeaveModal
                 open={exitGuard.open}
+                processing={leaveForm.processing}
                 title="Keluar dari permainan?"
                 description={
-                    <>
-                        Pertandingan
-                        {room ? ` di ruang ${room.code}` : ''} masih berjalan.
-                        Papan, giliran, dan posisi bidak sudah tersimpan di
-                        server, jadi kamu bisa melanjutkan lewat tautan ruang
-                        ini kapan saja. Yakin ingin keluar sekarang?
-                    </>
+                    me?.is_host ? (
+                        <>
+                            Sebagai host, keluar dari ruang {room?.code} akan
+                            mengakhiri pertandingan dan mengembalikan semua
+                            pemain ke halaman utama. Yakin ingin keluar?
+                        </>
+                    ) : (
+                        <>
+                            Pertandingan
+                            {room ? ` di ruang ${room.code}` : ''} masih berjalan.
+                            Papan, giliran, dan posisi bidak sudah tersimpan di
+                            server, jadi kamu bisa melanjutkan lewat tautan ruang
+                            ini kapan saja. Yakin ingin keluar sekarang?
+                        </>
+                    )
                 }
                 cancelLabel="Lanjut main"
                 confirmLabel="Ya, keluar"

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Events\MatchAction;
 use App\Events\RoomUpdated;
 use App\Models\Room;
+use App\Models\RoomPlayer;
 use App\Services\MatchRules;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -359,6 +360,134 @@ class RoomFlowTest extends TestCase
         $this->post('/rooms', ['max_players' => 4, 'password' => 'malaquena'])
             ->assertRedirect();
         $this->assertDatabaseCount('rooms', 2);
+    }
+
+    public function test_changing_capacity_resets_guest_seats_and_start_needs_exactly_that_many_players(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        [$room, $hostToken, $guestTokens] = $this->roomWithSeatedGuests([['yellow', 'solgarde'], ['green', 'verdantor']]);
+
+        // Capacity 4 with 3 seated players: the host cannot start yet.
+        $this->post("/rooms/{$room->code}/start")->assertSessionHasErrors('start');
+
+        // Host lowers the capacity to 3: every guest picks colour and character again.
+        $this->patch("/rooms/{$room->code}/settings", ['max_players' => 3])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $host = $room->players()->where('is_host', true)->firstOrFail();
+        $this->assertSame(['red', 'ignivar', true], [$host->seat_color, $host->character, $host->is_ready]);
+        foreach ($room->players()->where('is_host', false)->get() as $guest) {
+            $this->assertSame([null, null, false], [$guest->seat_color, $guest->character, $guest->is_ready]);
+        }
+
+        $this->post("/rooms/{$room->code}/start")->assertSessionHasErrors('start');
+
+        foreach ([['yellow', 'solgarde'], ['green', 'verdantor']] as $index => [$seat, $character]) {
+            $this->withSession(['ludo_player_token' => $guestTokens[$index]]);
+            $this->post("/rooms/{$room->code}/seat", ['seat_color' => $seat, 'character' => $character])->assertRedirect();
+        }
+
+        $this->withSession(['ludo_player_token' => $hostToken, 'ludo_host_room_code' => $room->code]);
+        $this->post("/rooms/{$room->code}/start")
+            ->assertRedirect(route('play', ['room' => $room->code]));
+        $this->assertCount(3, $room->fresh()->match_state['tokens']);
+    }
+
+    public function test_guest_without_a_seat_after_lowering_capacity_leaves_when_the_match_starts(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        [$room, $hostToken, $guestTokens] = $this->roomWithSeatedGuests([['yellow', 'solgarde'], ['green', 'verdantor']]);
+
+        $this->patch("/rooms/{$room->code}/settings", ['max_players' => 2])->assertRedirect();
+
+        $this->withSession(['ludo_player_token' => $guestTokens[0]]);
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow', 'character' => 'solgarde'])->assertRedirect();
+
+        // Both seats for 2 players are taken now.
+        $this->withSession(['ludo_player_token' => $guestTokens[1]]);
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'green', 'character' => 'verdantor'])
+            ->assertSessionHasErrors('seat_color');
+
+        $this->withSession(['ludo_player_token' => $hostToken, 'ludo_host_room_code' => $room->code]);
+        $this->post("/rooms/{$room->code}/start")
+            ->assertRedirect(route('play', ['room' => $room->code]));
+
+        $players = $room->fresh('players')->players;
+        $this->assertSame(['red', 'yellow'], $players->pluck('seat_color')->all());
+        $this->assertFalse(RoomPlayer::where('player_token', $guestTokens[1])->exists());
+    }
+
+    /**
+     * Host (red, Ignivar) plus guests seated on the given colours and
+     * characters, everyone named and ready, in a room for 4 players.
+     *
+     * @param  list<array{0: string, 1: string}>  $guestSeats
+     * @return array{0: Room, 1: string, 2: list<string>}
+     */
+    private function roomWithSeatedGuests(array $guestSeats): array
+    {
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::latest('id')->firstOrFail();
+        $hostToken = session('ludo_player_token');
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'red', 'character' => 'ignivar'])->assertRedirect();
+        $this->post("/rooms/{$room->code}/name", ['name' => 'Bertha'])->assertRedirect();
+
+        $guestTokens = [];
+        foreach ($guestSeats as [$seat, $character]) {
+            $this->flushSession();
+            $this->get("/room?code={$room->code}")->assertOk();
+            $guestTokens[] = session('ludo_player_token');
+            $this->post("/rooms/{$room->code}/seat", ['seat_color' => $seat, 'character' => $character])->assertRedirect();
+            $this->post("/rooms/{$room->code}/name", ['name' => 'Pemain '.ucfirst($seat)])->assertRedirect();
+        }
+
+        $this->withSession(['ludo_player_token' => $hostToken, 'ludo_host_room_code' => $room->code]);
+
+        return [$room, $hostToken, $guestTokens];
+    }
+
+    public function test_changing_capacity_in_vs_computer_mode_leaves_a_seat_for_the_reset_guest(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        [$room, $hostToken, $guestTokens] = $this->roomWithSeatedGuests([['yellow', 'solgarde']]);
+
+        $this->patch("/rooms/{$room->code}/settings", ['vs_computer' => true])->assertRedirect();
+        $this->assertCount(4, $room->fresh('players')->players);
+
+        $this->patch("/rooms/{$room->code}/settings", ['max_players' => 3])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+        $players = $room->fresh('players')->players;
+        $this->assertCount(3, $players);
+        $this->assertCount(1, $players->where('is_computer', true));
+
+        $this->withSession(['ludo_player_token' => $guestTokens[0]]);
+        $freeSeat = array_values(array_diff(Room::ALL_COLORS, $players->pluck('seat_color')->filter()->all()))[0];
+        $this->post("/rooms/{$room->code}/seat", ['seat_color' => $freeSeat, 'character' => 'solgarde'])->assertRedirect();
+
+        $this->withSession(['ludo_player_token' => $hostToken, 'ludo_host_room_code' => $room->code]);
+        $this->post("/rooms/{$room->code}/start")
+            ->assertRedirect(route('play', ['room' => $room->code]));
+        $this->assertCount(3, $room->fresh()->match_state['tokens']);
+    }
+
+    public function test_room_creation_requires_the_host_to_pick_a_player_count(): void
+    {
+        $password = config('ludo.room_password');
+
+        $this->post('/rooms', ['password' => $password])
+            ->assertSessionHasErrors('max_players');
+        $this->post('/rooms', ['max_players' => 8, 'password' => $password])
+            ->assertSessionHasErrors('max_players');
+        $this->assertDatabaseCount('rooms', 0);
+
+        $this->post('/rooms', ['max_players' => 5, 'password' => $password])
+            ->assertRedirect();
+        $this->assertSame(5, Room::firstOrFail()->max_players);
     }
 
     public function test_opening_fourth_roll_guarantees_six_after_three_misses_then_returns_to_random(): void
@@ -773,6 +902,9 @@ class RoomFlowTest extends TestCase
             'seat_color' => 'yellow',
             'character' => 'zephyira',
         ])->assertRedirect();
+
+        // The match needs exactly max_players seated players; this room has two.
+        $room->forceFill(['max_players' => 2])->save();
 
         $this->withSession([
             'ludo_player_token' => $hostToken,

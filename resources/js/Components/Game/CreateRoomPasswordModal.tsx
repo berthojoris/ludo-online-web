@@ -4,6 +4,7 @@ import {
     EyeOffIcon,
     LockIcon,
 } from '@/Components/Game/Icons';
+import { PlayerCount } from '@/lib/ludo';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 
@@ -13,13 +14,20 @@ type Props = {
     error?: string | null;
     passwordRequired?: boolean;
     onCancel: () => void;
-    onSubmit: (password: string, vsComputer: boolean) => void;
+    onSubmit: (
+        password: string,
+        vsComputer: boolean,
+        playerCount: PlayerCount,
+    ) => void;
 };
 
+const PLAYER_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
+
 /**
- * Static access check shown before a visitor can create a room. The submitted
- * password is verified on the server, so the value is never shipped to the
- * browser bundle.
+ * Shown before a host creates a room: the host must pick the player count
+ * (nothing is preselected) and the opponent type, plus the static access
+ * password when the session is not unlocked yet. The password is verified on
+ * the server, so the value is never shipped to the browser bundle.
  */
 export default function CreateRoomPasswordModal({
     open,
@@ -31,6 +39,7 @@ export default function CreateRoomPasswordModal({
 }: Props) {
     const [password, setPassword] = useState('');
     const [vsComputer, setVsComputer] = useState(false);
+    const [playerCount, setPlayerCount] = useState<PlayerCount | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -53,6 +62,7 @@ export default function CreateRoomPasswordModal({
 
         setPassword('');
         setVsComputer(false);
+        setPlayerCount(null);
         setShowPassword(false);
 
         const focusTimeout = window.setTimeout(() => {
@@ -91,11 +101,15 @@ export default function CreateRoomPasswordModal({
     const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        if (processing || (passwordRequired && password === '')) {
+        if (
+            processing ||
+            playerCount === null ||
+            (passwordRequired && password === '')
+        ) {
             return;
         }
 
-        onSubmit(password, vsComputer);
+        onSubmit(password, vsComputer, playerCount);
     };
 
     return (
@@ -136,8 +150,8 @@ export default function CreateRoomPasswordModal({
                                     className="text-ink-muted mt-1 text-xs leading-relaxed"
                                 >
                                     {passwordRequired
-                                        ? 'Masukkan kata sandi akses dan pilih lawan.'
-                                        : 'Pilih lawan untuk ruang baru.'}
+                                        ? 'Pilih jumlah pemain dan lawan, lalu masukkan kata sandi akses.'
+                                        : 'Pilih jumlah pemain dan lawan untuk ruang baru.'}
                                 </p>
                             </div>
                         </div>
@@ -153,6 +167,36 @@ export default function CreateRoomPasswordModal({
                     </div>
 
                     <form onSubmit={handleSubmit}>
+                        <fieldset
+                            className="mt-4"
+                            disabled={processing}
+                            aria-describedby="create-room-player-count-hint"
+                        >
+                            <legend className="text-ink text-xs font-semibold">
+                                Jumlah pemain
+                            </legend>
+                            <div className="segmented mt-1.5 grid grid-cols-3">
+                                {PLAYER_COUNTS.map((count) => (
+                                    <button
+                                        key={count}
+                                        type="button"
+                                        className="segmented-item min-h-11 px-2 text-xs"
+                                        aria-pressed={playerCount === count}
+                                        onClick={() => setPlayerCount(count)}
+                                    >
+                                        {count} Pemain
+                                    </button>
+                                ))}
+                            </div>
+                            <p
+                                id="create-room-player-count-hint"
+                                className="text-ink-muted mt-1 text-xs"
+                            >
+                                {playerCount === null
+                                    ? 'Wajib dipilih sebelum membuat ruang.'
+                                    : `Ruang untuk ${playerCount} pemain.`}
+                            </p>
+                        </fieldset>
                         <fieldset className="mt-4" disabled={processing}>
                             <legend className="text-ink text-xs font-semibold">
                                 Lawan
@@ -271,6 +315,7 @@ export default function CreateRoomPasswordModal({
                                 type="submit"
                                 disabled={
                                     processing ||
+                                    playerCount === null ||
                                     (passwordRequired && password === '')
                                 }
                                 aria-busy={processing}

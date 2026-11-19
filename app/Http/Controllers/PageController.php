@@ -6,6 +6,7 @@ use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\PlayerResume;
 use App\Services\RoomBroadcaster;
+use App\Services\RoomPresence;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ use Inertia\Response;
 
 class PageController extends Controller
 {
-    public function __construct(private RoomBroadcaster $broadcaster) {}
+    public function __construct(
+        private RoomBroadcaster $broadcaster,
+        private RoomPresence $presence,
+    ) {}
 
     public function home(Request $request): Response
     {
@@ -43,17 +47,26 @@ class PageController extends Controller
 
             if (! $room) {
                 $roomNotice = 'Ruang tidak ditemukan. Periksa kembali kode undanganmu.';
-            } elseif ($room->status === 'waiting') {
-                return redirect()->route('room', ['code' => $room->code]);
-            } elseif ($room->status === 'ended') {
-                PlayerResume::forget($room->code);
-
-                return redirect()->route('home');
             } else {
+                // A host that stopped heartbeating closes the room; the
+                // status checks below then send this browser home.
+                $this->presence->closeIfHostGone($room);
+
+                if ($room->status === 'waiting') {
+                    return redirect()->route('room', ['code' => $room->code]);
+                }
+
+                if ($room->status === 'ended') {
+                    PlayerResume::forget($room->code);
+
+                    return redirect()->route('home');
+                }
+
                 RoomController::playerToken($request);
                 $me = PlayerResume::find($request, $room);
 
                 if ($me) {
+                    $this->presence->touch($me);
                     PlayerResume::remember($request, $me, $room->code);
                 } else {
                     $roomNotice = 'Kamu belum duduk di ruang ini. Minta kode undangan ke host untuk ikut bermain.';
@@ -104,6 +117,14 @@ class PageController extends Controller
 
             // A browser that already sat in this room (even after its session
             // expired) reclaims its old seat instead of joining as a new player.
+            $this->presence->closeIfHostGone($room);
+
+            if ($room->status === 'ended') {
+                PlayerResume::forget($room->code);
+
+                return redirect()->route('home');
+            }
+
             $resumed = PlayerResume::find($request, $room);
             $token = RoomController::playerToken($request);
 
@@ -155,6 +176,7 @@ class PageController extends Controller
                             'character' => null,
                             'is_ready' => false,
                             'is_host' => $isHost,
+                            'last_seen_at' => now(),
                         ]);
                         $joinedNow = true;
                     }
@@ -181,6 +203,7 @@ class PageController extends Controller
 
             /** @var RoomPlayer $me */
             $me = $result['me'];
+            $this->presence->touch($me);
             PlayerResume::remember($request, $me, $room->code);
 
             return Inertia::render('Room', [
@@ -241,6 +264,7 @@ class PageController extends Controller
                     'character' => Room::DEFAULT_CHARACTER_BY_COLOR[$firstSeat] ?? 'ignivar',
                     'is_ready' => true,
                     'is_host' => true,
+                    'last_seen_at' => now(),
                 ]);
 
                 return $created;
@@ -253,6 +277,7 @@ class PageController extends Controller
         $me = $freshRoom ? PlayerResume::find($request, $freshRoom) : null;
 
         if ($me && $freshRoom) {
+            $this->presence->touch($me);
             PlayerResume::remember($request, $me, $freshRoom->code);
         }
 
