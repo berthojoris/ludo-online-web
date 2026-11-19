@@ -777,13 +777,21 @@
     object-position: 50% 100%;
     user-select: none;
     -webkit-user-drag: none;
-    transition: opacity 120ms ease-out;
+    /*
+     * The legal/knocked states already imply an own compositor layer via their
+     * drop-shadow filters; pinning it here keeps the art on the same own layer
+     * in every state, so engines never rebuild the figure's layer — and risk
+     * re-capturing a blank frame — when state classes toggle mid-animation.
+     */
+    will-change: transform;
 }
 
 /*
- * While the art request is retried, the seat-colored pin stands in for it.
- * Opacity (not `visibility`) keeps the image painted — transparently — during
- * load, so engines never defer decoding a figure they have not drawn yet.
+ * Only the error state is dimmed, to keep broken-image glyphs hidden while the
+ * seat-colored pin stands in. A pending image needs no hiding: without a bitmap
+ * it paints nothing on its own, and staying visible means engines rasterize it
+ * on the ordinary image path as soon as the frame is decoded — there is no
+ * hidden state left whose rasterization an engine could defer.
  */
 .pion-art[data-failed] {
     opacity: 0;

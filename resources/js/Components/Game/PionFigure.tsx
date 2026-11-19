@@ -65,7 +65,7 @@ export default function PionFigure({
                         decoding="sync"
                         onError={art.onError}
                         onLoad={art.onLoad}
-                        data-failed={!art.loaded || art.failed || undefined}
+                        data-failed={art.failed || undefined}
                         className="pion-art"
                     />
                 </span>

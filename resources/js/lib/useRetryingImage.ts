@@ -1,3 +1,4 @@
+import { reportClientIssue } from '@/lib/clientIssues';
 import {
     SyntheticEvent,
     useCallback,
@@ -57,6 +58,26 @@ export function useRetryingImage(src: string) {
 
     useEffect(() => () => clearTimer(), [src, clearTimer]);
 
+    const reportedRef = useRef(false);
+
+    useEffect(() => {
+        reportedRef.current = false;
+    }, [src]);
+
+    /**
+     * Pion art failures are otherwise silent (the seat-colored pin just stands
+     * in), so report each one to the server log once per source URL to make
+     * device-specific art problems diagnosable from production logs.
+     */
+    const reportFailure = useCallback((message: string) => {
+        if (reportedRef.current) {
+            return;
+        }
+
+        reportedRef.current = true;
+        reportClientIssue(message, { source: 'pion-art', level: 'warning' });
+    }, []);
+
     const scheduleRetry = useCallback(
         (attempt: number) => {
             if (!src || attempt >= RETRY_DELAYS_MS.length) {
@@ -90,8 +111,15 @@ export function useRetryingImage(src: string) {
         const attempt = current.attempt;
 
         setState({ src, attempt, loaded: false, failed: true });
+
+        if (attempt >= RETRY_DELAYS_MS.length) {
+            reportFailure(
+                `Pion art failed to load after ${attempt} attempts: ${src.split('?')[0]}`,
+            );
+        }
+
         scheduleRetry(attempt);
-    }, [src, current.attempt, scheduleRetry]);
+    }, [src, current.attempt, scheduleRetry, reportFailure]);
 
     const markLoaded = useCallback(() => {
         clearTimer();
@@ -116,9 +144,14 @@ export function useRetryingImage(src: string) {
                 return;
             }
 
-            img.decode().then(markLoaded, () => onError());
+            img.decode().then(markLoaded, () => {
+                onError();
+                reportFailure(
+                    `Pion art frame failed to decode: ${src.split('?')[0]}`,
+                );
+            });
         },
-        [markLoaded, onError],
+        [markLoaded, onError, reportFailure, src],
     );
 
     const onLoad = useCallback(
