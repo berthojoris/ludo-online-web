@@ -186,6 +186,121 @@ class RoomController extends Controller
         }
     }
 
+    public function randomize(Request $request, string $code): RedirectResponse
+    {
+        $token = self::playerToken($request);
+        $room = Room::where('code', strtoupper($code))->firstOrFail();
+
+        if ($room->host_token !== $token) {
+            abort(403, 'Hanya host yang dapat mengacak warna dan karakter.');
+        }
+
+        if ($room->status !== 'waiting') {
+            throw ValidationException::withMessages([
+                'room' => 'Permainan sudah dimulai.',
+            ]);
+        }
+
+        DB::transaction(function () use ($room) {
+            $lockedRoom = Room::where('id', $room->id)->lockForUpdate()->firstOrFail();
+            if ($lockedRoom->status !== 'waiting') {
+                throw ValidationException::withMessages(['room' => 'Permainan sudah dimulai.']);
+            }
+
+            $players = $lockedRoom->players()->get();
+            if (! $players->contains(fn (RoomPlayer $player) => (bool) $player->is_computer)) {
+                throw ValidationException::withMessages([
+                    'room' => 'Fitur acak hanya tersedia pada mode VS COMPUTER.',
+                ]);
+            }
+
+            $targets = $players
+                ->filter(fn (RoomPlayer $player) => $player->is_host || $player->is_computer)
+                ->values();
+
+            $fixedPlayers = $players->reject(fn (RoomPlayer $player) => $player->is_host || $player->is_computer);
+
+            $reservedColors = $fixedPlayers
+                ->pluck('seat_color')
+                ->filter()
+                ->values()
+                ->all();
+
+            $reservedCharacters = $fixedPlayers
+                ->filter(fn (RoomPlayer $player) => $player->seat_color !== null || $player->character !== null)
+                ->map(fn (RoomPlayer $player) => $player->character ?? ($player->seat_color ? (Room::DEFAULT_CHARACTER_BY_COLOR[$player->seat_color] ?? 'ignivar') : null))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $availableColors = array_values(array_diff(Room::ALL_COLORS, $reservedColors));
+            $availableCharacters = array_values(array_diff(Room::ALL_CHARACTERS, $reservedCharacters));
+            $targetCount = $targets->count();
+
+            if (count($availableColors) < $targetCount || count($availableCharacters) < $targetCount) {
+                throw ValidationException::withMessages([
+                    'room' => 'Tidak cukup warna atau karakter yang tersedia untuk diacak.',
+                ]);
+            }
+
+            $previous = $targets
+                ->map(fn (RoomPlayer $player) => [$player->seat_color, $player->character])
+                ->all();
+
+            $pickedColors = [];
+            $pickedCharacters = [];
+
+            for ($attempt = 0; $attempt < 10; $attempt++) {
+                $pickedColors = array_slice(self::shuffleList($availableColors), 0, $targetCount);
+                $pickedCharacters = array_slice(self::shuffleList($availableCharacters), 0, $targetCount);
+
+                $next = [];
+                for ($index = 0; $index < $targetCount; $index++) {
+                    $next[] = [$pickedColors[$index], $pickedCharacters[$index]];
+                }
+
+                if ($next !== $previous) {
+                    break;
+                }
+            }
+
+            foreach ($targets as $index => $target) {
+                $newColor = $pickedColors[$index];
+                $newCharacter = $pickedCharacters[$index];
+
+                if ($target->is_computer && ($target->name === 'Computer' || in_array($target->name, Room::CHARACTER_NAMES, true))) {
+                    $target->name = Room::characterName($newCharacter);
+                }
+
+                $target->seat_color = $newColor;
+                $target->character = $newCharacter;
+                $target->is_ready = true;
+                $target->save();
+            }
+        });
+
+        $room->refresh()->load('players');
+        $this->broadcaster->publishRoomUpdated($room, __FUNCTION__);
+
+        return back();
+    }
+
+    /**
+     * @param  list<string>  $items
+     * @return list<string>
+     */
+    private static function shuffleList(array $items): array
+    {
+        $list = array_values($items);
+        for ($i = count($list) - 1; $i > 0; $i--) {
+            $j = random_int(0, $i);
+            [$list[$i], $list[$j]] = [$list[$j], $list[$i]];
+        }
+
+        return $list;
+    }
+
     public function selectSeat(Request $request, string $code): RedirectResponse
     {
         $validated = $request->validate([

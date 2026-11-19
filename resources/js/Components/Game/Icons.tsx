@@ -337,3 +337,15 @@ export function ChatBubbleIcon(props: IconProps) {
         </svg>
     );
 }
+
+export function ShuffleIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <path d="M16 4h4v4" />
+            <path d="m4 20 16-16" />
+            <path d="M20 16v4h-4" />
+            <path d="m15 15 5 5" />
+            <path d="m4 4 5 5" />
+        </svg>
+    );
+}

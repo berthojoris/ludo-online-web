@@ -18,6 +18,7 @@ Route::get('/play', [PageController::class, 'play'])->name('play');
 Route::get('/room', [PageController::class, 'room'])->name('room');
 Route::post('/rooms', [RoomController::class, 'store'])->name('rooms.store');
 Route::patch('/rooms/{code}/settings', [RoomController::class, 'updateSettings'])->name('rooms.settings');
+Route::post('/rooms/{code}/randomize', [RoomController::class, 'randomize'])->name('rooms.randomize');
 Route::post('/rooms/{code}/seat', [RoomController::class, 'selectSeat'])->name('rooms.seat');
 Route::post('/rooms/{code}/name', [RoomController::class, 'updateName'])->name('rooms.name');
 Route::patch('/rooms/{code}/players/{player}/name', [RoomController::class, 'updatePlayerName'])->name('rooms.players.name');

@@ -14,6 +14,7 @@ import {
     LinkIcon,
     PawnIcon,
     PencilIcon,
+    ShuffleIcon,
     SlidersIcon,
     TrophyIcon,
     UsersIcon,
@@ -77,26 +78,82 @@ function RoomSettingsSummary({
     playerCount,
     isHost,
     pending,
+    randomizing = false,
     onSelectPlayerCount,
     vsComputer,
     onSelectOpponent,
+    onRandomize,
 }: {
     playerCount: PlayerCount;
     isHost: boolean;
     pending: boolean;
+    randomizing?: boolean;
     onSelectPlayerCount: (count: PlayerCount) => void;
     vsComputer: boolean;
     onSelectOpponent: (computer: boolean) => void;
+    onRandomize?: () => void;
 }) {
+    const controlsDisabled = !isHost || pending || randomizing;
+
     return (
         <>
-            <fieldset className="mb-3" disabled={!isHost || pending} aria-busy={pending}>
-                <legend className="text-ink-muted text-xs font-medium">Lawan</legend>
+            <fieldset
+                className="mb-3"
+                disabled={controlsDisabled}
+                aria-busy={pending || randomizing}
+            >
+                <legend className="text-ink-muted text-xs font-medium">
+                    Lawan
+                </legend>
                 <div className="segmented mt-1.5 grid grid-cols-2">
-                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={!vsComputer} onClick={() => onSelectOpponent(false)}>MANUSIA</button>
-                    <button type="button" className="segmented-item min-h-11 px-2 text-xs" aria-pressed={vsComputer} onClick={() => onSelectOpponent(true)}>VS COMPUTER</button>
+                    <button
+                        type="button"
+                        className="segmented-item min-h-11 px-2 text-xs"
+                        aria-pressed={!vsComputer}
+                        onClick={() => onSelectOpponent(false)}
+                    >
+                        MANUSIA
+                    </button>
+                    <button
+                        type="button"
+                        className="segmented-item min-h-11 px-2 text-xs"
+                        aria-pressed={vsComputer}
+                        onClick={() => onSelectOpponent(true)}
+                    >
+                        VS COMPUTER
+                    </button>
                 </div>
-                {vsComputer && <p className="text-ink-muted mt-1 text-xs">Level Computer: MEDIUM</p>}
+                {vsComputer && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-ink-muted text-xs">
+                            Level Computer: MEDIUM
+                        </p>
+                        {isHost && onRandomize && (
+                            <button
+                                type="button"
+                                disabled={controlsDisabled}
+                                aria-busy={randomizing}
+                                onClick={onRandomize}
+                                className="btn btn-secondary btn-sm shrink-0 gap-1.5 px-2.5 text-xs"
+                            >
+                                {randomizing ? (
+                                    <>
+                                        <span
+                                            aria-hidden="true"
+                                            className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                        />
+                                        <span>Mengacak…</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShuffleIcon className="h-3.5 w-3.5 shrink-0" />
+                                        <span>Random</span>
+                                    </>
+                                )}
+                            </button>
+                        )}
+                    </div>
+                )}
             </fieldset>
             <div>
                 <div className="flex items-center justify-between gap-2">
@@ -114,7 +171,7 @@ function RoomSettingsSummary({
                         <button
                             key={count}
                             type="button"
-                            disabled={!isHost || pending}
+                            disabled={controlsDisabled}
                             onClick={() => onSelectPlayerCount(count)}
                             aria-pressed={playerCount === count}
                             className="segmented-item px-1 text-[11px] sm:text-xs"
@@ -191,6 +248,8 @@ function RoomContent() {
         string | null
     >(null);
     const [pendingAction, setPendingAction] = useState(false);
+    const [randomizing, setRandomizing] = useState(false);
+    const isBusy = pendingAction || randomizing;
     const [actionError, setActionError] = useState<string | null>(
         roomError ?? null,
     );
@@ -319,7 +378,7 @@ function RoomContent() {
             !roomCode ||
             roomStatus !== 'waiting' ||
             viewMode !== 'lobby' ||
-            pendingAction ||
+            isBusy ||
             renamingPlayerId !== null ||
             requiredNameModalOpen
         ) {
@@ -339,7 +398,7 @@ function RoomContent() {
         roomCode,
         roomStatus,
         viewMode,
-        pendingAction,
+        isBusy,
         renamingPlayerId,
         requiredNameModalOpen,
     ]);
@@ -368,6 +427,7 @@ function RoomContent() {
     const playerCount: PlayerCount = liveRoom?.max_players ?? 4;
     const allColorSeats = ALL_PLAYER_COLORS;
     const players = liveRoom?.players ?? [];
+    const vsComputer = players.some((player) => player.is_computer);
     const occupiedCount = players.length;
     const seatedCount = players.filter((p) => p.seat_color !== null).length;
     const readyCount = players.filter((p) => p.is_ready).length;
@@ -431,7 +491,7 @@ function RoomContent() {
     };
 
     const handleSelectPlayerCount = (count: PlayerCount) => {
-        if (!liveRoom || !isHost || count === playerCount) {
+        if (!liveRoom || !isHost || isBusy || count === playerCount) {
             return;
         }
         cue();
@@ -449,7 +509,7 @@ function RoomContent() {
     };
 
     const handleToggleAdvantage = () => {
-        if (!liveRoom || !isHost || pendingAction) return;
+        if (!liveRoom || !isHost || isBusy) return;
         const next = !liveRoom.host_advantage;
         cue();
         setActionError(null);
@@ -470,21 +530,43 @@ function RoomContent() {
     };
 
     const handleSelectOpponent = (computer: boolean) => {
-        if (!liveRoom || !isHost || pendingAction || liveRoom.players.some((player) => player.is_computer) === computer) return;
+        if (!liveRoom || !isHost || isBusy || vsComputer === computer) return;
         setActionError(null);
         setPendingAction(true);
-        router.patch(route('rooms.settings', { code: liveRoom.code }), { vs_computer: computer }, {
-            preserveScroll: true,
-            onError: handleFirstError,
-            onFinish: () => setPendingAction(false),
-        });
+        router.patch(
+            route('rooms.settings', { code: liveRoom.code }),
+            { vs_computer: computer },
+            {
+                preserveScroll: true,
+                onError: handleFirstError,
+                onFinish: () => setPendingAction(false),
+            },
+        );
+    };
+
+    const handleRandomize = () => {
+        if (!liveRoom || !isHost || !vsComputer || isBusy) {
+            return;
+        }
+        cue();
+        setActionError(null);
+        setRandomizing(true);
+        router.post(
+            route('rooms.randomize', { code: liveRoom.code }),
+            {},
+            {
+                preserveScroll: true,
+                onError: handleFirstError,
+                onFinish: () => setRandomizing(false),
+            },
+        );
     };
 
     const handleSelectSeat = (
         color: PlayerColor | null,
         character?: CharacterId,
     ) => {
-        if (!liveRoom || pendingAction) {
+        if (!liveRoom || isBusy) {
             return;
         }
         cue();
@@ -513,7 +595,7 @@ function RoomContent() {
     };
 
     const openCharacterPickerForSeat = (color: PlayerColor) => {
-        if (!liveRoom || pendingAction) {
+        if (!liveRoom || isBusy) {
             return;
         }
         cue();
@@ -538,7 +620,7 @@ function RoomContent() {
     };
 
     const handleToggleReady = () => {
-        if (!liveRoom || pendingAction) {
+        if (!liveRoom || isBusy) {
             return;
         }
         if (!currentMe?.seat_color) {
@@ -562,7 +644,7 @@ function RoomContent() {
     };
 
     const handleStartMatch = () => {
-        if (!liveRoom || !isHost || !allReady || pendingAction) {
+        if (!liveRoom || !isHost || !allReady || isBusy) {
             return;
         }
         cue();
@@ -580,7 +662,7 @@ function RoomContent() {
 
     const handleSaveName = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-        if (!liveRoom || !nameDraft.trim() || pendingAction) {
+        if (!liveRoom || !nameDraft.trim() || isBusy) {
             return;
         }
         cue();
@@ -599,7 +681,7 @@ function RoomContent() {
     };
 
     const openHostEditName = (player: RoomPlayerData) => {
-        if (!isHost || pendingAction || renamingPlayerId !== null) {
+        if (!isHost || isBusy || renamingPlayerId !== null) {
             return;
         }
         cue();
@@ -1036,11 +1118,35 @@ function RoomContent() {
                                         </div>
                                     </div>
 
-                                    <div className="flex shrink-0 items-center gap-1.5">
+                                    <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5">
+                                        {vsComputer && isHost && (
+                                            <button
+                                                type="button"
+                                                disabled={isBusy}
+                                                aria-busy={randomizing}
+                                                onClick={handleRandomize}
+                                                className="btn btn-secondary min-h-10 gap-1.5 px-2.5 sm:min-h-11 sm:px-3 md:hidden"
+                                            >
+                                                {randomizing ? (
+                                                    <>
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                                        />
+                                                        <span>Mengacak…</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ShuffleIcon className="h-3.5 w-3.5 shrink-0" />
+                                                        <span>Random</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
                                         {currentMe?.seat_color && (
                                             <button
                                                 type="button"
-                                                disabled={pendingAction}
+                                                disabled={isBusy}
                                                 onClick={() =>
                                                     openCharacterPickerForSeat(
                                                         currentMe.seat_color!,
@@ -1181,7 +1287,7 @@ function RoomContent() {
                                                             key={player.id}
                                                             type="button"
                                                             disabled={
-                                                                pendingAction ||
+                                                                isBusy ||
                                                                 renamingPlayerId ===
                                                                     player.id
                                                             }
@@ -1535,7 +1641,7 @@ function RoomContent() {
                                                                 <button
                                                                     type="button"
                                                                     disabled={
-                                                                        pendingAction
+                                                                        isBusy
                                                                     }
                                                                     onClick={() =>
                                                                         openCharacterPickerForSeat(
@@ -1566,7 +1672,7 @@ function RoomContent() {
                                                                 <button
                                                                     type="button"
                                                                     disabled={
-                                                                        pendingAction
+                                                                        isBusy
                                                                     }
                                                                     onClick={() =>
                                                                         handleSelectSeat(
@@ -1584,7 +1690,7 @@ function RoomContent() {
                                                             <button
                                                                 type="button"
                                                                 disabled={
-                                                                    pendingAction ||
+                                                                    isBusy ||
                                                                     renamingPlayerId ===
                                                                         occupant.id
                                                                 }
@@ -1618,7 +1724,7 @@ function RoomContent() {
                                                         <button
                                                             type="button"
                                                             disabled={
-                                                                pendingAction ||
+                                                                isBusy ||
                                                                 capacityFull
                                                             }
                                                             onClick={() =>
@@ -1672,7 +1778,7 @@ function RoomContent() {
                                         {isHost ? (
                                             <button
                                                 type="button"
-                                                disabled={pendingAction}
+                                                disabled={isBusy}
                                                 onClick={handleCreateNewRoom}
                                                 className="btn btn-quiet btn-sm text-[11px]"
                                             >
@@ -1796,11 +1902,13 @@ function RoomContent() {
                                     </ul>
 
                                     <RoomSettingsSummary
-                                        vsComputer={Boolean(liveRoom?.players.some((player) => player.is_computer))}
+                                        vsComputer={vsComputer}
                                         onSelectOpponent={handleSelectOpponent}
                                         playerCount={playerCount}
                                         isHost={isHost}
                                         pending={pendingAction}
+                                        randomizing={randomizing}
+                                        onRandomize={handleRandomize}
                                         onSelectPlayerCount={
                                             handleSelectPlayerCount
                                         }
@@ -1833,7 +1941,7 @@ function RoomContent() {
                                                 disabled={
                                                     !currentMe?.seat_color ||
                                                     !currentMe?.character ||
-                                                    pendingAction
+                                                    isBusy
                                                 }
                                                 onClick={handleToggleReady}
                                                 className="switch"
@@ -1859,7 +1967,7 @@ function RoomContent() {
                                                 <button
                                                     type="button"
                                                     disabled={
-                                                        !allReady || pendingAction
+                                                        !allReady || isBusy
                                                     }
                                                     onClick={handleStartMatch}
                                                     aria-busy={pendingAction}
@@ -1940,7 +2048,7 @@ function RoomContent() {
                                         disabled={
                                             !currentMe?.seat_color ||
                                             !currentMe?.character ||
-                                            pendingAction
+                                            isBusy
                                         }
                                         onClick={handleToggleReady}
                                         className="switch"
@@ -1964,7 +2072,7 @@ function RoomContent() {
                                 {isHost ? (
                                     <button
                                         type="button"
-                                        disabled={!allReady || pendingAction}
+                                        disabled={!allReady || isBusy}
                                         onClick={handleStartMatch}
                                         aria-busy={pendingAction}
                                         className="btn btn-primary flex-1 px-3"
@@ -2048,15 +2156,13 @@ function RoomContent() {
 
                         <div className="space-y-4">
                             <RoomSettingsSummary
-                                vsComputer={Boolean(
-                                    liveRoom?.players.some(
-                                        (player) => player.is_computer,
-                                    ),
-                                )}
+                                vsComputer={vsComputer}
                                 onSelectOpponent={handleSelectOpponent}
                                 playerCount={playerCount}
                                 isHost={isHost}
                                 pending={pendingAction}
+                                randomizing={randomizing}
+                                onRandomize={handleRandomize}
                                 onSelectPlayerCount={handleSelectPlayerCount}
                             />
 
@@ -2078,7 +2184,7 @@ function RoomContent() {
                                         liveRoom?.host_advantage,
                                     )}
                                     aria-busy={pendingAction}
-                                    disabled={!isHost || pendingAction}
+                                    disabled={!isHost || isBusy}
                                     onClick={handleToggleAdvantage}
                                     className="switch shrink-0"
                                 >

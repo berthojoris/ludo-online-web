@@ -788,4 +788,76 @@ class RoomFlowTest extends TestCase
                 ->where('room.players.0.character', 'solgarde')
                 ->where('room.players.1.character', 'zephyira'));
     }
+
+    public function test_host_can_randomize_colors_and_characters_in_vs_computer_mode_and_reselect_available_ones(): void
+    {
+        Event::fake([RoomUpdated::class]);
+
+        $this->withSession(['ludo_room_access' => true])->get('/room')->assertOk();
+        $room = Room::firstOrFail();
+        $hostToken = session('ludo_player_token');
+
+        // Cannot randomize in MANUSIA mode (without computer opponents)
+        $this->post("/rooms/{$room->code}/randomize")
+            ->assertSessionHasErrors('room');
+
+        // Switch to VS COMPUTER (4 players: 1 host + 3 computers)
+        $this->patch("/rooms/{$room->code}/settings", ['vs_computer' => true])
+            ->assertRedirect();
+
+        $before = $room->fresh('players')->players
+            ->mapWithKeys(fn ($player) => [$player->id => [$player->seat_color, $player->character]])
+            ->all();
+
+        // Randomize colors and characters for host and computers
+        $this->post("/rooms/{$room->code}/randomize")
+            ->assertRedirect();
+
+        Event::assertDispatched(RoomUpdated::class, fn (RoomUpdated $event) => $event->room['code'] === $room->code);
+
+        $players = $room->fresh('players')->players;
+        $this->assertCount(4, $players);
+
+        $colors = $players->pluck('seat_color')->all();
+        $characters = $players->pluck('character')->all();
+        $this->assertCount(4, array_unique($colors));
+        $this->assertCount(4, array_unique($characters));
+
+        foreach ($players as $player) {
+            $this->assertContains($player->seat_color, Room::ALL_COLORS);
+            $this->assertContains($player->character, Room::ALL_CHARACTERS);
+            $this->assertTrue($player->is_ready);
+        }
+
+        $after = $players
+            ->mapWithKeys(fn ($player) => [$player->id => [$player->seat_color, $player->character]])
+            ->all();
+        $this->assertNotSame($before, $after);
+
+        // Host can select any color and character that is now available after randomizing
+        $freeColors = array_values(array_diff(Room::ALL_COLORS, $colors));
+        $freeCharacters = array_values(array_diff(Room::ALL_CHARACTERS, $characters));
+        $this->assertNotEmpty($freeColors);
+        $this->assertNotEmpty($freeCharacters);
+
+        $this->post("/rooms/{$room->code}/seat", [
+            'seat_color' => $freeColors[0],
+            'character' => $freeCharacters[0],
+        ])->assertRedirect();
+
+        $host = $room->players()->where('is_host', true)->firstOrFail();
+        $this->assertSame($freeColors[0], $host->seat_color);
+        $this->assertSame($freeCharacters[0], $host->character);
+
+        // Non-host cannot randomize
+        $this->flushSession();
+        $this->post("/rooms/{$room->code}/randomize")
+            ->assertForbidden();
+
+        // Cannot randomize after match has started
+        $this->withSession(['ludo_player_token' => $hostToken]);
+        $room->update(['status' => 'started']);
+        $this->post("/rooms/{$room->code}/randomize")
+            ->assertSessionHasErrors('room');
+    }
 }
