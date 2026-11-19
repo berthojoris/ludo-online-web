@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BackgroundMusicController;
+use App\Http\Controllers\BroadcastAuthorizationController;
 use App\Http\Controllers\CharacterKillAnimationController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
@@ -11,6 +12,12 @@ use App\Http\Controllers\RoomHandoffController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
+
+// Room broadcasts are private. Guests participate without an account, so the
+// endpoint validates the same room membership used by the room and match flow
+// instead of Laravel's user-only broadcast auth.
+Route::post('/broadcasting/room-auth', [BroadcastAuthorizationController::class, 'authenticateRoom'])
+    ->name('broadcasting.room-auth');
 
 Route::get('/how-it-works', [PageController::class, 'howItWorks'])->name('how-it-works');
 
@@ -28,8 +35,8 @@ Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('room
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
 Route::post('/rooms/{code}/leave', [RoomController::class, 'leave'])->name('rooms.leave');
 Route::post('/rooms/{code}/heartbeat', [RoomController::class, 'heartbeat'])->name('rooms.heartbeat');
-Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
-Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
+Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->middleware('throttle:60,1')->name('rooms.match.roll');
+Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->middleware('throttle:60,1')->name('rooms.match.move');
 Route::post('/rooms/{code}/handoff', [RoomHandoffController::class, 'store'])->middleware('throttle:20,1')->name('rooms.handoff.store');
 Route::get('/rooms/{code}/continue', [RoomHandoffController::class, 'show'])->name('rooms.continue');
 Route::post('/rooms/{code}/continue', [RoomHandoffController::class, 'claim'])->middleware('throttle:10,1')->name('rooms.continue.store');

@@ -24,6 +24,14 @@ import {
 import Logo from '@/Components/Game/Logo';
 import LudoPin from '@/Components/Game/LudoPin';
 import RoomChat from '@/Components/Game/RoomChat';
+import RoomSettingsSummary from '@/Components/Game/RoomSettingsSummary';
+import type {
+    CopyState,
+    RoomData,
+    RoomPageProps,
+    RoomPlayerData,
+    ViewMode,
+} from '@/features/room/roomTypes';
 import {
     ALL_PLAYER_COLORS,
     ARENA_BACKGROUND_IMAGE,
@@ -39,7 +47,6 @@ import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { useRoomHeartbeat } from '@/lib/useRoomHeartbeat';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
-import { User } from '@/types';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
 import {
@@ -51,151 +58,6 @@ import {
     useRef,
     useState,
 } from 'react';
-
-type CopyState = 'idle' | 'link' | 'error';
-type ViewMode = 'lobby' | 'join';
-
-type RoomPlayerData = {
-    id: number;
-    name: string;
-    seat_color: PlayerColor | null;
-    character?: CharacterId | string | null;
-    is_ready: boolean;
-    is_host: boolean;
-    is_computer?: boolean;
-    name_confirmed: boolean;
-};
-
-type RoomData = {
-    code: string;
-    host_advantage: boolean;
-    max_players: PlayerCount;
-    status: 'waiting' | 'started';
-    players: RoomPlayerData[];
-};
-
-type RoomPageProps = {
-    auth?: { user: User | null };
-    mode?: 'create' | 'lobby' | 'join';
-    room?: RoomData | null;
-    me?: RoomPlayerData | null;
-    roomError?: string | null;
-    attemptedCode?: string | null;
-    canCreateRoom?: boolean;
-};
-
-const PLAYER_COUNTS: PlayerCount[] = [2, 3, 4, 5, 6, 7];
-
-function RoomSettingsSummary({
-    playerCount,
-    isHost,
-    pending,
-    randomizing = false,
-    onSelectPlayerCount,
-    vsComputer,
-    onSelectOpponent,
-    onRandomize,
-}: {
-    playerCount: PlayerCount;
-    isHost: boolean;
-    pending: boolean;
-    randomizing?: boolean;
-    onSelectPlayerCount: (count: PlayerCount) => void;
-    vsComputer: boolean;
-    onSelectOpponent: (computer: boolean) => void;
-    onRandomize?: () => void;
-}) {
-    const controlsDisabled = !isHost || pending || randomizing;
-
-    return (
-        <>
-            <fieldset
-                className="mb-3"
-                disabled={controlsDisabled}
-                aria-busy={pending || randomizing}
-            >
-                <legend className="text-ink-muted text-xs font-medium">
-                    Lawan
-                </legend>
-                <div className="segmented mt-1.5 grid grid-cols-2">
-                    <button
-                        type="button"
-                        className="segmented-item min-h-11 px-2 text-xs"
-                        aria-pressed={!vsComputer}
-                        onClick={() => onSelectOpponent(false)}
-                    >
-                        MANUSIA
-                    </button>
-                    <button
-                        type="button"
-                        className="segmented-item min-h-11 px-2 text-xs"
-                        aria-pressed={vsComputer}
-                        onClick={() => onSelectOpponent(true)}
-                    >
-                        VS COMPUTER
-                    </button>
-                </div>
-                {vsComputer && (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-ink-muted text-xs">
-                            Level Computer: MEDIUM
-                        </p>
-                        {isHost && onRandomize && (
-                            <button
-                                type="button"
-                                disabled={controlsDisabled}
-                                aria-busy={randomizing}
-                                onClick={onRandomize}
-                                className="btn btn-secondary btn-sm shrink-0 gap-1.5 px-2.5 text-xs"
-                            >
-                                {randomizing ? (
-                                    <>
-                                        <span
-                                            aria-hidden="true"
-                                            className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-                                        />
-                                        <span>Mengacak…</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <ShuffleIcon className="h-3.5 w-3.5 shrink-0" />
-                                        <span>Random</span>
-                                    </>
-                                )}
-                            </button>
-                        )}
-                    </div>
-                )}
-            </fieldset>
-            <div>
-                <div className="flex items-center justify-between gap-2">
-                    <span className="text-ink-muted block text-xs font-medium">
-                        Kapasitas pemain
-                    </span>
-                    {!isHost && (
-                        <span className="text-ink-muted text-[10px] font-medium">
-                            Diatur host
-                        </span>
-                    )}
-                </div>
-                <div className="segmented mt-1.5 grid grid-cols-3">
-                    {PLAYER_COUNTS.map((count) => (
-                        <button
-                            key={count}
-                            type="button"
-                            disabled={controlsDisabled}
-                            onClick={() => onSelectPlayerCount(count)}
-                            aria-pressed={playerCount === count}
-                            className="segmented-item px-1 text-[11px] sm:text-xs"
-                        >
-                            {count} Pemain
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </>
-    );
-}
 
 function normalizeCode(value: string): string {
     return value
@@ -384,7 +246,7 @@ function RoomContent() {
         }
 
         const channelName = `room.${roomCode}`;
-        const channel = echo().channel(channelName);
+        const channel = echo().private(channelName);
 
         channel.listen('.room.updated', (payload: { room?: RoomData }) => {
             if (payload?.room?.code === roomCode) {

@@ -77,7 +77,15 @@ class RoomController extends Controller
             'max_players.in' => 'Jumlah pemain harus 2 sampai 7.',
         ]);
 
-        if (! $request->session()->get('ludo_room_access') && ! hash_equals((string) config('ludo.room_password'), (string) $request->input('password'))) {
+        $roomPassword = config('ludo.room_password');
+
+        if (! $request->session()->get('ludo_room_access') && (! is_string($roomPassword) || $roomPassword === '')) {
+            throw ValidationException::withMessages([
+                'password' => 'Kata sandi pembuatan room belum dikonfigurasi di server.',
+            ]);
+        }
+
+        if (! $request->session()->get('ludo_room_access') && ! hash_equals((string) $roomPassword, (string) $request->input('password'))) {
             throw ValidationException::withMessages([
                 'password' => 'Kata sandi salah. Periksa kembali lalu coba lagi.',
             ]);
@@ -600,7 +608,7 @@ class RoomController extends Controller
 
         $startingPlayer = $players->random();
         $seatColors = $players->pluck('seat_color')->all();
-        $boardArms = $players->count() >= 5 ? min(7, $players->count()) : 4;
+        $boardArms = MatchRules::defaultArms($players->count());
 
         $status = DB::transaction(function () use ($room, $players, $startingPlayer, $seatColors, $boardArms) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();

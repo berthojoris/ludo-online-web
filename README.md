@@ -69,7 +69,7 @@ The initial product language is Indonesian, with English planned. The interface 
 | Outbox pattern and separate `matches` schema | Not started; single-snapshot design today |
 | Board renderer | React/CSS/SVG board with CSS animation working; PixiJS/GSAP not started |
 | PWA manifest and service worker | Not started |
-| Match channel authorization | Open question; match events currently ride the public `room.{CODE}` channel |
+| Match channel authorization | Working; private `room.{CODE}` channels with guest-aware membership auth |
 | `php artisan test` | Feature suite present (pages, room flow, resume) — passing |
 | TypeScript check | Passing |
 | Database | SQLite locally, MySQL is the target |
@@ -141,8 +141,6 @@ Open product decisions:
 
 - Private-room rematch behavior.
 - Guest session lifetime and account linking.
-- Whether match events should move from the public `room.{CODE}` channel to authorized private channels.
-
 See [GAME_RULES.md](GAME_RULES.md) for the target ruleset and invariant list.
 
 ## Architecture
@@ -176,7 +174,7 @@ Laravel Reverb is installed, configured, and actively broadcasting:
 
 - `BROADCAST_CONNECTION=reverb` with `ShouldBroadcastNow` events (no queue dependency for delivery).
 - Echo configured once in `resources/js/app.tsx`.
-- Two events on the public `room.{CODE}` channel:
+- Two events on the private `room.{CODE}` channel:
   - `room.updated` — the full lobby payload, emitted on seat, name, ready, settings, start, end, and join changes.
   - `match.action` — one envelope per committed mutation (`roll`, `move`, `end`), carrying `action_id` (UUID), `player_id`, the dice value or `token_index`, `state_version`, and the full resulting `match_state`.
 - Broadcast failures are caught and logged by `RoomBroadcaster` with room/action context; committed game state is never rolled back.
@@ -301,7 +299,7 @@ For HTTPS deployments, terminate TLS at a reverse proxy and set both `REVERB_SCH
 | `CACHE_STORE` | Cache store | `database` |
 | `QUEUE_CONNECTION` | Queue connection | `database` |
 | `BROADCAST_CONNECTION` | Broadcast driver | `reverb` |
-| `ROOM_CREATE_PASSWORD` | Server-verified password required to create a room | `malaquena` in the scaffold; override in every deployment |
+| `ROOM_CREATE_PASSWORD` | Server-verified password required to create a room | Required in every environment; room creation is disabled when empty |
 | `OPENROUTER_API_KEY` | OpenRouter key for SFX, BGM, and kill animation generation | Empty; generation endpoints report not configured |
 | `OPENROUTER_AUDIO_MODEL` | Audio model for SFX and BGM | `bytedance-seed/seed-audio-1-0` |
 | `OPENROUTER_IMAGE_MODEL` | Image model for kill animations | `openai/gpt-image-2.6-sunburst` |
@@ -432,7 +430,8 @@ The current suite covers rendered pages, the room join/seat/ready/start flow, an
 - Room creation is gated by a server-verified password (`ROOM_CREATE_PASSWORD`); the value never reaches the browser bundle.
 - Chat, client issue reporting, and asset generation endpoints are rate limited.
 - The OpenRouter API key is server-only and never exposed to the client.
-- Match events currently ride the public `room.{CODE}` channel. Moving match traffic to authorized private channels is an open hardening task.
+- Match events ride private `room.{CODE}` channels. The guest-aware `broadcasting/room-auth` endpoint authorizes room membership before Echo may subscribe.
+- Roll and move commands are rate limited (60/min) in addition to the `state_version` and row-lock guards.
 - `REVERB_ALLOWED_ORIGINS` must list explicit application origins outside local development.
 - Reverb credentials and `.env` values must stay out of version control.
 - Production requires HTTPS and WSS.
@@ -465,7 +464,7 @@ The PWA scope (manifest, install icons, service worker, offline banner, update h
 | M5 | Board animation, SFX, kill animations, BGM | Done without PixiJS/GSAP; haptics pending |
 | M6 | Security review, load tests, observability, backup restore, pilot release | Not started |
 
-The next engineering milestones are quick matchmaking, turn timers with a timeout policy, the installable PWA layer, and hardening match channels from public to authorized private channels.
+The next engineering milestones are quick matchmaking, turn timers with a timeout policy, and the installable PWA layer.
 
 See [TASKS.md](TASKS.md) and [ROADMAP.md](ROADMAP.md) for the detailed work breakdown.
 

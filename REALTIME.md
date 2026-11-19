@@ -153,6 +153,7 @@ Do not rely on the socket for initial state. Fetch the snapshot on mount and aft
 
 - `private-match.{matchId}`: authorized current participants, versioned gameplay events.
 - `presence-match.{matchId}`: authorized participants, online presence only.
+- `private-room.{CODE}`: the current room implementation. `RoomUpdated` and `MatchAction` broadcast here, and `resources/js/app.tsx` points Echo at the `broadcasting.room-auth` route, where `BroadcastAuthorizationController` validates room membership with `PlayerResume` (session token, resume cookie, or authenticated user) before signing the Pusher auth response.
 - `private-user.{userId}`: invitations and queue status.
 - `private-queue.{ticketId}`: matchmaking updates, only the ticket owner.
 

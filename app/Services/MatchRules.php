@@ -17,7 +17,7 @@ class MatchRules
 
     public static function resolveArms(array $colors, ?int $arms = null): int
     {
-        if ($arms !== null && $arms >= 5 && $arms <= 7) {
+        if ($arms === 3 || ($arms !== null && $arms >= 5 && $arms <= 7)) {
             return $arms;
         }
 
@@ -25,9 +25,28 @@ class MatchRules
             return 4;
         }
 
-        $count = count($colors);
+        return self::defaultArms(count($colors));
+    }
 
-        return $count >= 5 ? min(7, $count) : 4;
+    /**
+     * Board arms for a new match: 3 players use the three-base board,
+     * 2 and 4 players the classic cross, 5-7 players the radial star.
+     */
+    public static function defaultArms(int $playerCount): int
+    {
+        if ($playerCount === 3) {
+            return 3;
+        }
+
+        return $playerCount >= 5 ? min(7, $playerCount) : 4;
+    }
+
+    /**
+     * Track cells along one side of a radial arm; the three-base board uses classic-length arms.
+     */
+    private static function radialStepsPerArm(int $arms): int
+    {
+        return $arms === 3 ? 6 : 5;
     }
 
     /**
@@ -101,7 +120,9 @@ class MatchRules
             ];
         }
 
-        $sectorLength = 11;
+        $stepsPerArm = self::radialStepsPerArm($resolvedArms);
+        $sectorLength = 2 * $stepsPerArm + 1;
+        $safeOffset = 2 * $stepsPerArm - 4;
         $trackLength = $resolvedArms * $sectorLength;
         $safe = [];
         $starts = [];
@@ -110,7 +131,7 @@ class MatchRules
         for ($k = 0; $k < $resolvedArms; $k++) {
             $starts[$slots[$k]] = $k * $sectorLength;
             $safe[] = $k * $sectorLength;
-            $safe[] = $k * $sectorLength + 6;
+            $safe[] = $k * $sectorLength + $safeOffset;
         }
 
         return [
@@ -118,7 +139,7 @@ class MatchRules
             'sector_length' => $sectorLength,
             'track_length' => $trackLength,
             'last_track_position' => $trackLength - 2,
-            'finish_position' => $trackLength + 3,
+            'finish_position' => $trackLength - 1 + ($stepsPerArm - 1),
             'safe' => $safe,
             'starts' => $starts,
         ];
@@ -297,9 +318,13 @@ class MatchRules
             $absolute = self::absolute($player, $target, $colors, $arms);
             if ($absolute !== null && ! in_array($absolute, $spec['safe'], true)) {
                 foreach ($state['tokens'] as $opponent => $tokens) {
-                    if ($opponent === $player) continue;
+                    if ($opponent === $player) {
+                        continue;
+                    }
                     foreach ($tokens as $position) {
-                        if (self::absolute($opponent, $position, $colors, $arms) === $absolute) $score += 80;
+                        if (self::absolute($opponent, $position, $colors, $arms) === $absolute) {
+                            $score += 80;
+                        }
                     }
                 }
             }

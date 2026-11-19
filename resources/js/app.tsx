@@ -29,6 +29,15 @@ const reverbScheme =
 configureEcho({
     broadcaster: 'reverb',
     key: import.meta.env.VITE_REVERB_APP_KEY,
+    authEndpoint: route('broadcasting.room-auth'),
+    auth: {
+        headers: {
+            'X-CSRF-Token':
+                document
+                    .querySelector('meta[name="csrf-token"]')
+                    ?.getAttribute('content') ?? '',
+        },
+    },
     wsHost: reverbHost,
     wsPort: reverbPort,
     wssPort: reverbPort,

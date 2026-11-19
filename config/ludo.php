@@ -7,11 +7,13 @@ return [
     | Room Creation Password
     |--------------------------------------------------------------------------
     |
-    | Static access password required before a visitor may create a room. It is
+    | Access password required before a visitor may create a room. It is
     | verified on the server so the value never reaches the browser bundle.
+    | ROOM_CREATE_PASSWORD must be set in every environment; there is no
+    | fallback so a missing secret can never silently open room creation.
     |
     */
 
-    'room_password' => env('ROOM_CREATE_PASSWORD', 'malaquena'),
+    'room_password' => env('ROOM_CREATE_PASSWORD'),
 
 ];

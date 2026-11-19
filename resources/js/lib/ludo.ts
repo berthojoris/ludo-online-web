@@ -584,11 +584,28 @@ export type BoardSpec = {
 const RADIAL_SPEC_CACHE = new Map<string, BoardSpec>();
 const CLASSIC_SPEC_CACHE = new Map<string, BoardSpec>();
 
+/**
+ * Board arms used for a new match: 3 players get the three-base board,
+ * 2 and 4 players the classic cross, 5-7 players the radial star.
+ */
+export function defaultBoardArms(playerCount: number): number {
+    if (playerCount === 3) {
+        return 3;
+    }
+
+    return playerCount >= 5 ? Math.min(7, playerCount) : 4;
+}
+
 export function resolveBoardArms(
     order: PlayerColor[],
     explicitArms?: number | null,
 ): number {
-    if (explicitArms === 5 || explicitArms === 6 || explicitArms === 7) {
+    if (
+        explicitArms === 3 ||
+        explicitArms === 5 ||
+        explicitArms === 6 ||
+        explicitArms === 7
+    ) {
         return explicitArms;
     }
 
@@ -596,7 +613,12 @@ export function resolveBoardArms(
         return 4;
     }
 
-    return order.length >= 5 ? Math.min(7, order.length) : 4;
+    return defaultBoardArms(order.length);
+}
+
+/** Track cells along one side of an arm; the three-base board uses classic-length arms. */
+function radialStepsPerArm(arms: number): number {
+    return arms === 3 ? 6 : 5;
 }
 
 export function resolveSlotColors(
@@ -627,7 +649,7 @@ export function resolveSlotColors(
 }
 
 function buildRadialSpec(
-    arms: 5 | 6 | 7,
+    arms: 3 | 5 | 6 | 7,
     order: PlayerColor[],
 ): BoardSpec {
     const ringColors = resolveSlotColors(order, arms);
@@ -637,12 +659,14 @@ function buildRadialSpec(
         return cached;
     }
 
-    const stepsPerArm = 5;
-    const sectorLength = 11;
+    const stepsPerArm = radialStepsPerArm(arms);
+    const laneLength = stepsPerArm - 1;
+    const sectorLength = 2 * stepsPerArm + 1;
+    const safeOffset = 2 * stepsPerArm - 4;
     const trackLength = arms * sectorLength;
     const lastTrackPosition = trackLength - 2;
     const firstLanePosition = trackLength - 1;
-    const finishPosition = trackLength + 3;
+    const finishPosition = firstLanePosition + laneLength;
 
     const starts: Partial<Record<PlayerColor, number>> = {};
     const safeIndices = new Set<number>();
@@ -650,7 +674,7 @@ function buildRadialSpec(
     for (let k = 0; k < arms; k++) {
         starts[ringColors[k]] = k * sectorLength;
         safeIndices.add(k * sectorLength);
-        safeIndices.add(k * sectorLength + 6);
+        safeIndices.add(k * sectorLength + safeOffset);
     }
 
     const tanHalf = Math.tan(Math.PI / arms);
@@ -686,20 +710,20 @@ function buildRadialSpec(
         armGeom[k].pt(rIn + (t + 0.5) * d, -d);
     const pIn = (k: number, t: number) =>
         armGeom[k].pt(rIn + (t + 0.5) * d, d);
-    const pTip = (k: number) => armGeom[k].pt(rIn + 4.5 * d, 0);
+    const pTip = (k: number) => armGeom[k].pt(rIn + (stepsPerArm - 0.5) * d, 0);
 
     const trackCells: RadialCell[] = [];
     for (let k = 0; k < arms; k++) {
         const nextK = (k + 1) % arms;
 
-        for (let t = 3; t >= 0; t--) {
+        for (let t = laneLength - 1; t >= 0; t--) {
             const p = pIn(k, t);
             const idx = trackCells.length;
             trackCells.push({
                 x: p.x,
                 y: p.y,
                 angleDeg: armGeom[k].angleDeg,
-                owner: t === 3 ? ringColors[k] : undefined,
+                owner: t === laneLength - 1 ? ringColors[k] : undefined,
                 safe: safeIndices.has(idx),
             });
         }
@@ -723,7 +747,7 @@ function buildRadialSpec(
             safe: false,
         });
 
-        const corner = pIn(nextK, 4);
+        const corner = pIn(nextK, stepsPerArm - 1);
         trackCells.push({
             x: corner.x,
             y: corner.y,
@@ -770,11 +794,25 @@ function buildRadialSpec(
 
         const innerPath = `M ${wIn.x.toFixed(3)} ${wIn.y.toFixed(3)} L ${wOutA.x.toFixed(3)} ${wOutA.y.toFixed(3)} A ${rInnerArc.toFixed(3)} ${rInnerArc.toFixed(3)} 0 0 1 ${wOutB.x.toFixed(3)} ${wOutB.y.toFixed(3)} Z`;
 
-        const rPadInner = rApexInner + (0.48 * d) / tanHalf;
-        const rPadOuter = rInnerArc - 0.56 * d;
+        // The three-base wedge is wide, so its diamond of pads is sized to
+        // clear the arm edges: a pad at radius r sits (r - apex) * sin(half)
+        // away from each edge.
+        const padClearance = arms === 3 ? 0.88 * d : 0;
+        const rPadInner =
+            arms === 3
+                ? rApexInner + padClearance / sinHalf
+                : rApexInner + (0.48 * d) / tanHalf;
+        const rPadOuter =
+            arms === 3 ? rInnerArc - padClearance : rInnerArc - 0.56 * d;
         const rPadMid = (rPadInner + rPadOuter) / 2;
         const spread =
-            arms === 5 ? 0.8 * d : arms === 6 ? 0.66 * d : 0.54 * d;
+            arms === 3
+                ? 1.55 * d
+                : arms === 5
+                  ? 0.8 * d
+                  : arms === 6
+                    ? 0.66 * d
+                    : 0.54 * d;
 
         const basePads: RadialPoint[] = [
             { x: cx + rPadInner * bx, y: cy + rPadInner * by },
@@ -798,10 +836,10 @@ function buildRadialSpec(
         const cA = curr.pt(rIn, -1.5 * d);
         const cB = curr.pt(rIn, 1.5 * d);
         const centerTriangle = `${cA.x.toFixed(3)},${cA.y.toFixed(3)} ${cB.x.toFixed(3)},${cB.y.toFixed(3)} ${cx},${cy}`;
-        const finishPoint = curr.pt(rIn * 0.56, 0);
+        const finishPoint = curr.pt(rIn * (arms === 3 ? 0.66 : 0.56), 0);
 
         const laneCells: { x: number; y: number; angleDeg: number }[] = [];
-        for (let t = 3; t >= 0; t--) {
+        for (let t = laneLength - 1; t >= 0; t--) {
             const lp = curr.pt(rIn + (t + 0.5) * d, 0);
             laneCells.push({
                 x: lp.x,
@@ -823,9 +861,9 @@ function buildRadialSpec(
     }
 
     const tokenSizePercent =
-        arms === 5 ? 5.2 : arms === 6 ? 4.9 : 4.6;
+        arms === 3 ? 0.9 * d : arms === 5 ? 5.2 : arms === 6 ? 4.9 : 4.6;
     const padSizePercent =
-        arms === 5 ? 7.6 : arms === 6 ? 7.0 : 6.4;
+        arms === 3 ? 1.42 * d : arms === 5 ? 7.6 : arms === 6 ? 7.0 : 6.4;
 
     const spec: BoardSpec = {
         arms,
@@ -910,8 +948,8 @@ export function getBoardSpec(
     explicitArms?: number | null,
 ): BoardSpec {
     const arms = resolveBoardArms(order, explicitArms);
-    if (arms >= 5 && arms <= 7) {
-        return buildRadialSpec(arms as 5 | 6 | 7, order);
+    if (arms === 3 || (arms >= 5 && arms <= 7)) {
+        return buildRadialSpec(arms as 3 | 5 | 6 | 7, order);
     }
 
     return buildClassicSpec(order);
