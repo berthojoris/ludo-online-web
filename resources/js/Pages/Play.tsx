@@ -1,11 +1,13 @@
 import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import { SkillBurst } from '@/Components/Game/CharacterSkillBurst';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
+import ContinueOnDeviceModal from '@/Components/Game/ContinueOnDeviceModal';
 import Dice from '@/Components/Game/Dice';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
 import {
     ChevronLeftIcon,
     CloseIcon,
+    DeviceHandoffIcon,
     DiceIcon,
     HashIcon,
     RefreshIcon,
@@ -1116,6 +1118,7 @@ export default function Play() {
     const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
     const [resultModalOpen, setResultModalOpen] = useState(false);
     const [endGameModalOpen, setEndGameModalOpen] = useState(false);
+    const [continueDeviceOpen, setContinueDeviceOpen] = useState(false);
     const endGameOverlayStyle = useModalViewport(endGameModalOpen);
     const [endingGame, setEndingGame] = useState(false);
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
@@ -2978,11 +2981,16 @@ export default function Play() {
                                 onClick={exitGuard.blockLink}
                                 className="shrink-0 rounded-lg"
                             >
-                                <Logo
-                                    className="h-7 w-7"
-                                    withWordmark
-                                    compact
-                                />
+                                <span className="inline-flex min-[430px]:hidden">
+                                    <Logo className="h-7 w-7" />
+                                </span>
+                                <span className="hidden min-[430px]:inline-flex">
+                                    <Logo
+                                        className="h-7 w-7"
+                                        withWordmark
+                                        compact
+                                    />
+                                </span>
                             </Link>
                             <span className="border-line text-ink-muted hidden rounded-full border bg-white px-2.5 py-1 text-[10px] font-bold tracking-[0.12em] uppercase md:inline-flex">
                                 {room ? `RUANG #${room.code}` : 'LATIHAN'}
@@ -3046,6 +3054,23 @@ export default function Play() {
                                     className="border-danger/30 bg-danger/10 text-danger hover:bg-danger/15 inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-bold tracking-wide uppercase transition"
                                 >
                                     End Game
+                                </button>
+                            )}
+                            {room && me && screen === 'game' && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        cue(playUiSound);
+                                        setContinueDeviceOpen(true);
+                                    }}
+                                    aria-label="Lanjutkan di perangkat lain"
+                                    title="Lanjutkan di perangkat lain"
+                                    className="border-line text-ink-muted hover:text-ink inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full border bg-white px-2 text-[11px] font-bold transition lg:px-3"
+                                >
+                                    <DeviceHandoffIcon className="h-4 w-4" />
+                                    <span className="hidden lg:inline">
+                                        Lanjut di HP
+                                    </span>
                                 </button>
                             )}
                             <button
@@ -4040,6 +4065,14 @@ export default function Play() {
                         onMessage={showChatBubble}
                     />
                 )}
+
+            {room && me && (
+                <ContinueOnDeviceModal
+                    open={continueDeviceOpen}
+                    roomCode={room.code}
+                    onClose={() => setContinueDeviceOpen(false)}
+                />
+            )}
 
             <ConfirmLeaveModal
                 open={exitGuard.open}

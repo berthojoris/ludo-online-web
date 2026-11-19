@@ -338,6 +338,17 @@ export function ChatBubbleIcon(props: IconProps) {
     );
 }
 
+export function DeviceHandoffIcon(props: IconProps) {
+    return (
+        <svg {...base} {...props}>
+            <rect x="10.5" y="2.5" width="10" height="19" rx="2.6" />
+            <path d="M14 18.5h3" />
+            <path d="M2.5 12h5.5" />
+            <path d="m5.5 9.5 2.5 2.5-2.5 2.5" />
+        </svg>
+    );
+}
+
 export function ShuffleIcon(props: IconProps) {
     return (
         <svg {...base} {...props}>

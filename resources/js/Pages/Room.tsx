@@ -1,5 +1,6 @@
 import CharacterSelectModal from '@/Components/Game/CharacterSelectModal';
 import ConfirmLeaveModal from '@/Components/Game/ConfirmLeaveModal';
+import ContinueOnDeviceModal from '@/Components/Game/ContinueOnDeviceModal';
 import CreateRoomPasswordModal from '@/Components/Game/CreateRoomPasswordModal';
 import RequiredPlayerNameModal from '@/Components/Game/RequiredPlayerNameModal';
 import FullscreenToggle from '@/Components/Game/FullscreenToggle';
@@ -9,6 +10,7 @@ import {
     CheckIcon,
     ChevronLeftIcon,
     CloseIcon,
+    DeviceHandoffIcon,
     DiceIcon,
     HashIcon,
     LinkIcon,
@@ -32,6 +34,7 @@ import {
     PlayerColor,
     PlayerCount,
 } from '@/lib/ludo';
+import { copyText } from '@/lib/clipboard';
 import { playUiSound, unlockAudio } from '@/lib/sound';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
@@ -192,29 +195,6 @@ function normalizeCode(value: string): string {
         .slice(0, 6);
 }
 
-async function copyText(value: string): Promise<boolean> {
-    try {
-        if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(value);
-
-            return true;
-        }
-
-        const textarea = document.createElement('textarea');
-        textarea.value = value;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const copied = document.execCommand('copy');
-        document.body.removeChild(textarea);
-
-        return copied;
-    } catch {
-        return false;
-    }
-}
-
 export default function Room() {
     const { room } = usePage().props as unknown as RoomPageProps;
 
@@ -242,6 +222,7 @@ function RoomContent() {
         serverRoom?.code ?? attemptedCode ?? '',
     );
     const [copyState, setCopyState] = useState<CopyState>('idle');
+    const [continueDeviceOpen, setContinueDeviceOpen] = useState(false);
     const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
     const [createPasswordOpen, setCreatePasswordOpen] = useState(false);
     const [createPasswordError, setCreatePasswordError] = useState<
@@ -1192,6 +1173,23 @@ function RoomContent() {
                                                 </>
                                             )}
                                         </button>
+                                        {currentMe && !currentMe.is_computer && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    cue();
+                                                    setContinueDeviceOpen(true);
+                                                }}
+                                                aria-label="Lanjutkan di perangkat lain"
+                                                title="Lanjutkan di perangkat lain"
+                                                className="btn btn-secondary min-h-10 min-w-10 px-2.5 sm:min-h-11 sm:min-w-11 sm:px-3.5"
+                                            >
+                                                <DeviceHandoffIcon className="h-4 w-4" />
+                                                <span className="hidden lg:inline">
+                                                    Lanjut di HP
+                                                </span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -2366,6 +2364,14 @@ function RoomContent() {
                         containerClassName="game-chat-room"
                     />
                 )}
+
+            {liveRoom && currentMe && !currentMe.is_computer && (
+                <ContinueOnDeviceModal
+                    open={continueDeviceOpen}
+                    roomCode={liveRoom.code}
+                    onClose={() => setContinueDeviceOpen(false)}
+                />
+            )}
 
             <ConfirmLeaveModal
                 open={exitGuard.open}

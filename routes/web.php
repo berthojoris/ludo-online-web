@@ -5,8 +5,9 @@ use App\Http\Controllers\CharacterKillAnimationController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
-use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomChatController;
+use App\Http\Controllers\RoomController;
+use App\Http\Controllers\RoomHandoffController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
@@ -27,6 +28,9 @@ Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('room
 Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
 Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->name('rooms.match.roll');
 Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->name('rooms.match.move');
+Route::post('/rooms/{code}/handoff', [RoomHandoffController::class, 'store'])->middleware('throttle:20,1')->name('rooms.handoff.store');
+Route::get('/rooms/{code}/continue', [RoomHandoffController::class, 'show'])->name('rooms.continue');
+Route::post('/rooms/{code}/continue', [RoomHandoffController::class, 'claim'])->middleware('throttle:10,1')->name('rooms.continue.store');
 Route::get('/rooms/{code}/chat', [RoomChatController::class, 'index'])->name('rooms.chat.index');
 Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->middleware('throttle:30,1')->name('rooms.chat.store');
 Route::post('/client-issues', [ClientIssueController::class, 'store'])

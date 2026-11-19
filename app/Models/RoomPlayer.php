@@ -40,9 +40,17 @@ class RoomPlayer extends Model
         'name_confirmed',
     ];
 
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [
+        'handoff_code_hash',
+    ];
+
     protected function casts(): array
     {
         return [
+            'handoff_expires_at' => 'datetime',
             'is_ready' => 'boolean',
             'is_host' => 'boolean',
             'is_computer' => 'boolean',
