@@ -202,7 +202,7 @@ type Action =
     | { type: 'MOVE'; tokenIndex: number; now: number; version?: number }
     | { type: 'RESET'; now: number; turn?: PlayerId };
 
-const TURN_TIMEOUT_SECONDS = 30;
+const TURN_TIMEOUT_SECONDS = 10;
 
 function formatTurnTimer(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -230,8 +230,8 @@ function TurnCountdownHud({
     const radius = 8;
     const circumference = 2 * Math.PI * radius;
     const dashOffset = circumference * (1 - progress);
-    const isCritical = secondsLeft <= 5;
-    const isWarning = secondsLeft > 5 && secondsLeft <= 10;
+    const isCritical = secondsLeft <= 2;
+    const isWarning = secondsLeft > 2 && secondsLeft <= 5;
 
     const ringColor = isCritical
         ? '#dc2626'
@@ -3195,9 +3195,9 @@ export default function Play() {
                                 style={{
                                     width: `${Math.max(0, Math.min(100, (turnSecondsLeft / TURN_TIMEOUT_SECONDS) * 100))}%`,
                                     backgroundColor:
-                                        turnSecondsLeft <= 5
+                                        turnSecondsLeft <= 2
                                             ? '#dc2626'
-                                            : turnSecondsLeft <= 10
+                                            : turnSecondsLeft <= 5
                                               ? '#d97706'
                                               : PLAYER_CONFIG[state.turn]
                                                     .palette.base,

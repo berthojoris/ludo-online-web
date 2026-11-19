@@ -18,6 +18,12 @@ use Illuminate\Validation\ValidationException;
 
 class RoomController extends Controller
 {
+    /** Window a turn player has before the server accepts an afk auto roll/move. */
+    private const TURN_TIMEOUT_MS = 10_000;
+
+    /** Extra delay the client adds before its timeout request lands. */
+    private const TURN_TIMEOUT_GRACE_MS = 1_500;
+
     public function __construct(
         private RoomBroadcaster $broadcaster,
         private RoomPresence $presence,
@@ -670,7 +676,12 @@ class RoomController extends Controller
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
                 $turnStartedAt = (int) ($state['turn_started_at'] ?? ($room->updated_at?->getTimestampMs() ?? 0));
                 $elapsedMs = now()->getTimestampMs() - $turnStartedAt;
-                abort_unless($turnStartedAt > 0 && $elapsedMs >= 28500, 422, 'Waktu giliran belum habis.');
+                abort_unless(
+                    $turnStartedAt > 0 &&
+                        $elapsedMs >= self::TURN_TIMEOUT_MS - self::TURN_TIMEOUT_GRACE_MS,
+                    422,
+                    'Waktu giliran belum habis.',
+                );
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
@@ -761,7 +772,14 @@ class RoomController extends Controller
                 $afkAutoMove = ! empty($state['afk_auto_move']);
                 $turnStartedAt = (int) ($state['turn_started_at'] ?? ($room->updated_at?->getTimestampMs() ?? 0));
                 $elapsedMs = now()->getTimestampMs() - $turnStartedAt;
-                abort_unless($afkAutoMove || ($turnStartedAt > 0 && $elapsedMs >= 28500), 422, 'Waktu giliran belum habis.');
+                abort_unless(
+                    $afkAutoMove ||
+                        ($turnStartedAt > 0 &&
+                            $elapsedMs >=
+                                self::TURN_TIMEOUT_MS - self::TURN_TIMEOUT_GRACE_MS),
+                    422,
+                    'Waktu giliran belum habis.',
+                );
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
             if ($player->is_computer) {
