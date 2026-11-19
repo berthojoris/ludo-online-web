@@ -48,7 +48,7 @@ export default function Login({
                         name="email"
                         value={data.email}
                         className="mt-1 block w-full"
-                        autoComplete="username"
+                        autoComplete="off"
                         isFocused={true}
                         onChange={(e) => setData('email', e.target.value)}
                     />
@@ -65,7 +65,7 @@ export default function Login({
                         name="password"
                         value={data.password}
                         className="mt-1 block w-full"
-                        autoComplete="current-password"
+                        autoComplete="off"
                         onChange={(e) => setData('password', e.target.value)}
                     />
 

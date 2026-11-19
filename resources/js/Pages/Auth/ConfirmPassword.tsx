@@ -38,6 +38,7 @@ export default function ConfirmPassword() {
                         name="password"
                         value={data.password}
                         className="mt-1 block w-full"
+                        autoComplete="off"
                         isFocused={true}
                         onChange={(e) => setData('password', e.target.value)}
                     />

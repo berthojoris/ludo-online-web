@@ -1456,6 +1456,7 @@ function RoomContent() {
                                                         id="player-display-name"
                                                         type="text"
                                                         autoFocus
+                                                        autoComplete="off"
                                                         value={nameDraft}
                                                         onChange={(e) =>
                                                             setNameDraft(
@@ -2433,6 +2434,7 @@ function RoomContent() {
                                 ref={hostRenameInputRef}
                                 id="host-player-name-input"
                                 type="text"
+                                autoComplete="off"
                                 value={hostNameDraft}
                                 onChange={(event) => {
                                     setHostNameDraft(

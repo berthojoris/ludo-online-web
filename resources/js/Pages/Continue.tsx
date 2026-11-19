@@ -156,7 +156,7 @@ export default function Continue({
                                     }
                                     inputMode="numeric"
                                     pattern="[0-9]*"
-                                    autoComplete="one-time-code"
+                                    autoComplete="off"
                                     enterKeyHint="go"
                                     maxLength={codeLength}
                                     placeholder="000000"

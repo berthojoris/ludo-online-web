@@ -51,7 +51,7 @@ export default function RequiredPlayerNameModal({ open, roomCode }: { open: bool
                                 value={form.data.name}
                                 onChange={(event) => { form.setData('name', event.target.value); form.clearErrors('name'); }}
                                 maxLength={24}
-                                autoComplete="nickname"
+                                autoComplete="off"
                                 placeholder="Masukkan nama"
                                 disabled={form.processing}
                                 aria-invalid={form.errors.name ? true : undefined}

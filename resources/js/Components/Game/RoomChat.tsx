@@ -193,7 +193,7 @@ export default function RoomChat({
                     </div>
                     {error && <p className="game-chat-error" role="status">{error}</p>}
                     <form className="game-chat-form" onSubmit={submit}>
-                        <input aria-label="Tulis pesan" placeholder="Tulis pesan…" maxLength={200} value={chat.data.message} onChange={(event) => chat.setData('message', event.target.value)} />
+                        <input aria-label="Tulis pesan" placeholder="Tulis pesan…" maxLength={200} autoComplete="off" value={chat.data.message} onChange={(event) => chat.setData('message', event.target.value)} />
                         <button type="submit" disabled={chat.processing || !chat.data.message.trim()} aria-busy={chat.processing}>{chat.processing ? '…' : 'Kirim'}</button>
                     </form>
                 </section>
@@ -238,7 +238,7 @@ export function RoomChatPanel({ code, playerId, onMessage }: RoomChatProps) {
             </div>
             {error && <p className="game-chat-error" role="status">{error}</p>}
             <form className="game-chat-form" onSubmit={submit}>
-                <input aria-label="Tulis pesan" placeholder="Tulis pesan…" maxLength={200} value={chat.data.message} onChange={(event) => chat.setData('message', event.target.value)} />
+                <input aria-label="Tulis pesan" placeholder="Tulis pesan…" maxLength={200} autoComplete="off" value={chat.data.message} onChange={(event) => chat.setData('message', event.target.value)} />
                 <button type="submit" disabled={chat.processing || !chat.data.message.trim()} aria-busy={chat.processing}>{chat.processing ? '…' : 'Kirim'}</button>
             </form>
         </section>

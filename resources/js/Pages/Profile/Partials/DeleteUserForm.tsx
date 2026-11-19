@@ -138,7 +138,7 @@ export default function DeleteUserForm({
                             name="password"
                             ref={passwordInput}
                             value={data.password}
-                            autoComplete="current-password"
+                            autoComplete="off"
                             enterKeyHint="done"
                             disabled={processing}
                             onChange={(e) => {

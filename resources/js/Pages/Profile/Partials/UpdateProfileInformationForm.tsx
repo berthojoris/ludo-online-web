@@ -52,7 +52,7 @@ export default function UpdateProfileInformation({
                         onChange={(e) => setData('name', e.target.value)}
                         required
                         isFocused
-                        autoComplete="name"
+                        autoComplete="off"
                     />
 
                     <InputError className="mt-2" message={errors.name} />
@@ -68,7 +68,7 @@ export default function UpdateProfileInformation({
                         value={data.email}
                         onChange={(e) => setData('email', e.target.value)}
                         required
-                        autoComplete="username"
+                        autoComplete="off"
                     />
 
                     <InputError className="mt-2" message={errors.email} />
