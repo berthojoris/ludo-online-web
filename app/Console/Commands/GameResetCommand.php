@@ -5,116 +5,45 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class GameResetCommand extends Command
 {
-    /**
-     * Tabel internal Laravel yang tidak ikut di-truncate.
-     *
-     * @var list<string>
-     */
-    protected const PRESERVED_TABLES = [
-        'migrations',
-    ];
-
     protected $signature = 'game:reset
-        {--force : Jalankan tanpa konfirmasi di environment production}
-        {--keep-users : Pertahankan tabel users (akun tidak ikut terhapus)}';
+        {--force : Jalankan tanpa konfirmasi di environment production}';
 
-    protected $description = 'Truncate semua tabel database dan reset seluruh state game (rooms, players, chat, sesi, cache, antrean)';
+    protected $description = 'Hapus semua tabel database (migrate:fresh), buat ulang dari migrasi, dan reset seluruh state game (cache, sesi, antrean)';
 
     public function handle(): int
     {
         if (! $this->option('force')
             && $this->getLaravel()->environment('production')
-            && ! $this->confirm('PRODUCTION: semua tabel akan di-truncate dan seluruh state game dihapus. Lanjutkan?')) {
+            && ! $this->confirm('PRODUCTION: semua tabel akan dihapus dan dibuat ulang, seluruh data (termasuk akun users) hilang. Lanjutkan?')) {
             $this->info('Dibatalkan. Tidak ada yang dihapus.');
 
             return self::SUCCESS;
         }
 
-        $preserved = self::PRESERVED_TABLES;
-        if ($this->option('keep-users')) {
-            $preserved[] = 'users';
-        }
-
-        $targets = array_values(array_diff(Schema::getTableListing(), $preserved));
-
-        if ($targets === []) {
-            $this->warn('Tidak ada tabel yang bisa di-truncate.');
-
-            return self::SUCCESS;
-        }
-
-        $this->truncateTables($targets);
-        $this->resetAutoIncrements($targets);
+        $this->dropAllTablesAndMigrate();
         $this->clearRuntimeState();
 
         $this->newLine();
         $this->info('Game kembali bersih.');
-        $this->line(sprintf(
-            'Truncate %d tabel: %s',
-            count($targets),
-            implode(', ', $targets),
-        ));
-
-        if ($this->option('keep-users')) {
-            $this->line('Tabel users dipertahankan.');
-        }
+        $this->line('Semua tabel dihapus dan dibuat ulang dari migrasi.');
 
         return self::SUCCESS;
     }
 
     /**
-     * @param  list<string>  $tables
+     * Hapus semua tabel di database (termasuk migrations dan users) lalu
+     * jalankan seluruh migrasi dari awal, sehingga struktur database
+     * konsisten kembali dengan file migrasi terbaru.
      */
-    protected function truncateTables(array $tables): void
+    protected function dropAllTablesAndMigrate(): void
     {
-        $connection = DB::connection();
-        $grammar = $connection->getQueryGrammar();
-        $isSqlite = $connection->getDriverName() === 'sqlite';
+        $this->info('Menghapus semua tabel dan menjalankan migrasi ulang...');
 
-        Schema::disableForeignKeyConstraints();
-
-        try {
-            foreach ($tables as $table) {
-                try {
-                    // SQLite tidak mendukung TRUNCATE; DELETE memakai grammar
-                    // agar identifier di-quote sesuai driver.
-                    if ($isSqlite) {
-                        $connection->statement("DELETE FROM {$grammar->wrapTable($table)}");
-                    } else {
-                        $connection->statement("TRUNCATE TABLE {$grammar->wrapTable($table)}");
-                    }
-
-                    $this->line("Truncated: {$table}");
-                } catch (\Throwable $e) {
-                    $this->error("Gagal truncate {$table}: {$e->getMessage()}");
-                }
-            }
-        } finally {
-            Schema::enableForeignKeyConstraints();
-        }
-    }
-
-    /**
-     * Reset counter auto-increment agar ID kembali mulai dari 1.
-     *
-     * @param  list<string>  $tables
-     */
-    protected function resetAutoIncrements(array $tables): void
-    {
-        if (DB::connection()->getDriverName() !== 'sqlite') {
-            return; // TRUNCATE sudah me-reset AUTO_INCREMENT di MySQL/Postgres.
-        }
-
-        if (! Schema::hasTable('sqlite_sequence')) {
-            return;
-        }
-
-        DB::table('sqlite_sequence')->whereIn('name', $tables)->delete();
+        Artisan::call('migrate:fresh', ['--force' => true]);
+        $this->line(trim(Artisan::output()));
     }
 
     /**
@@ -134,8 +63,6 @@ class GameResetCommand extends Command
             }
 
             $this->line('Sesi berbasis file dibersihkan.');
-        } elseif (config('session.driver') === 'database') {
-            $this->line('Sesi database di-truncate (semua login terhapus).');
         }
 
         Artisan::call('optimize:clear');
