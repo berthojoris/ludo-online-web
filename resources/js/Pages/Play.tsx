@@ -10,6 +10,7 @@ import {
     DeviceHandoffIcon,
     DiceIcon,
     HashIcon,
+    LogoutIcon,
     RefreshIcon,
     SoundOffIcon,
     SoundOnIcon,
@@ -67,7 +68,7 @@ import {
 import { preloadImages } from '@/lib/preloadImages';
 import { useGameExitGuard } from '@/lib/useGameExitGuard';
 import { useMediaQuery } from '@/lib/useMediaQuery';
-import { useModalViewport } from '@/lib/useModalViewport';
+import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
 import { HttpResponseError, ReloadOptions } from '@inertiajs/core';
 import {
@@ -1121,6 +1122,11 @@ export default function Play() {
     const [continueDeviceOpen, setContinueDeviceOpen] = useState(false);
     const endGameOverlayStyle = useModalViewport(endGameModalOpen);
     const [endingGame, setEndingGame] = useState(false);
+    const endGamePanelRef = useRef<HTMLDivElement>(null);
+    const endGameCancelRef = useRef<HTMLButtonElement>(null);
+    const endGameOpenerRef = useRef<HTMLElement | null>(null);
+    const endingGameRef = useRef(endingGame);
+    endingGameRef.current = endingGame;
     const [boardRef, boardSize] = useBoardSize(screen === 'game');
     const boardHandleRef = useRef<LudoBoardHandle>(null);
     const rollHttp = useHttp<
@@ -2147,16 +2153,39 @@ export default function Play() {
             return;
         }
 
+        endGameOpenerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        const focusTimeout = window.setTimeout(() => {
+            if (hasCoarsePointer()) {
+                endGamePanelRef.current?.focus({ preventScroll: true });
+            } else {
+                endGameCancelRef.current?.focus();
+            }
+        }, 40);
+
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && !endingGame) {
+            if (event.key === 'Escape' && !endingGameRef.current) {
+                event.preventDefault();
                 setEndGameModalOpen(false);
             }
         };
 
         window.addEventListener('keydown', onKeyDown);
 
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [endGameModalOpen, endingGame]);
+        return () => {
+            window.clearTimeout(focusTimeout);
+            window.removeEventListener('keydown', onKeyDown);
+
+            const opener = endGameOpenerRef.current;
+            endGameOpenerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
+        };
+    }, [endGameModalOpen]);
 
     const activeRoomPlayer = room
         ? room.players[state.order.indexOf(state.turn)]
@@ -3105,21 +3134,19 @@ export default function Play() {
                                     Demo lokal
                                 </span>
                             )}
-                            {screen === 'game' &&
-                                !blockedByRoom &&
-                                canRestartMatch && (
-                                    <button
-                                        type="button"
-                                        onClick={openSetup}
-                                        className="border-line text-ink-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-[11px] font-semibold transition"
-                                        aria-label="Atur nama dan warna pemain"
-                                    >
-                                        <UsersIcon className="h-3.5 w-3.5" />
-                                        <span className="hidden sm:inline">
-                                            Atur pemain
-                                        </span>
-                                    </button>
-                                )}
+                            {!room && screen === 'game' && (
+                                <button
+                                    type="button"
+                                    onClick={openSetup}
+                                    className="border-line text-ink-muted hover:text-ink inline-flex h-8 items-center gap-1.5 rounded-full border bg-white px-2.5 text-[11px] font-semibold transition"
+                                    aria-label="Atur nama dan warna pemain"
+                                >
+                                    <UsersIcon className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">
+                                        Atur pemain
+                                    </span>
+                                </button>
+                            )}
                         </div>
                     </div>
                     {turnSecondsLeft !== null && (
@@ -3992,11 +4019,12 @@ export default function Play() {
 
             {endGameModalOpen && room && me?.is_host && (
                 <div
-                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/20"
                     style={endGameOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="end-game-title"
+                    aria-describedby="end-game-description"
                     onClick={(event) => {
                         if (
                             event.target === event.currentTarget &&
@@ -4006,49 +4034,66 @@ export default function Play() {
                         }
                     }}
                 >
-                    <div className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <h2
-                                    id="end-game-title"
-                                    className="text-ink text-base font-semibold"
+                    <div
+                        ref={endGamePanelRef}
+                        tabIndex={-1}
+                        className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="modal-bezel-card">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <span className="bg-danger/10 text-danger grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                        <LogoutIcon className="h-5 w-5" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2
+                                            id="end-game-title"
+                                            className="text-ink text-base font-semibold"
+                                        >
+                                            Akhiri permainan?
+                                        </h2>
+                                        <p
+                                            id="end-game-description"
+                                            className="text-ink-muted mt-1 text-xs leading-relaxed"
+                                        >
+                                            Pertandingan di ruang {room.code}{' '}
+                                            akan dihentikan untuk semua pemain
+                                            dan kamu akan kembali ke beranda.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={endingGame}
+                                    onClick={() => setEndGameModalOpen(false)}
+                                    aria-label="Tutup konfirmasi"
+                                    className="btn btn-quiet btn-sm btn-icon shrink-0"
                                 >
-                                    Akhiri permainan?
-                                </h2>
-                                <p className="text-ink-muted mt-1 text-xs leading-relaxed">
-                                    Pertandingan di ruang {room.code} akan
-                                    dihentikan untuk semua pemain dan kamu akan
-                                    kembali ke beranda.
-                                </p>
+                                    <CloseIcon className="h-4 w-4" />
+                                </button>
                             </div>
-                            <button
-                                type="button"
-                                disabled={endingGame}
-                                onClick={() => setEndGameModalOpen(false)}
-                                aria-label="Tutup konfirmasi"
-                                className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-white transition"
-                            >
-                                <CloseIcon className="h-4 w-4" />
-                            </button>
-                        </div>
 
-                        <div className="mt-5 flex items-center gap-2">
-                            <button
-                                type="button"
-                                disabled={endingGame}
-                                onClick={() => setEndGameModalOpen(false)}
-                                className="border-line text-ink hover:bg-surface-muted inline-flex h-10 flex-1 items-center justify-center rounded-xl border bg-white text-xs font-semibold transition"
-                            >
-                                Lanjut main
-                            </button>
-                            <button
-                                type="button"
-                                disabled={endingGame}
-                                onClick={handleConfirmEndGame}
-                                className="bg-danger hover:bg-danger/90 inline-flex h-10 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition disabled:opacity-60"
-                            >
-                                {endingGame ? 'Mengakhiri…' : 'Ya, akhiri'}
-                            </button>
+                            <div className="mt-5 flex flex-wrap items-center gap-2">
+                                <button
+                                    ref={endGameCancelRef}
+                                    type="button"
+                                    disabled={endingGame}
+                                    onClick={() => setEndGameModalOpen(false)}
+                                    className="btn btn-secondary min-w-[6.5rem] flex-1"
+                                >
+                                    Lanjut main
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={endingGame}
+                                    aria-busy={endingGame}
+                                    onClick={handleConfirmEndGame}
+                                    className="btn btn-danger min-w-[6.5rem] flex-1"
+                                >
+                                    {endingGame ? 'Mengakhiri…' : 'Ya, akhiri'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

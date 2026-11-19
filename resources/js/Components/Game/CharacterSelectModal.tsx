@@ -9,7 +9,7 @@ import {
     PlayerColor,
 } from '@/lib/ludo';
 import { useModalViewport } from '@/lib/useModalViewport';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type CharacterSelectModalProps = {
     open: boolean;
@@ -43,6 +43,12 @@ export default function CharacterSelectModal({
         : preferredCharacter;
 
     const [selectedId, setSelectedId] = useState<CharacterId>(resolvedDefault);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const openerRef = useRef<HTMLElement | null>(null);
+    const onCloseRef = useRef(onClose);
+    const processingRef = useRef(processing);
+    onCloseRef.current = onClose;
+    processingRef.current = processing;
     const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
@@ -56,16 +62,35 @@ export default function CharacterSelectModal({
             return;
         }
 
+        openerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        const focusTimeout = window.setTimeout(() => {
+            panelRef.current?.focus({ preventScroll: true });
+        }, 40);
+
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && !processing) {
-                onClose();
+            if (event.key === 'Escape' && !processingRef.current) {
+                event.preventDefault();
+                onCloseRef.current();
             }
         };
 
         window.addEventListener('keydown', onKeyDown);
 
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [open, processing, onClose]);
+        return () => {
+            window.clearTimeout(focusTimeout);
+            window.removeEventListener('keydown', onKeyDown);
+
+            const opener = openerRef.current;
+            openerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
+        };
+    }, [open]);
 
     if (!open) {
         return null;
@@ -78,7 +103,7 @@ export default function CharacterSelectModal({
 
     return (
         <div
-            className="modal-overlay bg-ink/55 backdrop-blur-[4px]"
+            className="modal-overlay bg-ink/20"
             style={overlayStyle}
             role="dialog"
             aria-modal="true"
@@ -90,16 +115,22 @@ export default function CharacterSelectModal({
                 }
             }}
         >
-            <div className="modal-panel animate-modal-enter flex max-w-2xl flex-col overflow-hidden rounded-[26px] border-2 border-white/80 bg-gradient-to-b from-[#f4f8ff] to-white shadow-[0_28px_70px_-18px_rgba(18,30,52,0.48)]">
+            <div
+                ref={panelRef}
+                tabIndex={-1}
+                className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,42rem)] outline-none"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="modal-bezel-card flex flex-col overflow-hidden p-0">
                 {/* Header */}
-                <div className="border-line/70 flex shrink-0 items-center justify-between gap-3 border-b bg-white/90 px-4 py-3 sm:px-6 sm:py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <span className="bg-brand/12 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl shadow-inner sm:h-11 sm:w-11">
+                <div className="border-line/70 flex shrink-0 items-start justify-between gap-3 border-b px-4 py-4 sm:px-5">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
                             <svg
                                 viewBox="0 0 24 24"
                                 fill="currentColor"
                                 aria-hidden="true"
-                                className="h-5 w-5 sm:h-6 sm:w-6"
+                                className="h-5 w-5"
                             >
                                 <path d="M6.8 6.5h10.4a4.6 4.6 0 0 1 4.5 5.5l-.8 4.2a3.2 3.2 0 0 1-5.4 1.7l-1.6-1.6a1.5 1.5 0 0 0-1.1-.4h-1.6a1.5 1.5 0 0 0-1.1.4l-1.6 1.6a3.2 3.2 0 0 1-5.4-1.7l-.8-4.2a4.6 4.6 0 0 1 4.5-5.5Zm1.7 2.5a.8.8 0 0 0-.8.8v1.2H6.5a.8.8 0 0 0 0 1.6h1.2v1.2a.8.8 0 0 0 1.6 0v-1.2h1.2a.8.8 0 0 0 0-1.6H9.3V9.8a.8.8 0 0 0-.8-.8Zm7.2.7a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm2.2 2.1a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z" />
                             </svg>
@@ -108,7 +139,7 @@ export default function CharacterSelectModal({
                             <div className="flex flex-wrap items-center gap-2">
                                 <h2
                                     id="character-select-title"
-                                    className="text-ink min-w-0 truncate text-base font-extrabold tracking-tight sm:text-lg"
+                                    className="text-ink min-w-0 truncate text-base font-semibold"
                                 >
                                     Pilih Karakter Kamu
                                 </h2>
@@ -134,7 +165,7 @@ export default function CharacterSelectModal({
                             </div>
                             <p
                                 id="character-select-subtitle"
-                                className="text-ink-muted truncate text-xs"
+                                className="text-ink-muted mt-1 text-xs leading-relaxed"
                             >
                                 Pilih satu karakter untuk menemanimu di
                                 permainan!
@@ -154,7 +185,7 @@ export default function CharacterSelectModal({
                 </div>
 
                 {/* Body */}
-                <div className="min-h-0 flex-1 overflow-y-auto p-3.5 sm:p-5">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
                     {/* 7 Character Thumbnails Row */}
                     <div
                         className="grid grid-cols-4 gap-2 sm:grid-cols-7 sm:gap-2.5"
@@ -366,6 +397,7 @@ export default function CharacterSelectModal({
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
     );

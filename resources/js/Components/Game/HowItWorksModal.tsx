@@ -2,6 +2,7 @@ import {
     ArrowRightIcon,
     CloseIcon,
     DiceIcon,
+    InfoIcon,
     TrophyIcon,
 } from '@/Components/Game/Icons';
 import { useModalViewport } from '@/lib/useModalViewport';
@@ -66,24 +67,25 @@ export default function HowItWorksModal({
                 >
                     <div
                         aria-hidden="true"
-                        className="bg-ink/45 fixed inset-0 backdrop-blur-[3px]"
+                        className="bg-ink/20 fixed inset-0"
                     />
                 </TransitionChild>
 
                 <div className="modal-overlay" style={overlayStyle}>
                     <TransitionChild
                         as={Fragment}
-                        enter="duration-200 ease-out"
-                        enterFrom="translate-y-2 scale-[0.98] opacity-0"
+                        enter="duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                        enterFrom="translate-y-2.5 scale-[0.97] opacity-0"
                         enterTo="translate-y-0 scale-100 opacity-100"
                         leave="duration-150 ease-in"
                         leaveFrom="translate-y-0 scale-100 opacity-100"
-                        leaveTo="translate-y-2 scale-[0.98] opacity-0"
+                        leaveTo="translate-y-2.5 scale-[0.97] opacity-0"
                     >
                         <DialogPanel
                             data-testid="how-it-works-panel"
-                            className="modal-panel border-line/80 shadow-board flex max-w-2xl flex-col overflow-hidden rounded-[24px] border bg-white"
+                            className="modal-panel modal-bezel max-w-[min(100%,42rem)] outline-none"
                         >
+                            <div className="modal-bezel-card flex flex-col overflow-hidden p-0">
                             <div
                                 aria-hidden="true"
                                 className="flex h-1 shrink-0"
@@ -94,31 +96,36 @@ export default function HowItWorksModal({
                                 <span className="bg-ludo-blue flex-1" />
                             </div>
 
-                            <header className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
-                                <div className="min-w-0">
-                                    <DialogTitle
-                                        id="how-it-works-title"
-                                        className="text-ink text-[22px] leading-tight font-semibold tracking-[-0.02em] sm:text-2xl"
-                                    >
-                                        Cara bermain
-                                    </DialogTitle>
-                                    <DialogDescription className="text-ink-muted mt-1 text-sm leading-6">
-                                        Empat langkah dari markas ke garis
-                                        akhir.
-                                    </DialogDescription>
+                            <header className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 pb-4 sm:px-5 sm:pt-5">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                        <InfoIcon className="h-5 w-5" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <DialogTitle
+                                            id="how-it-works-title"
+                                            className="text-ink text-base font-semibold"
+                                        >
+                                            Cara bermain
+                                        </DialogTitle>
+                                        <DialogDescription className="text-ink-muted mt-1 text-xs leading-relaxed">
+                                            Empat langkah dari markas ke garis
+                                            akhir.
+                                        </DialogDescription>
+                                    </div>
                                 </div>
 
                                 <button
                                     type="button"
                                     onClick={onClose}
                                     aria-label="Tutup cara bermain"
-                                    className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-11 w-11 shrink-0 place-items-center rounded-full border bg-white transition"
+                                    className="btn btn-quiet btn-sm btn-icon shrink-0"
                                 >
                                     <CloseIcon className="h-4 w-4" />
                                 </button>
                             </header>
 
-                            <div className="border-line/70 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t px-5 py-5 sm:px-6">
+                            <div className="border-line/70 min-h-0 flex-1 overflow-y-auto overscroll-contain border-t px-4 py-4 sm:px-5 sm:py-5">
                                 <div className="grid gap-5 md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] md:gap-6">
                                     <aside className="bg-ink order-2 flex h-full flex-col rounded-2xl px-4 py-4 text-white md:order-1">
                                         <div className="flex items-center gap-2">
@@ -208,24 +215,25 @@ export default function HowItWorksModal({
                                 </div>
                             </div>
 
-                            <footer className="border-line/70 flex shrink-0 flex-col gap-2 border-t px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+                            <footer className="border-line/70 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 py-4 sm:justify-end sm:px-5">
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center rounded-xl border bg-white px-4 text-sm font-semibold transition"
+                                    className="btn btn-secondary min-w-[6.5rem] flex-1 sm:flex-none"
                                 >
                                     Tutup
                                 </button>
                                 <Link
                                     href={route('play')}
                                     onClick={onStart}
-                                    className="bg-brand hover:bg-brand-dark inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.75)] transition active:scale-[0.99]"
+                                    className="btn btn-primary min-w-[6.5rem] flex-1 gap-2 sm:flex-none"
                                 >
                                     <DiceIcon className="h-4 w-4" />
                                     Main sekarang
                                     <ArrowRightIcon className="h-4 w-4" />
                                 </Link>
                             </footer>
+                            </div>
                         </DialogPanel>
                     </TransitionChild>
                 </div>

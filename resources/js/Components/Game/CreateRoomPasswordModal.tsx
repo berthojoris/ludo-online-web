@@ -34,6 +34,7 @@ export default function CreateRoomPasswordModal({
     const [showPassword, setShowPassword] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
+    const openerRef = useRef<HTMLElement | null>(null);
     const overlayStyle = useModalViewport(open);
     const onCancelRef = useRef(onCancel);
     const processingRef = useRef(processing);
@@ -44,6 +45,11 @@ export default function CreateRoomPasswordModal({
         if (!open) {
             return;
         }
+
+        openerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
 
         setPassword('');
         setVsComputer(false);
@@ -69,6 +75,12 @@ export default function CreateRoomPasswordModal({
         return () => {
             window.clearTimeout(focusTimeout);
             window.removeEventListener('keydown', onKeyDown);
+
+            const opener = openerRef.current;
+            openerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
         };
     }, [open, passwordRequired]);
 

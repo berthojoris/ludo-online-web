@@ -1,5 +1,5 @@
-import { CloseIcon } from '@/Components/Game/Icons';
-import { useModalViewport } from '@/lib/useModalViewport';
+import { CloseIcon, LogoutIcon } from '@/Components/Game/Icons';
+import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { ReactNode, useCallback, useEffect, useRef } from 'react';
 
 type Props = {
@@ -26,6 +26,7 @@ export default function ConfirmLeaveModal({
     onConfirm,
 }: Props) {
     const cancelRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
     const openerRef = useRef<HTMLElement | null>(null);
     const onCancelRef = useRef(onCancel);
     onCancelRef.current = onCancel;
@@ -41,10 +42,13 @@ export default function ConfirmLeaveModal({
                 ? document.activeElement
                 : null;
 
-        const focusTimeout = window.setTimeout(
-            () => cancelRef.current?.focus(),
-            40,
-        );
+        const focusTimeout = window.setTimeout(() => {
+            if (hasCoarsePointer()) {
+                panelRef.current?.focus({ preventScroll: true });
+            } else {
+                cancelRef.current?.focus();
+            }
+        }, 40);
 
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
@@ -81,7 +85,7 @@ export default function ConfirmLeaveModal({
 
     return (
         <div
-            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            className="modal-overlay bg-ink/20"
             style={overlayStyle}
             role="dialog"
             aria-modal="true"
@@ -94,50 +98,59 @@ export default function ConfirmLeaveModal({
             }}
         >
             <div
-                className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                ref={panelRef}
+                tabIndex={-1}
+                className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
                 onClick={stopPropagation}
             >
-                <div className="flex items-start justify-between gap-3">
-                    <div>
-                        <h2
-                            id="confirm-leave-title"
-                            className="text-ink text-base font-semibold"
+                <div className="modal-bezel-card">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                            <span className="bg-danger/10 text-danger grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                <LogoutIcon className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0">
+                                <h2
+                                    id="confirm-leave-title"
+                                    className="text-ink text-base font-semibold"
+                                >
+                                    {title}
+                                </h2>
+                                <p
+                                    id="confirm-leave-description"
+                                    className="text-ink-muted mt-1 text-xs leading-relaxed"
+                                >
+                                    {description}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            aria-label="Tutup konfirmasi"
+                            className="btn btn-quiet btn-sm btn-icon shrink-0"
                         >
-                            {title}
-                        </h2>
-                        <p
-                            id="confirm-leave-description"
-                            className="text-ink-muted mt-1 text-xs leading-relaxed"
-                        >
-                            {description}
-                        </p>
+                            <CloseIcon className="h-4 w-4" />
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        aria-label="Tutup konfirmasi"
-                        className="btn btn-quiet btn-sm btn-icon shrink-0"
-                    >
-                        <CloseIcon className="h-4 w-4" />
-                    </button>
-                </div>
 
-                <div className="mt-5 flex items-center gap-2">
-                    <button
-                        ref={cancelRef}
-                        type="button"
-                        onClick={onCancel}
-                        className="btn btn-secondary flex-1"
-                    >
-                        {cancelLabel}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onConfirm}
-                        className="btn btn-danger flex-1"
-                    >
-                        {confirmLabel}
-                    </button>
+                    <div className="mt-5 flex flex-wrap items-center gap-2">
+                        <button
+                            ref={cancelRef}
+                            type="button"
+                            onClick={onCancel}
+                            className="btn btn-secondary min-w-[6.5rem] flex-1"
+                        >
+                            {cancelLabel}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            className="btn btn-danger min-w-[6.5rem] flex-1"
+                        >
+                            {confirmLabel}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

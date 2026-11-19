@@ -11,7 +11,7 @@ import {
     PLAYER_CONFIG,
     PlayerColor,
 } from '@/lib/ludo';
-import { useModalViewport } from '@/lib/useModalViewport';
+import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { Link } from '@inertiajs/react';
 import { useEffect, useRef } from 'react';
 
@@ -60,6 +60,10 @@ export default function MatchResultModal({
 }: MatchResultModalProps) {
     const playAgainRef = useRef<HTMLButtonElement>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const openerRef = useRef<HTMLElement | null>(null);
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
     const overlayStyle = useModalViewport(open);
 
     useEffect(() => {
@@ -67,23 +71,39 @@ export default function MatchResultModal({
             return;
         }
 
-        const frame = window.requestAnimationFrame(() => {
-            (playAgainRef.current ?? closeRef.current)?.focus();
-        });
+        openerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        const focusTimeout = window.setTimeout(() => {
+            if (hasCoarsePointer()) {
+                panelRef.current?.focus({ preventScroll: true });
+            } else {
+                (playAgainRef.current ?? closeRef.current)?.focus();
+            }
+        }, 40);
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                onClose();
+                event.preventDefault();
+                onCloseRef.current();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
 
         return () => {
-            window.cancelAnimationFrame(frame);
+            window.clearTimeout(focusTimeout);
             window.removeEventListener('keydown', handleKeyDown);
+
+            const opener = openerRef.current;
+            openerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
         };
-    }, [open, onClose]);
+    }, [open]);
 
     if (!open) {
         return null;
@@ -97,7 +117,7 @@ export default function MatchResultModal({
 
     return (
         <div
-            className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+            className="modal-overlay bg-ink/20"
             style={overlayStyle}
             role="dialog"
             aria-modal="true"
@@ -109,7 +129,13 @@ export default function MatchResultModal({
                 }
             }}
         >
-            <div className="modal-panel animate-modal-enter border-line max-w-md overflow-y-auto overscroll-contain rounded-[26px] border bg-white p-4 shadow-[0_28px_70px_-20px_rgba(32,43,58,0.34)] sm:p-6">
+            <div
+                ref={panelRef}
+                tabIndex={-1}
+                className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,28rem)] outline-none"
+                onClick={(event) => event.stopPropagation()}
+            >
+                <div className="modal-bezel-card">
                 <div className="flex items-center justify-between gap-3">
                     <span
                         className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"
@@ -138,7 +164,7 @@ export default function MatchResultModal({
                         onClick={onClose}
                         aria-label="Tutup dialog dan lihat papan"
                         title="Lihat papan"
-                        className="border-line text-ink-muted hover:bg-surface-muted hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-full border bg-white transition"
+                        className="btn btn-quiet btn-sm btn-icon shrink-0"
                     >
                         <CloseIcon className="h-4 w-4" />
                     </button>
@@ -336,7 +362,7 @@ export default function MatchResultModal({
                                 ref={playAgainRef}
                                 type="button"
                                 onClick={onPlayAgain}
-                                className="bg-brand hover:bg-brand-dark inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold text-white shadow-[0_12px_26px_-12px_rgba(47,107,239,0.75)] transition active:scale-[0.99]"
+                                className="btn btn-primary w-full gap-2"
                             >
                                 <RefreshIcon className="h-4 w-4" />
                                 Main lagi
@@ -346,14 +372,14 @@ export default function MatchResultModal({
                                 <button
                                     type="button"
                                     onClick={onOpenSetup}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                                    className="btn btn-secondary min-w-0 gap-1.5"
                                 >
                                     <UsersIcon className="h-4 w-4 shrink-0" />
                                     <span>Atur pemain</span>
                                 </button>
                                 <Link
                                     href={route('home')}
-                                    className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                                    className="btn btn-secondary min-w-0 gap-1.5"
                                 >
                                     <HomeIcon className="h-4 w-4 shrink-0" />
                                     <span>Beranda</span>
@@ -367,13 +393,14 @@ export default function MatchResultModal({
                             </p>
                             <Link
                                 href={route('home')}
-                                className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl border bg-white px-3 text-xs font-semibold transition sm:text-sm"
+                                className="btn btn-secondary w-full gap-1.5"
                             >
                                 <HomeIcon className="h-4 w-4 shrink-0" />
                                 <span>Beranda</span>
                             </Link>
                         </>
                     )}
+                </div>
                 </div>
             </div>
         </div>

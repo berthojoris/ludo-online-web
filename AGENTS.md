@@ -154,3 +154,11 @@ These rules apply to every screen, overlay, link, and state change in this Inert
 - Closing an overlay must return to its parent route. Escape, backdrop click, the close button, and any navigation CTA must leave history in a valid state without stale overlay URLs.
 - Add a feature test for every new public route: `assertOk`, Inertia component, and required props.
 </routing-guidelines>
+
+<ui-guidelines>
+# Tailwind CSS and modal UI
+
+- Activate the `tailwind-glass-bezel-modal` skill before writing or editing any Tailwind CSS class or stylesheet in this project, and always before creating, styling, refactoring, or reviewing any modal, pop-up, dialog, confirmation, sheet, or overlay.
+- Every modal pop-up or overlay must use the canonical glass-bezel shell from `tailwind-glass-bezel-modal`: `modal-overlay bg-ink/20` → `modal-panel modal-bezel animate-modal-enter` → `modal-bezel-card`, plus the shared `.btn` and `.segmented` primitives.
+- Never create a one-off modal frame, a separate overlay scrim style, or a custom button/input recipe when the skill already defines one.
+</ui-guidelines>

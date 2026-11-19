@@ -41,7 +41,14 @@ import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { User } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { echo, echoIsConfigured } from '@laravel/echo-react';
-import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+    CSSProperties,
+    FormEvent,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
 type CopyState = 'idle' | 'link' | 'error';
 type ViewMode = 'lobby' | 'join';
@@ -250,6 +257,13 @@ function RoomContent() {
     const [chatUnread, setChatUnread] = useState(0);
     const advancedOverlayStyle = useModalViewport(advancedModalOpen);
     const hostRenameOverlayStyle = useModalViewport(hostEditingPlayer !== null);
+    const advancedPanelRef = useRef<HTMLDivElement>(null);
+    const advancedOpenerRef = useRef<HTMLElement | null>(null);
+    const hostRenamePanelRef = useRef<HTMLDivElement>(null);
+    const hostRenameInputRef = useRef<HTMLInputElement>(null);
+    const hostRenameOpenerRef = useRef<HTMLElement | null>(null);
+    const renamingPlayerIdRef = useRef(renamingPlayerId);
+    renamingPlayerIdRef.current = renamingPlayerId;
 
     useEffect(() => {
         setLiveRoom(serverRoom ?? null);
@@ -285,15 +299,34 @@ function RoomContent() {
             return;
         }
 
+        advancedOpenerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        const focusTimeout = window.setTimeout(() => {
+            advancedPanelRef.current?.focus({ preventScroll: true });
+        }, 40);
+
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
+                event.preventDefault();
                 setAdvancedModalOpen(false);
             }
         };
 
         window.addEventListener('keydown', onKeyDown);
 
-        return () => window.removeEventListener('keydown', onKeyDown);
+        return () => {
+            window.clearTimeout(focusTimeout);
+            window.removeEventListener('keydown', onKeyDown);
+
+            const opener = advancedOpenerRef.current;
+            advancedOpenerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
+        };
     }, [advancedModalOpen]);
 
     useEffect(() => {
@@ -301,8 +334,22 @@ function RoomContent() {
             return;
         }
 
+        hostRenameOpenerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
+        const focusTimeout = window.setTimeout(() => {
+            if (hasCoarsePointer()) {
+                hostRenamePanelRef.current?.focus({ preventScroll: true });
+            } else {
+                hostRenameInputRef.current?.focus();
+            }
+        }, 40);
+
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && renamingPlayerId === null) {
+            if (event.key === 'Escape' && renamingPlayerIdRef.current === null) {
+                event.preventDefault();
                 setHostEditingPlayer(null);
                 setHostNameError(null);
             }
@@ -310,8 +357,17 @@ function RoomContent() {
 
         window.addEventListener('keydown', onKeyDown);
 
-        return () => window.removeEventListener('keydown', onKeyDown);
-    }, [hostEditingPlayer, renamingPlayerId]);
+        return () => {
+            window.clearTimeout(focusTimeout);
+            window.removeEventListener('keydown', onKeyDown);
+
+            const opener = hostRenameOpenerRef.current;
+            hostRenameOpenerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
+        };
+    }, [hostEditingPlayer]);
 
     const roomCode = liveRoom?.code ?? null;
     const roomStatus = liveRoom?.status ?? 'waiting';
@@ -2123,102 +2179,129 @@ function RoomContent() {
 
             {advancedModalOpen && liveRoom && isHost && (
                 <div
-                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/20"
                     style={advancedOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="room-advanced-title"
+                    aria-describedby="room-advanced-description"
                     onClick={(event) => {
                         if (event.target === event.currentTarget) {
                             setAdvancedModalOpen(false);
                         }
                     }}
                 >
-                    <div className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]">
-                        <div className="mb-4 flex items-center justify-between gap-2">
-                            <h2
-                                id="room-advanced-title"
-                                className="text-ink text-base font-semibold"
-                            >
-                                Advanced
-                            </h2>
-                            <button
-                                type="button"
-                                onClick={() => setAdvancedModalOpen(false)}
-                                aria-label="Tutup Advanced"
-                                className="btn btn-quiet btn-sm btn-icon"
-                            >
-                                <CloseIcon className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <RoomSettingsSummary
-                                vsComputer={vsComputer}
-                                onSelectOpponent={handleSelectOpponent}
-                                playerCount={playerCount}
-                                isHost={isHost}
-                                pending={pendingAction}
-                                randomizing={randomizing}
-                                onRandomize={handleRandomize}
-                                onSelectPlayerCount={handleSelectPlayerCount}
-                            />
-
-                            <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5">
-                                <div className="min-w-0">
-                                    <p className="text-ink text-xs font-semibold">
-                                        Keuntungan host
-                                    </p>
-                                    <p className="text-ink-muted mt-0.5 text-[11px]">
-                                        Peluang 50% dadu 6 (keluar markas / di
-                                        jalan) atau menangkap saat tersedia.
-                                    </p>
+                    <div
+                        ref={advancedPanelRef}
+                        tabIndex={-1}
+                        className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="modal-bezel-card">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                        <SlidersIcon className="h-5 w-5" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2
+                                            id="room-advanced-title"
+                                            className="text-ink text-base font-semibold"
+                                        >
+                                            Advanced
+                                        </h2>
+                                        <p
+                                            id="room-advanced-description"
+                                            className="text-ink-muted mt-1 text-xs leading-relaxed"
+                                        >
+                                            Atur lawan, kapasitas pemain, dan
+                                            keuntungan host.
+                                        </p>
+                                    </div>
                                 </div>
                                 <button
                                     type="button"
-                                    role="switch"
-                                    aria-label="Keuntungan host"
-                                    aria-checked={Boolean(
-                                        liveRoom?.host_advantage,
-                                    )}
-                                    aria-busy={pendingAction}
-                                    disabled={!isHost || isBusy}
-                                    onClick={handleToggleAdvantage}
-                                    className="switch shrink-0"
+                                    onClick={() => setAdvancedModalOpen(false)}
+                                    aria-label="Tutup Advanced"
+                                    className="btn btn-quiet btn-sm btn-icon shrink-0"
                                 >
-                                    <span className="w-6 text-right tabular-nums">
-                                        {pendingAction
-                                            ? '…'
-                                            : liveRoom?.host_advantage
-                                              ? 'ON'
-                                              : 'OFF'}
-                                    </span>
-                                    <span
-                                        aria-hidden="true"
-                                        className="switch-track"
-                                    >
-                                        <span className="switch-thumb" />
-                                    </span>
+                                    <CloseIcon className="h-4 w-4" />
                                 </button>
                             </div>
-                        </div>
 
-                        {!isHost && (
-                            <p className="text-ink-muted mt-2.5 text-[11px]">
-                                Hanya host yang dapat mengubah pengaturan ini.
-                            </p>
-                        )}
+                            <div className="mt-4 space-y-4">
+                                <RoomSettingsSummary
+                                    vsComputer={vsComputer}
+                                    onSelectOpponent={handleSelectOpponent}
+                                    playerCount={playerCount}
+                                    isHost={isHost}
+                                    pending={pendingAction}
+                                    randomizing={randomizing}
+                                    onRandomize={handleRandomize}
+                                    onSelectPlayerCount={
+                                        handleSelectPlayerCount
+                                    }
+                                />
+
+                                <div className="border-line flex items-center justify-between gap-3 rounded-2xl border px-3 py-2.5">
+                                    <div className="min-w-0">
+                                        <p className="text-ink text-xs font-semibold">
+                                            Keuntungan host
+                                        </p>
+                                        <p className="text-ink-muted mt-0.5 text-[11px]">
+                                            Peluang 50% dadu 6 (keluar markas /
+                                            di jalan) atau menangkap saat
+                                            tersedia.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        role="switch"
+                                        aria-label="Keuntungan host"
+                                        aria-checked={Boolean(
+                                            liveRoom?.host_advantage,
+                                        )}
+                                        aria-busy={pendingAction}
+                                        disabled={!isHost || isBusy}
+                                        onClick={handleToggleAdvantage}
+                                        className="switch shrink-0"
+                                    >
+                                        <span className="w-6 text-right tabular-nums">
+                                            {pendingAction
+                                                ? '…'
+                                                : liveRoom?.host_advantage
+                                                  ? 'ON'
+                                                  : 'OFF'}
+                                        </span>
+                                        <span
+                                            aria-hidden="true"
+                                            className="switch-track"
+                                        >
+                                            <span className="switch-thumb" />
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {!isHost && (
+                                <p className="text-ink-muted mt-2.5 text-[11px]">
+                                    Hanya host yang dapat mengubah pengaturan
+                                    ini.
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
 
             {hostEditingPlayer && liveRoom && (
                 <div
-                    className="modal-overlay bg-ink/40 backdrop-blur-[3px]"
+                    className="modal-overlay bg-ink/20"
                     style={hostRenameOverlayStyle}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="host-rename-player-title"
+                    aria-describedby="host-rename-player-description"
                     onClick={(event) => {
                         if (
                             event.target === event.currentTarget &&
@@ -2229,108 +2312,134 @@ function RoomContent() {
                         }
                     }}
                 >
-                    <form
-                        onSubmit={handleHostSavePlayerName}
-                        className="modal-panel animate-modal-enter border-line max-w-sm overflow-y-auto overscroll-contain rounded-[24px] border bg-white p-5 shadow-[0_24px_64px_-16px_rgba(32,43,58,0.3)]"
+                    <div
+                        ref={hostRenamePanelRef}
+                        tabIndex={-1}
+                        className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
+                        onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="mb-4 flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                                <h2
-                                    id="host-rename-player-title"
-                                    className="text-ink text-base font-semibold"
-                                >
-                                    Ganti nama pemain
-                                </h2>
-                                <p className="text-ink-muted mt-0.5 truncate text-xs">
-                                    {hostEditingPlayer.name}
-                                    {hostEditingPlayer.seat_color
-                                        ? ` · Kursi ${PLAYER_CONFIG[hostEditingPlayer.seat_color].label}`
-                                        : ''}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                disabled={renamingPlayerId !== null}
-                                onClick={() => {
-                                    setHostEditingPlayer(null);
-                                    setHostNameError(null);
-                                }}
-                                aria-label="Tutup ganti nama pemain"
-                                className="btn btn-quiet btn-sm btn-icon shrink-0"
-                            >
-                                <CloseIcon className="h-4 w-4" />
-                            </button>
-                        </div>
-
-                        <label
-                            htmlFor="host-player-name-input"
-                            className="text-ink block text-xs font-semibold"
+                        <form
+                            onSubmit={handleHostSavePlayerName}
+                            className="modal-bezel-card"
                         >
-                            Nama baru
-                        </label>
-                        <input
-                            id="host-player-name-input"
-                            type="text"
-                            autoFocus={!hasCoarsePointer()}
-                            value={hostNameDraft}
-                            onChange={(event) => {
-                                setHostNameDraft(
-                                    event.target.value.slice(0, 24),
-                                );
-                                if (hostNameError) {
-                                    setHostNameError(null);
-                                }
-                            }}
-                            maxLength={24}
-                            placeholder="Masukkan nama pemain"
-                            aria-label="Nama pemain baru"
-                            className="border-line bg-canvas text-ink focus:border-brand focus:ring-brand/10 mt-1.5 h-11 w-full rounded-xl border px-3 text-base font-medium focus:bg-white focus:ring-4 focus:outline-none"
-                        />
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-start gap-3">
+                                    <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                        <PencilIcon className="h-5 w-5" />
+                                    </span>
+                                    <div className="min-w-0">
+                                        <h2
+                                            id="host-rename-player-title"
+                                            className="text-ink text-base font-semibold"
+                                        >
+                                            Ganti nama pemain
+                                        </h2>
+                                        <p
+                                            id="host-rename-player-description"
+                                            className="text-ink-muted mt-1 truncate text-xs leading-relaxed"
+                                        >
+                                            {hostEditingPlayer.name}
+                                            {hostEditingPlayer.seat_color
+                                                ? ` · Kursi ${PLAYER_CONFIG[hostEditingPlayer.seat_color].label}`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    disabled={renamingPlayerId !== null}
+                                    onClick={() => {
+                                        setHostEditingPlayer(null);
+                                        setHostNameError(null);
+                                    }}
+                                    aria-label="Tutup ganti nama pemain"
+                                    className="btn btn-quiet btn-sm btn-icon shrink-0"
+                                >
+                                    <CloseIcon className="h-4 w-4" />
+                                </button>
+                            </div>
 
-                        {hostNameError && (
-                            <p
-                                role="alert"
-                                className="bg-danger/10 text-danger mt-2.5 rounded-xl px-3 py-2 text-xs font-semibold"
+                            <label
+                                htmlFor="host-player-name-input"
+                                className="text-ink mt-4 block text-xs font-semibold"
                             >
-                                {hostNameError}
-                            </p>
-                        )}
-
-                        <div className="mt-4 flex items-center justify-end gap-2">
-                            <button
-                                type="button"
-                                disabled={renamingPlayerId !== null}
-                                onClick={() => {
-                                    setHostEditingPlayer(null);
-                                    setHostNameError(null);
+                                Nama baru
+                            </label>
+                            <input
+                                ref={hostRenameInputRef}
+                                id="host-player-name-input"
+                                type="text"
+                                value={hostNameDraft}
+                                onChange={(event) => {
+                                    setHostNameDraft(
+                                        event.target.value.slice(0, 24),
+                                    );
+                                    if (hostNameError) {
+                                        setHostNameError(null);
+                                    }
                                 }}
-                                className="btn btn-secondary flex-1 px-4"
-                            >
-                                Batal
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={
-                                    !hostNameDraft.trim() ||
-                                    renamingPlayerId !== null
+                                maxLength={24}
+                                placeholder="Masukkan nama pemain"
+                                disabled={renamingPlayerId !== null}
+                                aria-invalid={hostNameError ? true : undefined}
+                                aria-describedby={
+                                    hostNameError
+                                        ? 'host-player-name-error'
+                                        : undefined
                                 }
-                                aria-busy={renamingPlayerId !== null}
-                                className="btn btn-primary flex-1 px-4"
-                            >
-                                {renamingPlayerId !== null ? (
-                                    <>
-                                        <span
-                                            aria-hidden="true"
-                                            className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-                                        />
-                                        Menyimpan…
-                                    </>
-                                ) : (
-                                    'Simpan'
-                                )}
-                            </button>
-                        </div>
-                    </form>
+                                className={`text-ink focus-visible:ring-brand/60 mt-1.5 h-11 w-full rounded-xl border bg-white px-3 text-base transition outline-none focus-visible:ring-2 disabled:opacity-60 ${
+                                    hostNameError
+                                        ? 'border-danger'
+                                        : 'border-line'
+                                }`}
+                            />
+
+                            {hostNameError && (
+                                <p
+                                    id="host-player-name-error"
+                                    role="alert"
+                                    className="text-danger mt-1.5 text-xs leading-relaxed"
+                                >
+                                    {hostNameError}
+                                </p>
+                            )}
+
+                            <div className="mt-5 flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    disabled={renamingPlayerId !== null}
+                                    onClick={() => {
+                                        setHostEditingPlayer(null);
+                                        setHostNameError(null);
+                                    }}
+                                    className="btn btn-secondary min-w-[6.5rem] flex-1"
+                                >
+                                    Batal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={
+                                        !hostNameDraft.trim() ||
+                                        renamingPlayerId !== null
+                                    }
+                                    aria-busy={renamingPlayerId !== null}
+                                    className="btn btn-primary min-w-[6.5rem] flex-1"
+                                >
+                                    {renamingPlayerId !== null ? (
+                                        <>
+                                            <span
+                                                aria-hidden="true"
+                                                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                                            />
+                                            Menyimpan…
+                                        </>
+                                    ) : (
+                                        'Simpan'
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
 

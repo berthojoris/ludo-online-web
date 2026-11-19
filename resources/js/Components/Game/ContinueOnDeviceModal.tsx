@@ -50,6 +50,7 @@ export default function ContinueOnDeviceModal({
 }: Props) {
     const overlayStyle = useModalViewport(open);
     const panelRef = useRef<HTMLDivElement>(null);
+    const openerRef = useRef<HTMLElement | null>(null);
     const onCloseRef = useRef(onClose);
     onCloseRef.current = onClose;
     const handoff = useHttp<Record<string, never>, HandoffResponse>({});
@@ -104,6 +105,11 @@ export default function ContinueOnDeviceModal({
             return;
         }
 
+        openerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+
         void requestCode();
 
         const focusTimeout = window.setTimeout(() => {
@@ -122,6 +128,12 @@ export default function ContinueOnDeviceModal({
         return () => {
             window.clearTimeout(focusTimeout);
             window.removeEventListener('keydown', onKeyDown);
+
+            const opener = openerRef.current;
+            openerRef.current = null;
+            if (opener && document.contains(opener)) {
+                opener.focus();
+            }
         };
     }, [open, requestCode]);
 
