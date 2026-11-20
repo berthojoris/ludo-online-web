@@ -125,6 +125,7 @@ class RoomFlowTest extends TestCase
             $state = $room->fresh()->match_state;
             $this->assertCount($count, $state['tokens']);
             $this->assertSame($room->fresh()->allowedSeats(), $state['colors']);
+            $this->assertSame($count === 3 ? 3 : 4, $state['arms']);
 
             $state['turn'] = $count - 1;
             $room->update(['match_state' => $state]);
@@ -143,6 +144,33 @@ class RoomFlowTest extends TestCase
                 $this->assertSame(($index + 1) % $count, $room->fresh()->match_state['turn']);
             }
         }
+    }
+
+    public function test_three_base_board_uses_its_own_track_instead_of_the_classic_cross(): void
+    {
+        $colors = ['red', 'green', 'yellow'];
+        $spec = MatchRules::spec($colors, 3);
+
+        // Same numbers the client builds in getBoardSpec() for three arms.
+        $this->assertSame(3, $spec['arms']);
+        $this->assertSame(13, $spec['sector_length']);
+        $this->assertSame(39, $spec['track_length']);
+        $this->assertSame(37, $spec['last_track_position']);
+        $this->assertSame(43, $spec['finish_position']);
+        $this->assertSame([0, 8, 13, 21, 26, 34], $spec['safe']);
+        $this->assertSame(['red' => 0, 'green' => 13, 'yellow' => 26], $spec['starts']);
+
+        // Green 29 is absolute 3 on the 39-cell ring, so a 1 lands on red at absolute 4.
+        $captureState = MatchRules::initial(1, $colors, 3);
+        $captureState['tokens'][0][0] = 4;
+        $captureState['tokens'][1][0] = 29;
+        $this->assertContains(1, MatchRules::captureRolls($captureState, 1));
+
+        // A token can never be moved past the three-base finish.
+        $finishState = MatchRules::initial(0, $colors, 3);
+        $finishState['tokens'][0] = [43, 42, 40, -1];
+        $this->assertSame([1 => 43, 2 => 41], MatchRules::moves($finishState, 0, 1));
+        $this->assertSame([], MatchRules::moves($finishState, 0, 4));
     }
 
     public function test_capture_checks_every_opponent_using_seat_colors(): void
@@ -686,12 +714,17 @@ class RoomFlowTest extends TestCase
         $this->withSession(['ludo_player_token' => $hostToken]);
         $this->post("/rooms/{$room->code}/start")->assertRedirect(route('play', ['room' => $room->code]));
 
+        // Three players play on the three-base board, which has its own finish.
+        $spec = MatchRules::spec(['red', 'green', 'yellow'], 3);
+        $finish = $spec['finish_position'];
+        $lastTrack = $spec['last_track_position'];
+
         // Set up: player 0 is 1 step away from finishing all 4 tokens.
-        $state = MatchRules::initial(0, ['red', 'green', 'yellow']);
+        $state = MatchRules::initial(0, ['red', 'green', 'yellow'], 3);
         $state['tokens'] = [
-            [56, 56, 56, 55],
-            [56, 56, 56, 55],
-            [56, 56, 56, 50],
+            [$finish, $finish, $finish, $finish - 1],
+            [$finish, $finish, $finish, $finish - 1],
+            [$finish, $finish, $finish, $lastTrack],
         ];
         $state['turn'] = 0;
         $state['dice'] = 1;
@@ -723,7 +756,7 @@ class RoomFlowTest extends TestCase
 
         // Player 2 finishes 2nd: only player 1 remains, so the match ends with player 1 in last place.
         $midState = $room->fresh()->match_state;
-        $midState['tokens'][2] = [56, 56, 56, 50];
+        $midState['tokens'][2] = [$finish, $finish, $finish, $finish - 6];
         $midState['turn'] = 2;
         $midState['dice'] = 6;
         $room->update(['match_state' => $midState]);

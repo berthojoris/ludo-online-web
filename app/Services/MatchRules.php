@@ -87,6 +87,10 @@ class MatchRules
     }
 
     /**
+     * Track geometry for the board the match is played on. Only the 4-arm
+     * board uses the classic cross; the three-base board and the 5-7 arm
+     * stars share the radial geometry, mirroring getBoardSpec() on the client.
+     *
      * @return array{
      *     arms: int,
      *     sector_length: int,
@@ -101,7 +105,7 @@ class MatchRules
     {
         $resolvedArms = self::resolveArms($colors, $arms);
 
-        if ($resolvedArms <= 4) {
+        if ($resolvedArms === 4) {
             $slots = self::resolveSlotColors($colors, 4);
             $classicStartOffsets = [0, 13, 26, 39];
             $starts = [];
