@@ -1,14 +1,28 @@
-import { PencilIcon } from '@/Components/Game/Icons';
+import { CloseIcon, PencilIcon } from '@/Components/Game/Icons';
 import { hasCoarsePointer, useModalViewport } from '@/lib/useModalViewport';
 import { Dialog, DialogDescription, DialogPanel, DialogTitle } from '@headlessui/react';
 import { useForm } from '@inertiajs/react';
 import { FormEvent, useRef } from 'react';
 
-export default function RequiredPlayerNameModal({ open, roomCode }: { open: boolean; roomCode: string }) {
+export default function RequiredPlayerNameModal({
+    open,
+    roomCode,
+    onClose,
+}: {
+    open: boolean;
+    roomCode: string;
+    onClose?: () => void;
+}) {
     const overlayStyle = useModalViewport(open);
     const panelRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const form = useForm({ name: '' });
+
+    const handleClose = () => {
+        if (!form.processing) {
+            onClose?.();
+        }
+    };
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -20,7 +34,7 @@ export default function RequiredPlayerNameModal({ open, roomCode }: { open: bool
     return (
         <Dialog
             open={open}
-            onClose={() => {}}
+            onClose={handleClose}
             initialFocus={hasCoarsePointer() ? panelRef : inputRef}
             className="relative z-50"
         >
@@ -31,16 +45,27 @@ export default function RequiredPlayerNameModal({ open, roomCode }: { open: bool
                     className="modal-panel modal-bezel animate-modal-enter max-w-[min(100%,25rem)] outline-none"
                 >
                     <div className="modal-bezel-card">
-                        <div className="flex min-w-0 items-start gap-3">
-                            <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
-                                <PencilIcon className="h-5 w-5" />
-                            </span>
-                            <div className="min-w-0">
-                                <DialogTitle className="text-ink text-base font-semibold">Masukkan nama pemain</DialogTitle>
-                                <DialogDescription className="text-ink-muted mt-1 text-xs leading-relaxed">
-                                    Isi nama yang akan dilihat pemain lain sebelum permainan dimulai.
-                                </DialogDescription>
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <span className="bg-brand/10 text-brand grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                    <PencilIcon className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0">
+                                    <DialogTitle className="text-ink text-base font-semibold">Masukkan nama pemain</DialogTitle>
+                                    <DialogDescription className="text-ink-muted mt-1 text-xs leading-relaxed">
+                                        Isi nama yang akan dilihat pemain lain sebelum permainan dimulai.
+                                    </DialogDescription>
+                                </div>
                             </div>
+                            <button
+                                type="button"
+                                disabled={form.processing}
+                                onClick={handleClose}
+                                aria-label="Tutup dialog"
+                                className="btn btn-quiet btn-sm btn-icon shrink-0"
+                            >
+                                <CloseIcon className="h-4 w-4" />
+                            </button>
                         </div>
                         <form onSubmit={submit}>
                             <label htmlFor="required-player-name" className="text-ink mt-4 block text-xs font-semibold">Nama pemain</label>

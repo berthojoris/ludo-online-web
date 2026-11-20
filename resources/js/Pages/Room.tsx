@@ -120,6 +120,7 @@ function RoomContent() {
     const [characterModalOpen, setCharacterModalOpen] = useState(false);
     const [characterModalSeat, setCharacterModalSeat] =
         useState<PlayerColor | null>(null);
+    const [requiredNameDismissed, setRequiredNameDismissed] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
     const [chatUnread, setChatUnread] = useState(0);
     const advancedOverlayStyle = useModalViewport(advancedModalOpen);
@@ -270,7 +271,9 @@ function RoomContent() {
                 currentMe?.seat_color &&
                 !currentMe.name_confirmed &&
                 liveRoom.status === 'waiting',
-        ) && !characterModalOpen;
+        ) &&
+        !characterModalOpen &&
+        !requiredNameDismissed;
 
     // Lightweight fallback sync while waiting in lobby. Paused whenever a
     // mutating request is in flight or the required-name modal is open: a
@@ -2081,6 +2084,7 @@ function RoomContent() {
             <RequiredPlayerNameModal
                 open={requiredNameModalOpen}
                 roomCode={liveRoom?.code ?? ''}
+                onClose={() => setRequiredNameDismissed(true)}
             />
 
             <CharacterSelectModal
