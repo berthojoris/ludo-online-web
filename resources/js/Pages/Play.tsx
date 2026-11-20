@@ -357,7 +357,12 @@ export default function Play() {
                 );
             },
             onNetworkError: (error) => {
+                if (!navigator.onLine) {
+                    return;
+                }
+
                 reportClientIssue('Room synchronization failed', {
+                    level: 'warning',
                     source: 'game.sync',
                     roomCode: roomRef.current?.code,
                     action: trigger,
@@ -391,8 +396,10 @@ export default function Play() {
         [roomSyncOptions],
     );
 
+    const pollIntervalMs = connectionStatus === 'connected' ? 5000 : 2000;
+
     const { start: startPolling, stop: stopPolling } = usePoll(
-        5000,
+        pollIntervalMs,
         () => roomSyncOptions('poll'),
         { autoStart: false, background: 'pause', mode: 'rest' },
     );

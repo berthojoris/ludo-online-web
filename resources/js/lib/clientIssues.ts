@@ -94,6 +94,50 @@ function describeReason(reason: unknown): {
     }
 }
 
+const CHUNK_RELOAD_KEY = 'ludo:chunk-reload-at';
+const CHUNK_RELOAD_COOLDOWN_MS = 15_000;
+
+function isNetworkError(reason: unknown, message: string): boolean {
+    if (reason instanceof Error && reason.name === 'HttpNetworkError') {
+        return true;
+    }
+
+    return message.startsWith('Network error (');
+}
+
+function isModuleImportError(message: string): boolean {
+    const normalized = message.toLowerCase();
+
+    return (
+        normalized.includes('importing a module script failed') ||
+        normalized.includes('failed to fetch dynamically imported module') ||
+        normalized.includes('error loading dynamically imported module')
+    );
+}
+
+function tryReloadForStaleChunk(): boolean {
+    if (!navigator.onLine) {
+        return false;
+    }
+
+    try {
+        const lastReload = Number(
+            window.sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? '0',
+        );
+
+        if (Date.now() - lastReload <= CHUNK_RELOAD_COOLDOWN_MS) {
+            return false;
+        }
+
+        window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
+        window.location.reload();
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export function installClientIssueReporting(): void {
     window.addEventListener('error', (event) => {
         reportClientIssue(event.message || 'Uncaught browser error', {
@@ -104,6 +148,24 @@ export function installClientIssueReporting(): void {
 
     window.addEventListener('unhandledrejection', (event) => {
         const reason = describeReason(event.reason);
+
+        if (isNetworkError(event.reason, reason.message)) {
+            return;
+        }
+
+        if (isModuleImportError(reason.message)) {
+            if (tryReloadForStaleChunk()) {
+                return;
+            }
+
+            reportClientIssue(reason.message, {
+                level: 'warning',
+                source: 'window.unhandledrejection',
+                stack: reason.stack,
+            });
+
+            return;
+        }
 
         reportClientIssue(reason.message || 'Unhandled promise rejection', {
             source: 'window.unhandledrejection',
