@@ -778,12 +778,13 @@
     user-select: none;
     -webkit-user-drag: none;
     /*
-     * The legal/knocked states already imply an own compositor layer via their
-     * drop-shadow filters; pinning it here keeps the art on the same own layer
-     * in every state, so engines never rebuild the figure's layer — and risk
-     * re-capturing a blank frame — when state classes toggle mid-animation.
+     * No will-change here, on purpose. A resting pion's art paints into the
+     * board's own layer, the same path that draws its shadow and base ring,
+     * which never go blank. A permanent layer per pion (16+ on a full board)
+     * is what low-memory GPUs can drop textures for, and losing one erases
+     * only the art. Animations still get their own layer while they run, and
+     * PionFigure rebuilds the figure once the pion is back at rest.
      */
-    will-change: transform;
 }
 
 /*

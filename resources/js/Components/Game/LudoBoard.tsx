@@ -1153,6 +1153,7 @@ const TokenView = memo(function TokenView({
                 legal={legal}
                 busy={busy}
                 motion={motion}
+                hidden={hidden}
                 stacked={fanned}
                 stackCount={stackCount}
             />
