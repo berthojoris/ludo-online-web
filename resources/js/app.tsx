@@ -1,3 +1,7 @@
+import '@fontsource/instrument-sans/400.css';
+import '@fontsource/instrument-sans/500.css';
+import '@fontsource/instrument-sans/600.css';
+import '@fontsource/instrument-sans/700.css';
 import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/react';
