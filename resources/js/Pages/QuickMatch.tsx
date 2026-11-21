@@ -480,14 +480,11 @@ export default function QuickMatch() {
                                                 aria-hidden="true"
                                                 className="bg-brand/10 grid h-10 w-10 shrink-0 place-items-center rounded-2xl"
                                             >
-                                                <span className="flex items-end gap-1">
+                                                <span className="flex gap-1">
                                                     {[0, 1, 2].map((dot) => (
                                                         <span
                                                             key={dot}
-                                                            className="bg-brand h-1.5 w-1.5 animate-bounce rounded-full"
-                                                            style={{
-                                                                animationDelay: `${dot * 140}ms`,
-                                                            }}
+                                                            className="bg-brand h-1.5 w-1.5 rounded-full"
                                                         />
                                                     ))}
                                                 </span>
@@ -538,7 +535,7 @@ export default function QuickMatch() {
 
                                     {pool === 4 ? (
                                         <p className="text-ink-muted mt-4 text-xs leading-relaxed">
-                                            Jika kursi belum lengkap setelah 2 menit,
+                                            Jika kursi belum lengkap setelah 1 menit,
                                             komputer mengisi kursi kosong dan
                                             pertandingan langsung dimulai.
                                         </p>

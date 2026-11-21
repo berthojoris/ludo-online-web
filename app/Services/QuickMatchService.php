@@ -16,11 +16,11 @@ use Illuminate\Support\Str;
  * Quick Match matchmaking pool.
  *
  * A full pool starts immediately. In the four-seat pool, the oldest active
- * search starts a match after two minutes even if computers are needed.
+ * search starts a match after one minute even if computers are needed.
  */
 class QuickMatchService
 {
-    private const AUTO_FILL_SECONDS = 120;
+    private const AUTO_FILL_SECONDS = 60;
 
     public function __construct(private RoomBroadcaster $broadcaster) {}
 
