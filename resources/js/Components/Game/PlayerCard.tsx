@@ -9,7 +9,7 @@ type PlayerCardProps = {
     color: PlayerColor;
     name: string;
     character?: CharacterId | string | null;
-    role: 'Kamu' | 'Lawan' | 'Host' | 'Tamu';
+    role: 'Kamu' | 'Lawan' | 'Host' | 'Tamu' | 'Komputer';
     subtitle: string;
     active: boolean;
     finished: number;

@@ -12,7 +12,7 @@ Different Ludo variants exist. Implement `ruleset_id` and immutable `ruleset_ver
 - No legal move: turn advances (subject to extra-turn rules).
 - Three consecutive sixes: forfeiture of current turn (hangus). The 3rd six cannot be moved and turn immediately advances to the next player.
 - Single legal move auto-execution: When exactly one legal move exists (e.g. rolling 6 with only one token eligible to exit base and no tokens on track, or only one movable token on board), the engine auto-executes the move without waiting for manual player selection.
-- Timeout & Disconnect policy: Auto-skip current turn when timer expires. If a player triggers 3 consecutive auto-skips, they are marked as FORFEITED to avoid stalling the match.
+- Timeout & Disconnect policy: Auto-skip current turn when timer expires. If a player triggers 3 consecutive auto-skips, they are marked as FORFEITED to avoid stalling the match. In Quick Match a forfeited seat is handed to the computer (name and tokens stay); the player takes the seat back the moment they act manually again.
 - 2-Player seating policy: In Quick Match, 2 players are seated in opposite quadrants (Red vs Yellow or Green vs Blue) for fair 26-cell distance symmetry. In Private Room, players may freely choose any seat/quadrant.
 
 ## 2. Board model
@@ -70,5 +70,5 @@ TransitionResult includes next state, semantic events, and animation descriptor(
   - Safe squares: 8 standard safe squares (4 starting cells + 4 star/shield cells at step 9 of each color).
   - Extra turn on capture: Yes, capturing an enemy token grants 1 extra roll.
   - Stacking: Tokens of the same color can share a cell (no blockades in MVP).
-  - Turn timer: 15 seconds per action (roll/move).
+  - Turn timer: 10 seconds per action (roll/move).
 - **OPEN:** match placements (rank 2-4 vs winner-takes-all), private-room rematch behavior. Never silently assume these in production.

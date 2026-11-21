@@ -25,6 +25,9 @@ class RoomController extends Controller
     /** Extra delay the client adds before its timeout request lands. */
     private const TURN_TIMEOUT_GRACE_MS = 1_500;
 
+    /** Consecutive server-auto-played turns before a quick-match seat is forfeited. */
+    private const FORFEIT_AFTER_CONSECUTIVE_TIMEOUTS = 3;
+
     public function __construct(
         private RoomBroadcaster $broadcaster,
         private RoomPresence $presence,
@@ -64,6 +67,97 @@ class RoomController extends Controller
         } while (Room::where('code', $code)->exists());
 
         return $code;
+    }
+
+    /**
+     * Backfill the AFK bookkeeping on snapshots written before the
+     * consecutive-timeout policy existed.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    private static function backfillAfkCounters(array &$state): void
+    {
+        $count = count($state['tokens'] ?? []);
+
+        if (! isset($state['consecutive_timeouts']) || ! is_array($state['consecutive_timeouts'])) {
+            $state['consecutive_timeouts'] = array_fill(0, $count, 0);
+        }
+
+        for ($i = 0; $i < $count; $i++) {
+            $state['consecutive_timeouts'][$i] = (int) ($state['consecutive_timeouts'][$i] ?? 0);
+        }
+
+        if (! isset($state['forfeited']) || ! is_array($state['forfeited'])) {
+            $state['forfeited'] = [];
+        }
+
+        if (! array_key_exists('turn_timed_out', $state)) {
+            $state['turn_timed_out'] = false;
+        }
+    }
+
+    /**
+     * Close out the acting player's turn. A turn that contained any
+     * server-auto-played action counts as one consecutive skip; a turn the
+     * player played themselves resets the chain.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    private static function closeOutTurn(array &$state, int $index, bool $countSkip): void
+    {
+        if ($countSkip) {
+            if (! empty($state['turn_timed_out'])) {
+                $state['consecutive_timeouts'][$index] = (int) ($state['consecutive_timeouts'][$index] ?? 0) + 1;
+            } else {
+                $state['consecutive_timeouts'][$index] = 0;
+            }
+        }
+
+        $state['turn_timed_out'] = false;
+    }
+
+    /**
+     * Hand a quick-match seat to the computer after three consecutive
+     * auto-played turns: the row keeps its tokens and name but plays itself
+     * from now on, so the match keeps its pace instead of stalling.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    private static function forfeitSeatToComputer(array &$state, RoomPlayer $player, int $index): bool
+    {
+        if ($player->is_computer || in_array($index, $state['forfeited'] ?? [], true)) {
+            return false;
+        }
+
+        $state['forfeited'][] = $index;
+        $state['consecutive_timeouts'][$index] = 0;
+        $player->is_computer = true;
+        $player->save();
+
+        return true;
+    }
+
+    /**
+     * A forfeited player who acts manually takes the seat back. Native
+     * computer seats never send manual commands, so any manual command from
+     * a computer row is the returning human.
+     *
+     * @param  array<string, mixed>  $state
+     */
+    private static function reclaimForfeitedSeat(array &$state, RoomPlayer $player, int $index): bool
+    {
+        if (! $player->is_computer || ! in_array($index, $state['forfeited'] ?? [], true)) {
+            return false;
+        }
+
+        $state['forfeited'] = array_values(
+            array_filter($state['forfeited'], fn ($seat) => (int) $seat !== $index),
+        );
+        $state['consecutive_timeouts'][$index] = 0;
+        $player->is_computer = false;
+        $player->save();
+
+        return true;
     }
 
     public function store(Request $request): RedirectResponse
@@ -669,10 +763,13 @@ class RoomController extends Controller
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, &$player, $isComputer, $isTimeout, $request) {
+        $seatChanged = false;
+
+        $action = DB::transaction(function () use ($room, &$player, $isComputer, $isTimeout, $request, &$seatChanged) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $state = $room->match_state;
+            self::backfillAfkCounters($state);
             if ($isComputer) {
                 $player = $players->get($state['turn'] ?? -1);
                 abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
@@ -690,10 +787,21 @@ class RoomController extends Controller
                 );
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
-            if ($player->is_computer) {
+            // The version guard arbitrates concurrent computer-driver or
+            // timeout requests; a manual command from a converted seat is the
+            // returning owner and reclaims it without one.
+            if ($player->is_computer && ($isComputer || $isTimeout)) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && ! in_array($index, $state['winners'] ?? [], true) && $state['dice'] === null && $state['winner'] === null, 422, 'Bukan giliran melempar.');
+            // A timeout command marks the turn as auto-played so it counts
+            // toward the forfeit chain; a manual command from a converted
+            // seat is the returning owner and hands the seat back.
+            if ($isTimeout) {
+                $state['turn_timed_out'] = true;
+            } elseif (! $isComputer) {
+                $seatChanged = self::reclaimForfeitedSeat($state, $player, $index);
+            }
             $value = ($player->is_computer || $isTimeout) ? random_int(1, 6) : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
             if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
                 $state['had_six'] = array_fill(0, count($state['tokens']), false);
@@ -708,6 +816,15 @@ class RoomController extends Controller
             } else {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
                 $state['afk_auto_move'] = false;
+                self::closeOutTurn($state, $index, ! $player->is_computer);
+                if (
+                    $room->is_quick &&
+                    ! $player->is_computer &&
+                    ! in_array($index, $state['winners'] ?? [], true) &&
+                    (int) $state['consecutive_timeouts'][$index] >= self::FORFEIT_AFTER_CONSECUTIVE_TIMEOUTS
+                ) {
+                    $seatChanged = self::forfeitSeatToComputer($state, $player, $index) || $seatChanged;
+                }
             }
             $nowMs = now()->getTimestampMs();
             $state['state_version'] = (int) ($state['state_version'] ?? 0) + 1;
@@ -732,6 +849,11 @@ class RoomController extends Controller
         });
 
         $this->broadcaster->publishMatchAction($room, $action, $player);
+
+        if ($seatChanged) {
+            $room->refresh()->load('players');
+            $this->broadcaster->publishRoomUpdated($room, 'afk.seat', $player);
+        }
 
         return response()->json(['ok' => true, 'action' => $action]);
     }
@@ -764,10 +886,13 @@ class RoomController extends Controller
             return response()->json(['message' => 'Permainan belum dimulai atau sudah berakhir.'], 422);
         }
 
-        $action = DB::transaction(function () use ($room, &$player, $validated, $isComputer, $isTimeout, $request) {
+        $seatChanged = false;
+
+        $action = DB::transaction(function () use ($room, &$player, $validated, $isComputer, $isTimeout, $request, &$seatChanged) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
             $state = $room->match_state;
+            self::backfillAfkCounters($state);
             if ($isComputer) {
                 $player = $players->get($state['turn'] ?? -1);
                 abort_unless($player?->is_computer, 422, 'Bukan giliran komputer.');
@@ -788,10 +913,19 @@ class RoomController extends Controller
                 );
             }
             $index = $players->search(fn ($item) => $item->id === $player->id);
-            if ($player->is_computer) {
+            // Same as the roll: only automated commands carry a version to
+            // check, a manual one from a converted seat reclaims it.
+            if ($player->is_computer && ($isComputer || $isTimeout)) {
                 abort_unless((int) ($state['state_version'] ?? 0) === (int) $request->input('state_version'), 422, 'Status permainan telah berubah.');
             }
             abort_unless($room->status === 'started' && $state && $index !== false && $index < count($state['tokens']) && $state['turn'] === $index && $state['dice'] !== null, 422, 'Tidak ada langkah untuk dimainkan.');
+            // Same as the roll: a timeout marks the turn auto-played, a
+            // manual command from a converted seat reclaims it.
+            if ($isTimeout) {
+                $state['turn_timed_out'] = true;
+            } elseif (! $isComputer) {
+                $seatChanged = self::reclaimForfeitedSeat($state, $player, $index);
+            }
             $moves = MatchRules::moves($state, $index, $state['dice']);
             $tokenIndex = $player->is_computer
                 ? MatchRules::computerMove($state, $index)
@@ -833,6 +967,15 @@ class RoomController extends Controller
 
             if (! $matchOver && ($playerFinished || ($state['dice'] !== 6 && ! $captured && $target !== $finishPosition))) {
                 $state['turn'] = MatchRules::nextTurn($state, $index);
+                self::closeOutTurn($state, $index, ! $player->is_computer);
+                if (
+                    $room->is_quick &&
+                    ! $player->is_computer &&
+                    ! in_array($index, $state['winners'] ?? [], true) &&
+                    (int) $state['consecutive_timeouts'][$index] >= self::FORFEIT_AFTER_CONSECUTIVE_TIMEOUTS
+                ) {
+                    $seatChanged = self::forfeitSeatToComputer($state, $player, $index) || $seatChanged;
+                }
             }
             $nowMs = now()->getTimestampMs();
             $state['dice'] = null;
@@ -854,6 +997,11 @@ class RoomController extends Controller
         });
 
         $this->broadcaster->publishMatchAction($room, $action, $player);
+
+        if ($seatChanged) {
+            $room->refresh()->load('players');
+            $this->broadcaster->publishRoomUpdated($room, 'afk.seat', $player);
+        }
 
         return response()->json(['ok' => true, 'action' => $action]);
     }

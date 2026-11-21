@@ -106,7 +106,6 @@ Working today:
 Not yet implemented:
 
 - Quick matchmaking by mode, ruleset, and region.
-- Turn timers with timeout and forfeiture policy.
 - PWA manifest, service worker, and offline banner.
 - PixiJS/GSAP rendering and haptics.
 - Separate `matches` / `match_actions` tables and the outbox publisher described in [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -135,7 +134,7 @@ The ruleset lives in `app/Services/MatchRules.php` and is applied server-side on
 - 4-player matches use the classic 52-cell track with 8 safe squares (4 starts + 4 star cells); 5-7 player matches use a multi-arm track with 11-cell sectors and 2 safe squares per arm.
 - A single legal move is executed automatically by the client when only one token can move.
 - Computer opponents pick moves with a server-side heuristic (release from base, capture, finish, progress).
-- No turn deadline is enforced yet; the 15-second timer and timeout forfeiture policy are planned.
+- No turn deadline blocks the game: each action (roll/move) gets 10 seconds. A timed-out turn is auto-played by the server (random roll, then a random legal move), so an AFK player never stalls the match. In Quick Match, three consecutive auto-played turns forfeit the seat to a computer (name and tokens stay); acting manually takes the seat back.
 
 Open product decisions:
 

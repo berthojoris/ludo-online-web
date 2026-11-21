@@ -39,6 +39,9 @@ export type MatchSnapshot = {
     last_roll?: LastRoll | null;
     turn_started_at?: number | null;
     afk_auto_move?: boolean;
+    consecutive_timeouts?: number[];
+    forfeited?: number[];
+    turn_timed_out?: boolean;
 };
 
 export type MatchActionData = {

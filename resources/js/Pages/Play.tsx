@@ -1619,7 +1619,11 @@ export default function Play() {
                 color,
                 name: state.names[color],
                 character: state.characters[color],
-                role: color === state.human ? 'Kamu' : 'Lawan',
+                role: room?.players[state.order.indexOf(color)]?.is_computer
+                    ? 'Komputer'
+                    : color === state.human
+                      ? 'Kamu'
+                      : 'Lawan',
                 finished: finishedCount(color),
                 captures: state.captures[color],
                 rolls: state.rolls[color],
@@ -1635,6 +1639,7 @@ export default function Play() {
         state.human,
         state.captures,
         state.rolls,
+        room?.players,
     ]);
 
     const durationSeconds =
@@ -1646,6 +1651,12 @@ export default function Play() {
             : 0;
 
     const activeSubtitle = (color: PlayerId) => {
+        const seatIndex = state.order.indexOf(color);
+        const seatForfeited =
+            Boolean(room?.players[seatIndex]?.is_computer) &&
+            Boolean(room?.match_state?.forfeited?.includes(seatIndex));
+        const skipCount =
+            room?.match_state?.consecutive_timeouts?.[seatIndex] ?? 0;
         const winRank = state.winners.indexOf(color);
 
         if (state.winner) {
@@ -1658,6 +1669,16 @@ export default function Play() {
 
         if (winRank !== -1) {
             return `Selesai · Juara ${winRank + 1}`;
+        }
+
+        if (seatForfeited) {
+            return color === state.human
+                ? 'AFK · ketuk dadu untuk ambil alih'
+                : 'AFK · digantikan komputer';
+        }
+
+        if (skipCount > 0) {
+            return `AFK · ${skipCount}/3 auto-skip`;
         }
 
         if (state.turn !== color) {
@@ -1812,6 +1833,45 @@ export default function Play() {
     const executeRollRef = useRef(executeRoll);
     executeRollRef.current = executeRoll;
 
+    /**
+     * Sends one afk auto-move for the current turn as a timeout command, so
+     * the server keeps the turn marked as auto-played for the forfeit
+     * counter instead of counting it as the player acting themselves.
+     */
+    const postTimeoutMove = useCallback(async () => {
+        const activeRoom = roomRef.current;
+
+        if (!activeRoom) {
+            return;
+        }
+
+        timeoutPendingRef.current = true;
+        try {
+            const csrf =
+                document
+                    .querySelector('meta[name="csrf-token"]')
+                    ?.getAttribute('content') ?? '';
+            timeoutHttp.transform(() => ({
+                timeout: true,
+                state_version: stateRef.current.version,
+            }));
+            const data = await timeoutHttp.post(
+                route('rooms.match.move', { code: activeRoom.code }),
+                { headers: { 'X-CSRF-TOKEN': csrf } },
+            );
+            if (data?.action) {
+                processMatchActionRef.current(data.action);
+            }
+        } catch {
+            syncRoomState('afk-auto-move-race');
+        } finally {
+            timeoutPendingRef.current = false;
+        }
+    }, [syncRoomState]);
+
+    const postTimeoutMoveRef = useRef(postTimeoutMove);
+    postTimeoutMoveRef.current = postTimeoutMove;
+
     const isAfkAutoMove =
         autoPlayAfterTimeoutRollRef.current ||
         Boolean(
@@ -1901,14 +1961,25 @@ export default function Play() {
                     current.phase === 'choosing' &&
                     current.legalMoves.length > 0
                 ) {
-                    const randomMove =
-                        current.legalMoves[
-                            Math.floor(
-                                Math.random() * current.legalMoves.length,
-                            )
-                        ];
-                    if (randomMove) {
-                        void animateMoveRef.current(randomMove.tokenIndex);
+                    if (!activeRoom) {
+                        const randomMove =
+                            current.legalMoves[
+                                Math.floor(
+                                    Math.random() *
+                                        current.legalMoves.length,
+                                )
+                            ];
+                        if (randomMove) {
+                            void animateMoveRef.current(
+                                randomMove.tokenIndex,
+                            );
+                        }
+                    } else if (!timeoutPendingRef.current) {
+                        // Go through the timeout command path: a manual move
+                        // here would tell the server the player acted
+                        // themselves and the forfeit counter would never
+                        // grow for a stalled seat.
+                        void postTimeoutMoveRef.current();
                     }
                 }
                 return;
@@ -2710,9 +2781,16 @@ export default function Play() {
                                                     state.characters[color]
                                                 }
                                                 role={
-                                                    color === state.human
-                                                        ? 'Kamu'
-                                                        : 'Lawan'
+                                                    room?.players[
+                                                        state.order.indexOf(
+                                                            color,
+                                                        )
+                                                    ]?.is_computer
+                                                        ? 'Komputer'
+                                                        : color ===
+                                                            state.human
+                                                          ? 'Kamu'
+                                                          : 'Lawan'
                                                 }
                                                 subtitle={activeSubtitle(color)}
                                                 active={
@@ -3001,9 +3079,16 @@ export default function Play() {
                                                         state.characters[color]
                                                     }
                                                     role={
-                                                        color === state.human
-                                                            ? 'Kamu'
-                                                            : 'Lawan'
+                                                        room?.players[
+                                                            state.order.indexOf(
+                                                                color,
+                                                            )
+                                                        ]?.is_computer
+                                                            ? 'Komputer'
+                                                            : color ===
+                                                                  state.human
+                                                              ? 'Kamu'
+                                                              : 'Lawan'
                                                     }
                                                     subtitle={activeSubtitle(color)}
                                                     active={

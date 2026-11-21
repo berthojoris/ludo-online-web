@@ -3,7 +3,7 @@
 **Planning estimate:** 5–10 weeks for a scoped MVP with an experienced small team, subject to scope, assets, staffing and real-device QA. Not a delivery commitment.
 
 ## Milestone M0 — Decisions and setup
-- Confirm ruleset variants, guest identity, seat mapping, timeout/forfeit, deployment constraints.
+- Confirm ruleset variants, guest identity, seat mapping, deployment constraints. Decided: 10s turn timer; three consecutive auto-played turns forfeit a Quick Match seat to the computer, and a manual action reclaims it.
 - Repo bootstrap, CI, lint/static analysis, environments, coding conventions.
 - Done when decisions are recorded and baseline app deploys to staging.
 

@@ -64,7 +64,7 @@ class BroadcastAuthorizationController extends Controller
             throw new HttpException(503, 'Kanal privat belum tersedia untuk koneksi broadcast ini.');
         }
 
-        $payload = $broadcaster->getPusher()->authorizeChannel($socketId, $channelName);
+        $payload = $broadcaster->getPusher()->authorizeChannel($channelName, $socketId);
 
         return response()->json(json_decode($payload, true, 512, JSON_THROW_ON_ERROR));
     }
