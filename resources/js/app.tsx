@@ -5,6 +5,7 @@ import '@fontsource/instrument-sans/700.css';
 import '../css/app.css';
 
 import { createInertiaApp } from '@inertiajs/react';
+import { echo } from '@inertiajs/react/echo';
 import { configureEcho } from '@laravel/echo-react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { ComponentType } from 'react';
@@ -85,6 +86,7 @@ const appName = 'Ludo Arena';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
+    live: echo(),
     resolve: async (name) =>
         (
             await resolvePageComponent(

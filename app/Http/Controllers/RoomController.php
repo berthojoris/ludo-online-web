@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Room;
 use App\Models\RoomPlayer;
+use App\Services\ComputerStrategy;
 use App\Services\MatchRules;
 use App\Services\MatchStarter;
 use App\Services\PlayerResume;
@@ -802,7 +803,9 @@ class RoomController extends Controller
             } elseif (! $isComputer) {
                 $seatChanged = self::reclaimForfeitedSeat($state, $player, $index);
             }
-            $value = ($player->is_computer || $isTimeout) ? random_int(1, 6) : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
+            $value = ($room->is_quick || $player->is_computer || $isTimeout)
+                ? random_int(1, 6)
+                : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
             if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
                 $state['had_six'] = array_fill(0, count($state['tokens']), false);
             }
@@ -928,30 +931,17 @@ class RoomController extends Controller
             }
             $moves = MatchRules::moves($state, $index, $state['dice']);
             $tokenIndex = $player->is_computer
-                ? MatchRules::computerMove($state, $index)
+                ? ComputerStrategy::chooseMove($state, $index, $moves)
                 : ($isTimeout && $moves ? array_rand($moves) : (int) $validated['token_index']);
             abort_unless(array_key_exists($tokenIndex, $moves), 422, 'Langkah tidak sah.');
             $target = $moves[$tokenIndex];
-            $state['tokens'][$index][$tokenIndex] = $target;
             $colors = $state['colors'] ?? ['blue', 'green'];
             $arms = isset($state['arms']) ? (int) $state['arms'] : null;
-            $safeIndices = MatchRules::safeIndices($colors, $arms);
-            $finishPosition = MatchRules::finishPosition($colors, $arms);
-            $absolute = MatchRules::absolute($index, $target, $colors, $arms);
-            $capturedCount = 0;
-            if ($absolute !== null && ! in_array($absolute, $safeIndices, true)) {
-                foreach ($state['tokens'] as $opponentIndex => $tokens) {
-                    if ($opponentIndex === $index) {
-                        continue;
-                    }
-                    foreach ($tokens as $i => $position) {
-                        if (MatchRules::absolute($opponentIndex, $position, $colors, $arms) === $absolute) {
-                            $state['tokens'][$opponentIndex][$i] = -1;
-                            $capturedCount++;
-                        }
-                    }
-                }
-            }
+            $spec = MatchRules::spec($colors, $arms);
+            $starts = array_map(fn (string $color) => $spec['starts'][$color] ?? null, $colors);
+            [$state['tokens'], $capturedPositions] = MatchRules::moveTokens($state['tokens'], $index, $tokenIndex, $target, $starts, $spec);
+            $finishPosition = $spec['finish_position'];
+            $capturedCount = count($capturedPositions);
             $captured = $capturedCount > 0;
             $state['stats'][$index]['captures'] = ($state['stats'][$index]['captures'] ?? 0) + $capturedCount;
             $state['total_moves'] = ($state['total_moves'] ?? 0) + 1;

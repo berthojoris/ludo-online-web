@@ -83,9 +83,7 @@ function RoomContent() {
         canCreateRoom = false,
     } = page.props as unknown as RoomPageProps;
 
-    const [liveRoom, setLiveRoom] = useState<RoomData | null>(
-        serverRoom ?? null,
-    );
+    const liveRoom = serverRoom ?? null;
     const [viewMode, setViewMode] = useState<ViewMode>(
         initialMode === 'join' || !serverRoom ? 'join' : 'lobby',
     );
@@ -134,15 +132,14 @@ function RoomContent() {
     renamingPlayerIdRef.current = renamingPlayerId;
 
     useEffect(() => {
-        setLiveRoom(serverRoom ?? null);
         setViewMode(initialMode === 'join' || !serverRoom ? 'join' : 'lobby');
         if (serverRoom?.code) {
             setJoinCode(serverRoom.code);
         }
-        // Partial reloads (fallback poll / broadcast) recreate the prop
-        // identities every few seconds. Never let them clobber the draft
-        // while the player is typing a new name — re-sync only once the
-        // editor closes, using whatever name the server returned then.
+        // Live props / partial reloads recreate the prop identities on each
+        // update. Never let them clobber the draft while the player is typing
+        // a new name — re-sync only once the editor closes, using whatever
+        // name the server returned then.
         if (!editingName && serverMe?.name) {
             setNameDraft(serverMe.name);
         }
@@ -240,26 +237,6 @@ function RoomContent() {
     const roomCode = liveRoom?.code ?? null;
     const roomStatus = liveRoom?.status ?? 'waiting';
 
-    // Real-time Reverb subscription for room state updates
-    useEffect(() => {
-        if (!roomCode || !echoIsConfigured()) {
-            return;
-        }
-
-        const channelName = `room.${roomCode}`;
-        const channel = echo().private(channelName);
-
-        channel.listen('.room.updated', (payload: { room?: RoomData }) => {
-            if (payload?.room?.code === roomCode) {
-                setLiveRoom(payload.room);
-            }
-        });
-
-        return () => {
-            echo().leave(channelName);
-        };
-    }, [roomCode]);
-
     const currentMe: RoomPlayerData | null =
         liveRoom?.players.find((p) => p.id === serverMe?.id) ??
         serverMe ??
@@ -294,11 +271,15 @@ function RoomContent() {
         }
 
         const interval = window.setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                router.reload({
-                    only: ['room', 'me', 'roomError', 'attemptedCode'],
-                });
+            if (document.visibilityState !== 'visible') {
+                return;
             }
+            if (echoIsConfigured() && echo().connectionStatus() === 'connected') {
+                return;
+            }
+            router.reload({
+                only: ['room', 'me', 'roomError', 'attemptedCode'],
+            });
         }, 4000);
 
         return () => window.clearInterval(interval);

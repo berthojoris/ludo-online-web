@@ -18,7 +18,7 @@ class RoomBroadcaster
     public function publishRoomUpdated(Room $room, string $operation, ?RoomPlayer $player = null): void
     {
         try {
-            broadcast(new RoomUpdated($room));
+            broadcast(new RoomUpdated($room))->toOthers();
         } catch (BroadcastException|GuzzleException|PusherException $exception) {
             $this->reportFailure($exception, array_filter([
                 'room_code' => $room->code,

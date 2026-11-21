@@ -14,10 +14,11 @@ type QueueResponse = {
     state?: 'idle' | 'waiting' | 'matched' | 'active';
     room?: string | null;
     waiting?: number;
+    elapsed?: number;
 };
 
 const POLL_INTERVAL_MS = 4000;
-const BOT_FILL_AFTER_SECONDS = 30;
+const DUEL_BOT_OPTION_AFTER_SECONDS = 30;
 const MAX_REJOIN_ATTEMPTS = 3;
 
 function csrfToken(): string {
@@ -76,13 +77,20 @@ function formatElapsed(totalSeconds: number): string {
 }
 
 export default function QuickMatch() {
-    const { pool: initialPool, state: initialState, name: initialName, token, waiting: initialWaiting } = usePage()
-        .props as unknown as {
+    const {
+        pool: initialPool,
+        state: initialState,
+        name: initialName,
+        token,
+        waiting: initialWaiting,
+        elapsed: initialElapsed,
+    } = usePage().props as unknown as {
         pool: Pool;
         state: 'idle' | 'waiting';
         name: string;
         token: string;
         waiting: number;
+        elapsed: number;
     };
 
     const [phase, setPhase] = useState<'ready' | 'searching'>(
@@ -93,7 +101,7 @@ export default function QuickMatch() {
     );
     const [name, setName] = useState(initialName);
     const [waitingCount, setWaitingCount] = useState(initialWaiting);
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const [elapsedSeconds, setElapsedSeconds] = useState(initialElapsed);
     const [joinError, setJoinError] = useState<string | null>(null);
     const [busy, setBusy] = useState<'idle' | 'joining' | 'cancelling' | 'filling'>(
         'idle',
@@ -102,6 +110,7 @@ export default function QuickMatch() {
     const busyRef = useRef(false);
     const navigatingRef = useRef(false);
     const rejoinAttemptsRef = useRef(0);
+    const searchStartedAtRef = useRef(Date.now() - initialElapsed * 1000);
     const searchPoolRef = useRef(pool);
     const searchNameRef = useRef(name);
 
@@ -141,7 +150,9 @@ export default function QuickMatch() {
                 }
 
                 setPool(nextPool);
-                setElapsedSeconds(0);
+                const elapsed = data.elapsed ?? 0;
+                searchStartedAtRef.current = Date.now() - elapsed * 1000;
+                setElapsedSeconds(elapsed);
                 rejoinAttemptsRef.current = 0;
                 setWaitingCount(data.waiting ?? 0);
                 setPhase('searching');
@@ -210,14 +221,15 @@ export default function QuickMatch() {
         void startSearch(pool, trimmed);
     };
 
-    // Elapsed-time ticker for the searching card.
     useEffect(() => {
         if (phase !== 'searching') {
             return;
         }
 
         const interval = window.setInterval(() => {
-            setElapsedSeconds((current) => current + 1);
+            setElapsedSeconds(
+                Math.max(0, Math.floor((Date.now() - searchStartedAtRef.current) / 1000)),
+            );
         }, 1000);
 
         return () => {
@@ -329,24 +341,24 @@ export default function QuickMatch() {
                 </div>
 
                 <header className="border-line/60 bg-canvas/80 z-40 shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-                    <div className="mx-auto flex min-h-14 w-full max-w-6xl items-center justify-between px-4 sm:min-h-16 sm:px-6">
+                    <div className="mx-auto flex min-h-14 w-full max-w-6xl items-center justify-between px-[max(clamp(1rem,3vw,1.5rem),env(safe-area-inset-left),env(safe-area-inset-right))] sm:min-h-16">
                         <Link
                             href={route('home')}
                             aria-label="Kembali ke beranda Ludo Arena"
-                            className="rounded-xl"
+                            className="inline-flex min-h-11 items-center rounded-xl"
                         >
                             <Logo className="h-8 w-8 sm:h-9 sm:w-9" withWordmark />
                         </Link>
                         <Link
                             href={route('home')}
-                            className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex h-10 items-center justify-center rounded-full border bg-white px-4 text-xs font-semibold shadow-sm transition active:scale-[0.985]"
+                            className="border-line text-ink hover:border-ink/15 hover:bg-surface-muted inline-flex min-h-11 items-center justify-center rounded-full border bg-white px-4 text-xs font-semibold shadow-sm transition active:scale-[0.985]"
                         >
                             Beranda
                         </Link>
                     </div>
                 </header>
 
-                <main className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-[max(14px,env(safe-area-inset-bottom))] pt-[max(10px,1.6dvh)] sm:px-6">
+                <main className="relative z-10 flex min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-contain px-[max(clamp(1rem,3vw,1.5rem),env(safe-area-inset-left),env(safe-area-inset-right))] pb-[max(14px,env(safe-area-inset-bottom))] pt-[max(10px,1.6dvh)]">
                     <div className="m-auto w-full max-w-md py-6">
                         <div className="border-line shadow-card animate-fade-up rounded-3xl border bg-white/95 p-[clamp(1rem,3vw,1.5rem)] backdrop-blur-sm">
                             {phase === 'ready' ? (
@@ -524,8 +536,13 @@ export default function QuickMatch() {
                                             : 'Menunggu pemain lain bergabung'}
                                     </p>
 
-                                    {elapsedSeconds >=
-                                    BOT_FILL_AFTER_SECONDS ? (
+                                    {pool === 4 ? (
+                                        <p className="text-ink-muted mt-4 text-xs leading-relaxed">
+                                            Jika kursi belum lengkap setelah 2 menit,
+                                            komputer mengisi kursi kosong dan
+                                            pertandingan langsung dimulai.
+                                        </p>
+                                    ) : elapsedSeconds >= DUEL_BOT_OPTION_AFTER_SECONDS ? (
                                         <div className="border-line bg-canvas mt-4 rounded-2xl border p-3">
                                             <p className="text-ink-muted text-xs leading-relaxed">
                                                 Sudah lebih dari 30 detik dan

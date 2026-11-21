@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\RoomUpdated;
 use App\Models\QuickMatchQueue;
 use App\Models\Room;
 use App\Models\RoomPlayer;
@@ -9,6 +10,7 @@ use App\Services\PlayerResume;
 use App\Services\QuickMatchService;
 use App\Services\RoomBroadcaster;
 use App\Services\RoomPresence;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +65,7 @@ class PageController extends Controller
             'name' => $state['name'],
             'token' => $state['token'],
             'waiting' => $state['waiting'],
+            'elapsed' => $state['elapsed'],
         ]);
     }
 
@@ -237,13 +240,12 @@ class PageController extends Controller
             $this->presence->touch($me);
             PlayerResume::remember($request, $me, $room->code);
 
-            return Inertia::render('Room', [
-                'mode' => $me->is_host ? 'create' : 'lobby',
-                'room' => $freshRoom?->toLobbyPayload(),
-                'me' => $this->playerPayload($me),
-                'roomError' => null,
-                'canCreateRoom' => $canCreateRoom,
-            ]);
+            return $this->renderRoom(
+                $me->is_host ? 'create' : 'lobby',
+                $freshRoom,
+                $me,
+                $canCreateRoom,
+            );
         }
 
         $existingCode = $request->session()->get('ludo_host_room_code');
@@ -312,12 +314,39 @@ class PageController extends Controller
             PlayerResume::remember($request, $me, $freshRoom->code);
         }
 
+        return $this->renderRoom('create', $freshRoom, $me, true);
+    }
+
+    private function renderRoom(string $mode, ?Room $room, ?RoomPlayer $me, bool $canCreateRoom): Response
+    {
+        if (! $room) {
+            return Inertia::render('Room', [
+                'mode' => $mode,
+                'room' => null,
+                'me' => $me ? $this->playerPayload($me) : null,
+                'roomError' => null,
+                'canCreateRoom' => $canCreateRoom,
+            ]);
+        }
+
+        $channel = new PrivateChannel('room.'.$room->code);
+
         return Inertia::render('Room', [
-            'mode' => 'create',
-            'room' => $freshRoom?->toLobbyPayload(),
-            'me' => $me ? $this->playerPayload($me) : null,
+            'mode' => $mode,
+            'room' => Inertia::live(
+                fn () => $room->toLobbyPayload(),
+                on: RoomUpdated::class,
+                channel: $channel,
+                throttle: 150,
+            ),
+            'me' => Inertia::live(
+                fn () => $me ? $this->playerPayload($me) : null,
+                on: RoomUpdated::class,
+                channel: $channel,
+                throttle: 150,
+            ),
             'roomError' => null,
-            'canCreateRoom' => true,
+            'canCreateRoom' => $canCreateRoom,
         ]);
     }
 

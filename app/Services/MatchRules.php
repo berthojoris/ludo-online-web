@@ -310,53 +310,44 @@ class MatchRules
         return $rolls;
     }
 
-    public static function computerMove(array $state, int $player): ?int
+    /** @return array{0: array, 1: list<int>} Updated tokens and captured positions. */
+    public static function moveTokens(array $tokens, int $player, int $token, int $target, array $starts, array $spec): array
     {
-        $colors = $state['colors'];
-        $arms = $state['arms'] ?? null;
-        $spec = self::spec($colors, $arms);
-        $best = null;
-        $bestScore = -INF;
-        foreach (self::moves($state, $player, $state['dice']) as $index => $target) {
-            $score = $target / 10;
-            $score += $state['tokens'][$player][$index] === -1 ? 12 : 0;
-            $score += $target > $spec['last_track_position'] ? 30 : 0;
-            $score += $target === $spec['finish_position'] ? 60 : 0;
-            $absolute = self::absolute($player, $target, $colors, $arms);
-            if ($absolute !== null && ! in_array($absolute, $spec['safe'], true)) {
-                foreach ($state['tokens'] as $opponent => $tokens) {
-                    if ($opponent === $player) {
-                        continue;
-                    }
-                    foreach ($tokens as $position) {
-                        if (self::absolute($opponent, $position, $colors, $arms) === $absolute) {
-                            $score += 80;
-                        }
-                    }
-                }
+        $tokens[$player][$token] = $target;
+        $captured = [];
+        $absolute = self::trackIndex($target, $starts[$player], $spec);
+        if ($absolute === null || in_array($absolute, $spec['safe'], true)) {
+            return [$tokens, $captured];
+        }
+
+        foreach ($tokens as $opponent => $positions) {
+            if ($opponent === $player) {
+                continue;
             }
-            if ($score > $bestScore) {
-                $best = $index;
-                $bestScore = $score;
+            foreach ($positions as $index => $position) {
+                if (self::trackIndex($position, $starts[$opponent], $spec) === $absolute) {
+                    $tokens[$opponent][$index] = -1;
+                    $captured[] = $position;
+                }
             }
         }
 
-        return $best;
+        return [$tokens, $captured];
     }
 
     public static function absolute(int $player, int $position, array $colors = ['blue', 'green'], ?int $arms = null): ?int
     {
         $spec = self::spec($colors, $arms);
 
-        if ($position < 0 || $position > $spec['last_track_position']) {
+        return self::trackIndex($position, $spec['starts'][$colors[$player] ?? ''] ?? null, $spec);
+    }
+
+    public static function trackIndex(int $position, ?int $start, array $spec): ?int
+    {
+        if ($start === null || $position < 0 || $position > $spec['last_track_position']) {
             return null;
         }
 
-        $color = $colors[$player] ?? null;
-        if ($color === null || ! isset($spec['starts'][$color])) {
-            return null;
-        }
-
-        return ($spec['starts'][$color] + $position) % $spec['track_length'];
+        return ($start + $position) % $spec['track_length'];
     }
 }

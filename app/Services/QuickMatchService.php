@@ -6,7 +6,7 @@ use App\Http\Controllers\RoomController;
 use App\Models\QuickMatchQueue;
 use App\Models\Room;
 use App\Models\RoomPlayer;
-use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -15,22 +15,19 @@ use Illuminate\Support\Str;
 /**
  * Quick Match matchmaking pool.
  *
- * Players join a pool (2 or 4 seats) by themselves; the moment a pool holds
- * enough fresh entries the service pairs them into a new host-less quick
- * room: seats and characters are assigned automatically, the match starts
- * immediately (no lobby, no host controls) and every paired browser is told
- * its room code through a per-player broadcast channel. Quick rooms keep
- * `host_advantage` off for their whole life, so no player ever rolls with
- * an advantage they did not sign up for.
+ * A full pool starts immediately. In the four-seat pool, the oldest active
+ * search starts a match after two minutes even if computers are needed.
  */
 class QuickMatchService
 {
+    private const AUTO_FILL_SECONDS = 120;
+
     public function __construct(private RoomBroadcaster $broadcaster) {}
 
     /**
      * Snapshot of this browser for the quick-match page.
      *
-     * @return array{state: string, room: string|null, pool: int, name: string, token: string, waiting: int}
+     * @return array{state: string, room: string|null, pool: int, name: string, token: string, waiting: int, elapsed: int}
      */
     public function pageState(Request $request, int $fallbackPool): array
     {
@@ -38,11 +35,11 @@ class QuickMatchService
         $this->sweep();
 
         if ($room = $this->activeRoom($request)) {
-            return ['state' => 'active', 'room' => $room->code, 'pool' => $fallbackPool, 'name' => $this->defaultName($request), 'token' => $token, 'waiting' => 0];
+            return ['state' => 'active', 'room' => $room->code, 'pool' => $fallbackPool, 'name' => $this->defaultName($request), 'token' => $token, 'waiting' => 0, 'elapsed' => 0];
         }
 
         if ($entry = $this->matchedEntry($token)) {
-            return ['state' => 'matched', 'room' => $entry->room_code, 'pool' => $fallbackPool, 'name' => $entry->name, 'token' => $token, 'waiting' => 0];
+            return ['state' => 'matched', 'room' => $entry->room_code, 'pool' => $fallbackPool, 'name' => $entry->name, 'token' => $token, 'waiting' => 0, 'elapsed' => 0];
         }
 
         $entry = $this->waitingEntry($token);
@@ -55,6 +52,7 @@ class QuickMatchService
             'name' => $entry?->name ?? $this->defaultName($request),
             'token' => $token,
             'waiting' => $this->waitingCount($pool),
+            'elapsed' => $this->elapsedSeconds($entry),
         ];
     }
 
@@ -62,7 +60,7 @@ class QuickMatchService
      * Join (or rejoin, or switch pools in) a quick-match pool, then try to
      * pair right away so a full pool starts its match in this very request.
      *
-     * @return array{ok: bool, state: string, room: string|null, waiting: int}
+     * @return array{ok: bool, state: string, room: string|null, waiting: int, elapsed?: int}
      */
     public function join(Request $request, int $pool, string $name): array
     {
@@ -81,56 +79,54 @@ class QuickMatchService
         $name = $name === '' ? $this->defaultName($request) : $name;
 
         try {
-            QuickMatchQueue::updateOrCreate(
-                ['player_token' => $token, 'status' => QuickMatchQueue::WAITING],
-                [
+            DB::transaction(function () use ($request, $token, $pool, $name): void {
+                $entries = QuickMatchQueue::where('player_token', $token)->lockForUpdate()->get();
+                if ($entries->contains('status', QuickMatchQueue::MATCHED)) {
+                    return;
+                }
+
+                $entry = $entries->first() ?? new QuickMatchQueue([
+                    'player_token' => $token,
+                    'status' => QuickMatchQueue::WAITING,
+                ]);
+                if ($entry->exists && $entry->players !== $pool) {
+                    $entry->created_at = now();
+                }
+
+                $entry->fill([
                     'players' => $pool,
                     'user_id' => $request->user()?->id,
                     'name' => $name,
                     'last_seen_at' => now(),
-                ],
-            );
-        } catch (QueryException) {
-            // Two parallel requests from the same browser: the other one
-            // already stored the waiting entry, and the next status poll
-            // continues from it.
+                ])->save();
+            }, 3);
+        } catch (UniqueConstraintViolationException) {
+            // Another join from this browser inserted the queue entry first.
         }
 
-        if ($code = $this->attemptPair($pool)) {
-            return ['ok' => true, 'state' => 'matched', 'room' => $code, 'waiting' => 0];
-        }
+        $this->pairWaitingBrowser($token);
 
-        return ['ok' => true, 'state' => 'waiting', 'room' => null, 'waiting' => $this->waitingCount($pool)];
+        return $this->queueStatus($token, $pool);
     }
 
     /**
      * Refresh this browser's waiting stamp and try to pair its pool; the
      * searching page calls this every few seconds.
      *
-     * @return array{ok: bool, state: string, room: string|null, waiting: int}
+     * @return array{ok: bool, state: string, room: string|null, waiting: int, elapsed?: int}
      */
     public function touchStatus(Request $request, int $fallbackPool): array
     {
         $token = RoomController::playerToken($request);
         $this->sweep();
 
-        if ($entry = $this->matchedEntry($token)) {
-            return ['ok' => true, 'state' => 'matched', 'room' => $entry->room_code, 'waiting' => 0];
-        }
+        QuickMatchQueue::where('player_token', $token)
+            ->where('status', QuickMatchQueue::WAITING)
+            ->update(['last_seen_at' => now()]);
 
-        $entry = $this->waitingEntry($token);
-        $pool = (int) ($entry?->players ?? $fallbackPool);
+        $this->pairWaitingBrowser($token);
 
-        if ($entry) {
-            $entry->last_seen_at = now();
-            $entry->save();
-        }
-
-        if ($code = $this->attemptPair($pool)) {
-            return ['ok' => true, 'state' => 'matched', 'room' => $code, 'waiting' => 0];
-        }
-
-        return ['ok' => true, 'state' => $entry ? 'waiting' : 'idle', 'room' => null, 'waiting' => $this->waitingCount($pool)];
+        return $this->queueStatus($token, $fallbackPool);
     }
 
     public function cancel(Request $request): void
@@ -142,10 +138,9 @@ class QuickMatchService
     }
 
     /**
-     * Stop waiting and start the match right away with computers in the
-     * remaining seats.
+     * The two-seat pool also offers a manual match against a computer.
      *
-     * @return array{ok: bool, state: string, room: string|null, waiting: int}
+     * @return array{ok: bool, state: string, room: string|null, waiting: int, elapsed?: int}
      */
     public function fillBots(Request $request, int $pool): array
     {
@@ -154,9 +149,13 @@ class QuickMatchService
         abort_unless($entry, 422, 'Kamu sedang tidak dalam pencarian pemain.');
         abort_unless((int) $entry->players === $pool, 422, 'Mode pencarian sudah berubah. Mulai ulang pencarianmu.');
 
+        if ($pool === 4) {
+            return $this->touchStatus($request, $pool);
+        }
+
         $code = DB::transaction(function () use ($entry, $pool): string {
             $locked = QuickMatchQueue::whereKey($entry->id)->lockForUpdate()->firstOrFail();
-            abort_unless($locked->status === QuickMatchQueue::WAITING, 422, 'Pencarian sudah berakhir.');
+            abort_unless($locked->status === QuickMatchQueue::WAITING && $locked->players === $pool, 422, 'Pencarian sudah berakhir.');
 
             $room = $this->createRoom($pool, [$locked], $pool - 1);
 
@@ -171,27 +170,37 @@ class QuickMatchService
     }
 
     /**
-     * Pair the oldest fresh waiting entries of one pool into a new quick
-     * room. Returns the room code when a full match was created, null when
-     * the pool is still incomplete.
+     * Only a browser actively searching triggers pairing. Its response is
+     * resolved separately since the oldest entries may belong to others.
      */
-    private function attemptPair(int $pool): ?string
+    private function pairWaitingBrowser(string $token): void
+    {
+        if ($entry = $this->waitingEntry($token)) {
+            $this->attemptPair($entry->players);
+        }
+    }
+
+    private function attemptPair(int $pool): void
     {
         $paired = DB::transaction(function () use ($pool): ?array {
             $entries = QuickMatchQueue::query()
                 ->where('players', $pool)
                 ->where('status', QuickMatchQueue::WAITING)
                 ->where('last_seen_at', '>=', now()->subSeconds(QuickMatchQueue::ELIGIBLE_SECONDS))
+                ->orderBy('created_at')
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->limit($pool)
                 ->get();
 
-            if ($entries->count() < $pool) {
+            $oldest = $entries->first();
+            $computers = $pool - $entries->count();
+            $canFill = $pool === 4 && $this->elapsedSeconds($oldest) >= self::AUTO_FILL_SECONDS;
+            if (! $oldest || ($computers > 0 && ! $canFill)) {
                 return null;
             }
 
-            $room = $this->createRoom($pool, $entries->all(), 0);
+            $room = $this->createRoom($pool, $entries->all(), $computers);
 
             QuickMatchQueue::whereIn('id', $entries->pluck('id'))->update([
                 'status' => QuickMatchQueue::MATCHED,
@@ -199,10 +208,10 @@ class QuickMatchService
             ]);
 
             return [$room->code, $entries->pluck('player_token')->all()];
-        });
+        }, 3);
 
         if ($paired === null) {
-            return null;
+            return;
         }
 
         [$code, $tokens] = $paired;
@@ -212,8 +221,30 @@ class QuickMatchService
         foreach ($tokens as $token) {
             $this->broadcaster->publishQuickMatchFound($token, $code);
         }
+    }
 
-        return $code;
+    /** @return array{ok: bool, state: string, room: string|null, waiting: int, elapsed?: int} */
+    private function queueStatus(string $token, int $fallbackPool): array
+    {
+        $waiting = $this->waitingEntry($token);
+        if ($matched = $this->matchedEntry($token)) {
+            return ['ok' => true, 'state' => 'matched', 'room' => $matched->room_code, 'waiting' => 0];
+        }
+
+        return [
+            'ok' => true,
+            'state' => $waiting ? 'waiting' : 'idle',
+            'room' => null,
+            'waiting' => $this->waitingCount($waiting?->players ?? $fallbackPool),
+            'elapsed' => $this->elapsedSeconds($waiting),
+        ];
+    }
+
+    private function elapsedSeconds(?QuickMatchQueue $entry): int
+    {
+        $startedAt = $entry?->created_at?->getTimestamp();
+
+        return $startedAt === null ? 0 : max(0, now()->getTimestamp() - $startedAt);
     }
 
     /**
