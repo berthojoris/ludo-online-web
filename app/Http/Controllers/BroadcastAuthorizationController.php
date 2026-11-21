@@ -15,12 +15,14 @@ class BroadcastAuthorizationController extends Controller
 {
     private const ROOM_CHANNEL_PATTERN = '/^private-room\.(?<code>[A-Z0-9]{6})$/';
 
+    private const QUICK_MATCH_CHANNEL_PATTERN = '/^private-quick-match\.(?<token>[A-Za-z0-9]{40,64})$/';
+
     /**
-     * Authorize the private room channel for both authenticated users and
-     * guests. Laravel's default broadcast auth only resolves authenticated
-     * users, while this game's seats are claimable without an account, so
-     * membership is checked with the same resume identity used by the room
-     * and match routes.
+     * Authorize the private room and quick-match channels for both
+     * authenticated users and guests. Laravel's default broadcast auth only
+     * resolves authenticated users, while this game's seats are claimable
+     * without an account, so membership is checked with the same resume
+     * identity used by the room and match routes.
      */
     public function authenticateRoom(Request $request): JsonResponse
     {
@@ -29,26 +31,40 @@ class BroadcastAuthorizationController extends Controller
             'channel_name' => ['required', 'string'],
         ]);
 
-        if (! preg_match(self::ROOM_CHANNEL_PATTERN, $validated['channel_name'], $matches)) {
-            throw new AccessDeniedHttpException('Kanal tidak dikenali.');
+        $channelName = $validated['channel_name'];
+
+        if (preg_match(self::ROOM_CHANNEL_PATTERN, $channelName, $matches)) {
+            $room = Room::where('code', $matches['code'])->first();
+
+            if (! $room || ! PlayerResume::find($request, $room)) {
+                throw new AccessDeniedHttpException('Kamu bukan peserta ruang ini.');
+            }
+
+            return $this->authorizeChannel($validated['socket_id'], $channelName);
         }
 
-        $room = Room::where('code', $matches['code'])->first();
+        if (preg_match(self::QUICK_MATCH_CHANNEL_PATTERN, $channelName, $matches)) {
+            $sessionToken = $request->session()->get(PlayerResume::SESSION_TOKEN);
 
-        if (! $room || ! PlayerResume::find($request, $room)) {
-            throw new AccessDeniedHttpException('Kamu bukan peserta ruang ini.');
+            if (! is_string($sessionToken) || $sessionToken === '' || ! hash_equals($sessionToken, $matches['token'])) {
+                throw new AccessDeniedHttpException('Kamu bukan pemain kanal ini.');
+            }
+
+            return $this->authorizeChannel($validated['socket_id'], $channelName);
         }
 
+        throw new AccessDeniedHttpException('Kanal tidak dikenali.');
+    }
+
+    private function authorizeChannel(string $socketId, string $channelName): JsonResponse
+    {
         $broadcaster = Broadcast::connection();
 
         if (! $broadcaster instanceof PusherBroadcaster) {
             throw new HttpException(503, 'Kanal privat belum tersedia untuk koneksi broadcast ini.');
         }
 
-        $payload = $broadcaster->getPusher()->authorizeChannel(
-            $validated['channel_name'],
-            $validated['socket_id'],
-        );
+        $payload = $broadcaster->getPusher()->authorizeChannel($socketId, $channelName);
 
         return response()->json(json_decode($payload, true, 512, JSON_THROW_ON_ERROR));
     }

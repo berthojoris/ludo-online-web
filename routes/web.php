@@ -6,6 +6,7 @@ use App\Http\Controllers\CharacterKillAnimationController;
 use App\Http\Controllers\CharacterSoundController;
 use App\Http\Controllers\ClientIssueController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\QuickMatchController;
 use App\Http\Controllers\RoomChatController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomHandoffController;
@@ -24,6 +25,11 @@ Route::get('/how-it-works', [PageController::class, 'howItWorks'])->name('how-it
 Route::get('/play', [PageController::class, 'play'])->name('play');
 
 Route::get('/room', [PageController::class, 'room'])->name('room');
+Route::get('/quick-match', [PageController::class, 'quickMatch'])->name('quick-match');
+Route::post('/quick-match/join', [QuickMatchController::class, 'join'])->middleware('throttle:20,1')->name('quick-match.join');
+Route::get('/quick-match/status', [QuickMatchController::class, 'status'])->middleware('throttle:120,1')->name('quick-match.status');
+Route::post('/quick-match/cancel', [QuickMatchController::class, 'cancel'])->middleware('throttle:20,1')->name('quick-match.cancel');
+Route::post('/quick-match/fill', [QuickMatchController::class, 'fill'])->middleware('throttle:10,1')->name('quick-match.fill');
 Route::post('/rooms', [RoomController::class, 'store'])->name('rooms.store');
 Route::patch('/rooms/{code}/settings', [RoomController::class, 'updateSettings'])->name('rooms.settings');
 Route::post('/rooms/{code}/randomize', [RoomController::class, 'randomize'])->name('rooms.randomize');

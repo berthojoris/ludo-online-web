@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\QuickMatchQueue;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\PlayerResume;
+use App\Services\QuickMatchService;
 use App\Services\RoomBroadcaster;
 use App\Services\RoomPresence;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +21,7 @@ class PageController extends Controller
     public function __construct(
         private RoomBroadcaster $broadcaster,
         private RoomPresence $presence,
+        private QuickMatchService $quickMatch,
     ) {}
 
     public function home(Request $request): Response
@@ -32,6 +35,34 @@ class PageController extends Controller
     {
         return Inertia::render('Home', [
             'howItWorksOpen' => true,
+        ]);
+    }
+
+    /**
+     * The quick-match searching screen. A browser that is already waiting
+     * resumes its search, and a browser whose pairing already happened (or
+     * that still has a running match) is sent straight back to the board.
+     */
+    public function quickMatch(Request $request): Response|RedirectResponse
+    {
+        $pool = (int) $request->query('players', 4);
+
+        if (! in_array($pool, QuickMatchQueue::POOLS, true)) {
+            return redirect()->route('quick-match', ['players' => 4]);
+        }
+
+        $state = $this->quickMatch->pageState($request, $pool);
+
+        if (($state['state'] === 'active' || $state['state'] === 'matched') && is_string($state['room']) && $state['room'] !== '') {
+            return redirect()->route('play', ['room' => $state['room']]);
+        }
+
+        return Inertia::render('QuickMatch', [
+            'pool' => $state['pool'],
+            'state' => $state['state'],
+            'name' => $state['name'],
+            'token' => $state['token'],
+            'waiting' => $state['waiting'],
         ]);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\MatchAction;
+use App\Events\QuickMatchFound;
 use App\Events\RoomUpdated;
 use App\Models\Room;
 use App\Models\RoomPlayer;
@@ -24,6 +25,25 @@ class RoomBroadcaster
                 'operation' => $operation,
                 'player_id' => $player?->id,
             ], fn (mixed $value): bool => $value !== null));
+        }
+    }
+
+    /**
+     * Tell one waiting browser its quick match was paired so it can jump
+     * straight to the board. Like the room broadcasts this is best effort:
+     * every searching client also polls, so a failed broadcast is only
+     * logged and never blocks the pairing.
+     */
+    public function publishQuickMatchFound(string $playerToken, string $code): void
+    {
+        try {
+            broadcast(new QuickMatchFound($playerToken, $code));
+        } catch (BroadcastException|GuzzleException|PusherException $exception) {
+            $this->reportFailure($exception, [
+                'channel' => 'quick-match',
+                'player_token' => $playerToken,
+                'room_code' => $code,
+            ]);
         }
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\MatchRules;
+use App\Services\MatchStarter;
 use App\Services\PlayerResume;
 use App\Services\RoomBroadcaster;
 use App\Services\RoomPresence;
@@ -143,6 +144,15 @@ class RoomController extends Controller
 
         if ($room->host_token !== $token) {
             abort(403, 'Hanya host yang dapat mengubah kapasitas pemain.');
+        }
+
+        // Quick-match rooms are system-owned: they have no host, never show a
+        // lobby, and keep their settings — especially host_advantage off —
+        // for the whole match.
+        if ($room->is_quick) {
+            throw ValidationException::withMessages([
+                'room' => 'Room Quick Match tidak dapat diubah pengaturannya.',
+            ]);
         }
 
         if ($room->status !== 'waiting') {
@@ -606,11 +616,7 @@ class RoomController extends Controller
             ]);
         }
 
-        $startingPlayer = $players->random();
-        $seatColors = $players->pluck('seat_color')->all();
-        $boardArms = MatchRules::defaultArms($players->count());
-
-        $status = DB::transaction(function () use ($room, $players, $startingPlayer, $seatColors, $boardArms) {
+        $status = DB::transaction(function () use ($room, $players) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             if ($room->status !== 'waiting') {
                 return $room->status;
@@ -624,15 +630,7 @@ class RoomController extends Controller
                 ->get()
                 ->each(fn (RoomPlayer $player) => $player->delete());
 
-            $room->status = 'started';
-            $room->starting_player_id = $startingPlayer->id;
-            $room->match_state = MatchRules::initial(
-                $players->search(fn ($player) => $player->id === $startingPlayer->id),
-                $seatColors,
-                $boardArms,
-            );
-            $room->started_at = now();
-            $room->save();
+            MatchStarter::initialize($room, $players);
 
             return $room->status;
         });

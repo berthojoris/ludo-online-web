@@ -66,6 +66,7 @@ class Room extends Model
         'starting_player_id',
         'started_at',
         'host_advantage',
+        'is_quick',
         'match_state',
     ];
 
@@ -76,6 +77,7 @@ class Room extends Model
             'starting_player_id' => 'integer',
             'started_at' => 'datetime',
             'host_advantage' => 'boolean',
+            'is_quick' => 'boolean',
             'match_state' => 'array',
         ];
     }
