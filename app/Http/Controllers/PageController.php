@@ -99,6 +99,10 @@ class PageController extends Controller
                 RoomController::playerToken($request);
                 $me = PlayerResume::find($request, $room);
 
+                if ($room->is_quick && ! $me) {
+                    return redirect()->route('home');
+                }
+
                 if ($me) {
                     $this->presence->touch($me);
                     PlayerResume::remember($request, $me, $room->code);
@@ -157,6 +161,10 @@ class PageController extends Controller
                 PlayerResume::forget($room->code);
 
                 return redirect()->route('home');
+            }
+
+            if ($room->is_quick && $room->status === 'started') {
+                return redirect()->route('play', ['room' => $room->code]);
             }
 
             $resumed = PlayerResume::find($request, $room);

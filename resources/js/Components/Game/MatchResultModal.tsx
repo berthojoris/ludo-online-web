@@ -36,6 +36,8 @@ type MatchResultModalProps = {
     onPlayAgain: () => void;
     onOpenSetup: () => void;
     onClose: () => void;
+    onLeaveQuickMatch?: () => void;
+    leaving?: boolean;
 };
 
 function formatDuration(seconds: number): string {
@@ -57,6 +59,8 @@ export default function MatchResultModal({
     onPlayAgain,
     onOpenSetup,
     onClose,
+    onLeaveQuickMatch,
+    leaving = false,
 }: MatchResultModalProps) {
     const playAgainRef = useRef<HTMLButtonElement>(null);
     const closeRef = useRef<HTMLButtonElement>(null);
@@ -386,6 +390,24 @@ export default function MatchResultModal({
                                 </Link>
                             </div>
                         </>
+                    ) : onLeaveQuickMatch ? (
+                        <button
+                            type="button"
+                            onClick={onLeaveQuickMatch}
+                            disabled={leaving}
+                            aria-busy={leaving}
+                            className="btn btn-secondary w-full gap-1.5"
+                        >
+                            {leaving ? (
+                                <span
+                                    aria-hidden="true"
+                                    className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent motion-safe:animate-spin"
+                                />
+                            ) : (
+                                <HomeIcon className="h-4 w-4 shrink-0" />
+                            )}
+                            <span>{leaving ? 'Keluar…' : 'Beranda'}</span>
+                        </button>
                     ) : (
                         <>
                             <p className="text-ink-muted text-center text-xs leading-5">

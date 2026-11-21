@@ -111,6 +111,7 @@ class Room extends Model
             'code' => $this->code,
             'max_players' => $this->max_players,
             'host_advantage' => $this->host_advantage,
+            'is_quick' => $this->is_quick,
             'status' => $this->status,
             'starting_player_id' => $this->starting_player_id,
             'started_at' => $this->started_at?->toIso8601String(),

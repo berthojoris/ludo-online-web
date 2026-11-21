@@ -185,6 +185,7 @@ export default function Play() {
             code: string;
             max_players: number;
             status: string;
+            is_quick?: boolean;
             starting_player_id?: number | null;
             started_at?: string | null;
             server_now?: number;
@@ -547,6 +548,7 @@ export default function Play() {
         screen === 'game' &&
         serverWinner === null &&
         !state.winner;
+    const inQuickMatch = Boolean(room?.is_quick && me) && screen === 'game';
     const leaveMatch = useCallback((complete: () => void) => {
         const code = room?.code;
 
@@ -578,7 +580,7 @@ export default function Play() {
         Boolean(room) && Boolean(me) && screen === 'game' && !state.winner;
     const compactPlayers = chatMounted && isDesktopChat;
     const exitGuard = useGameExitGuard(
-        matchRunning,
+        matchRunning || inQuickMatch,
         route('home'),
         `play:${room?.code ?? 'solo'}`,
         leaveMatch,
@@ -1282,6 +1284,10 @@ export default function Play() {
         const channelName = `room.${room.code}`;
         const channel = echo().private(channelName);
 
+        if (room.is_quick) {
+            channel.listen('.room.updated', () => syncRoomState('room-updated'));
+        }
+
         channel.listen(
             '.match.action',
             (payload: { action?: MatchActionData }) => {
@@ -1306,7 +1312,7 @@ export default function Play() {
         return () => {
             echo().leave(channelName);
         };
-    }, [room?.code, syncRoomState]);
+    }, [room?.code, room?.is_quick, syncRoomState]);
 
     useEffect(() => {
         if (!endGameModalOpen) {
@@ -3249,7 +3255,7 @@ export default function Play() {
 
             {state.winner && screen === 'game' && (
                 <MatchResultModal
-                    open={resultModalOpen}
+                    open={resultModalOpen && !exitGuard.open}
                     winner={state.winner}
                     human={state.human}
                     standings={standings}
@@ -3259,6 +3265,8 @@ export default function Play() {
                     onPlayAgain={playAgain}
                     onOpenSetup={openSetup}
                     onClose={() => setResultModalOpen(false)}
+                    onLeaveQuickMatch={inQuickMatch ? exitGuard.leave : undefined}
+                    leaving={leaveForm.processing}
                 />
             )}
 
@@ -3369,7 +3377,14 @@ export default function Play() {
                 processing={leaveForm.processing}
                 title="Keluar dari permainan?"
                 description={
-                    me?.is_host ? (
+                    inQuickMatch ? (
+                        <>
+                            {matchRunning &&
+                                'Komputer akan mengambil alih kursimu. '}
+                            Kamu tidak bisa kembali ke ruang ini. Pilih Main
+                            Cepat di beranda untuk mencari pertandingan baru.
+                        </>
+                    ) : me?.is_host ? (
                         <>
                             Sebagai host, keluar dari ruang {room?.code} akan
                             mengakhiri pertandingan dan mengembalikan semua

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\QuickMatchQueue;
 use App\Models\Room;
 use App\Models\RoomPlayer;
 use App\Services\ComputerStrategy;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 
 class RoomController extends Controller
 {
@@ -151,14 +153,17 @@ class RoomController extends Controller
             return false;
         }
 
-        $state['forfeited'] = array_values(
-            array_filter($state['forfeited'], fn ($seat) => (int) $seat !== $index),
-        );
-        $state['consecutive_timeouts'][$index] = 0;
+        self::clearSeatTimeouts($state, $index);
         $player->is_computer = false;
         $player->save();
 
         return true;
+    }
+
+    private static function clearSeatTimeouts(array &$state, int $index): void
+    {
+        $state['forfeited'] = array_values(array_diff($state['forfeited'] ?? [], [$index]));
+        $state['consecutive_timeouts'][$index] = 0;
     }
 
     public function store(Request $request): RedirectResponse
@@ -769,6 +774,10 @@ class RoomController extends Controller
         $action = DB::transaction(function () use ($room, &$player, $isComputer, $isTimeout, $request, &$seatChanged) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
+            $player = $players->first(
+                fn (RoomPlayer $seat) => $seat->id === $player->id && $seat->player_token === $player->player_token,
+            );
+            abort_unless($player, 403, 'Kamu bukan peserta ruang ini.');
             $state = $room->match_state;
             self::backfillAfkCounters($state);
             if ($isComputer) {
@@ -894,6 +903,10 @@ class RoomController extends Controller
         $action = DB::transaction(function () use ($room, &$player, $validated, $isComputer, $isTimeout, $request, &$seatChanged) {
             $room = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
             $players = $room->players()->get();
+            $player = $players->first(
+                fn (RoomPlayer $seat) => $seat->id === $player->id && $seat->player_token === $player->player_token,
+            );
+            abort_unless($player, 403, 'Kamu bukan peserta ruang ini.');
             $state = $room->match_state;
             self::backfillAfkCounters($state);
             if ($isComputer) {
@@ -1018,7 +1031,7 @@ class RoomController extends Controller
     /**
      * A player leaving on purpose. The host leaving closes the room for
      * everyone (the broadcast sends every remaining player back to the home
-     * page). A guest can return to the same seat.
+     * page). In Quick Match the computer takes over the vacated seat.
      */
     public function leave(Request $request, string $code): RedirectResponse
     {
@@ -1026,17 +1039,67 @@ class RoomController extends Controller
         $room = Room::where('code', strtoupper($code))->firstOrFail();
 
         $player = PlayerResume::find($request, $room);
-        if (! $player) {
-            abort(403, 'Kamu bukan peserta ruang ini.');
-        }
+        if ($room->is_quick) {
+            if ($player) {
+                $this->leaveQuickMatch($room, $player);
+            }
 
-        if ($player->is_host) {
-            $this->closeRoom($room, $player, __FUNCTION__, 'host_left');
+            if (PlayerResume::lastRoom($request) === $room->code) {
+                cookie()->queue(cookie()->forget(PlayerResume::LAST_ROOM_COOKIE));
+            }
+            Inertia::clearHistory();
+        } else {
+            abort_unless($player, 403, 'Kamu bukan peserta ruang ini.');
+
+            if ($player->is_host) {
+                $this->closeRoom($room, $player, __FUNCTION__, 'host_left');
+            }
         }
 
         PlayerResume::forget($room->code);
 
         return redirect()->route('home');
+    }
+
+    private function leaveQuickMatch(Room $room, RoomPlayer $player): void
+    {
+        $left = DB::transaction(function () use ($room, $player): bool {
+            $lockedRoom = Room::whereKey($room->id)->lockForUpdate()->firstOrFail();
+            $seat = $lockedRoom->players()->whereKey($player->id)->lockForUpdate()->first();
+
+            if (! $seat || $seat->player_token !== $player->player_token) {
+                return false;
+            }
+
+            // Keep the seat ID and turn order while revoking every way to resume it.
+            $seat->forceFill([
+                'player_token' => Str::random(40),
+                'resume_token' => null,
+                'user_id' => null,
+                'handoff_code_hash' => null,
+                'handoff_expires_at' => null,
+                'is_computer' => true,
+            ])->save();
+
+            $state = $lockedRoom->match_state;
+            $index = array_search($seat->seat_color, $state['colors'] ?? [], true);
+            if ($index !== false) {
+                self::clearSeatTimeouts($state, $index);
+                $lockedRoom->update(['match_state' => $state]);
+            }
+
+            QuickMatchQueue::where('player_token', $player->player_token)
+                ->where('status', QuickMatchQueue::MATCHED)
+                ->where('room_code', $lockedRoom->code)
+                ->delete();
+
+            return true;
+        }, 3);
+
+        if ($left) {
+            $room->refresh()->load('players');
+            $this->broadcaster->publishRoomUpdated($room, 'player.left', $player);
+        }
     }
 
     private function closeRoom(Room $room, RoomPlayer $host, string $operation, ?string $reason = null): void

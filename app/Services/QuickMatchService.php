@@ -330,7 +330,7 @@ class QuickMatchService
         foreach (array_unique($codes) as $code) {
             $room = Room::where('code', $code)->first();
 
-            if ($room && $room->status === 'started' && PlayerResume::find($request, $room)) {
+            if ($room && $this->isActiveMatch($room) && PlayerResume::find($request, $room)) {
                 return $room;
             }
         }
@@ -348,8 +348,7 @@ class QuickMatchService
 
     /**
      * This browser's unconsumed pairing, if the room behind it is still
-     * running. A pairing whose room has ended is dead and gets deleted so
-     * the player can queue again.
+     * running and still includes this player.
      */
     private function matchedEntry(string $token): ?QuickMatchQueue
     {
@@ -364,13 +363,18 @@ class QuickMatchService
 
         $room = Room::where('code', $entry->room_code)->first();
 
-        if (! $room || $room->status !== 'started') {
+        if (! $room || ! $this->isActiveMatch($room) || ! $room->players()->where('player_token', $token)->exists()) {
             $entry->delete();
 
             return null;
         }
 
         return $entry;
+    }
+
+    private function isActiveMatch(Room $room): bool
+    {
+        return $room->status === 'started' && (! $room->is_quick || ($room->match_state['winner'] ?? null) === null);
     }
 
     private function waitingCount(int $pool): int

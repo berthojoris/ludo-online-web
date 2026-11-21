@@ -48,6 +48,7 @@ class RoomHandoffController extends Controller
 
         $pairingCode = DB::transaction(function () use ($room, $player): string {
             $locked = RoomPlayer::whereKey($player->id)->lockForUpdate()->firstOrFail();
+            abort_unless($locked->player_token === $player->player_token && ! $locked->is_computer, 403, 'Kamu bukan peserta ruang ini.');
 
             do {
                 $candidate = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
