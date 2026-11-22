@@ -5,6 +5,7 @@ import {
     InfoIcon,
     TrophyIcon,
 } from '@/Components/Game/Icons';
+import { TURN_TIMEOUT_SECONDS } from '@/Components/Game/TurnCountdownHud';
 import { useModalViewport } from '@/lib/useModalViewport';
 import {
     Dialog,
@@ -19,20 +20,28 @@ import { Fragment } from 'react';
 
 const STEPS = [
     {
-        title: 'Lempar untuk keluar',
-        body: 'Bidak bisa keluar dari markas saat dadu menunjukkan 6. Dapat 6 juga memberi lemparan tambahan.',
+        title: 'Cari lawan di Main Cepat',
+        body: 'Isi nama, pilih 2 atau 4 pemain, lalu tekan Cari Lawan. Jika belum lengkap, mode 2 pemain menawarkan lawan komputer setelah 30 detik. Mode 4 pemain mengisi kursi kosong dengan komputer setelah 1 menit.',
     },
     {
-        title: 'Pilih bidak yang menyala',
-        body: 'Setelah dadu berhenti, bidak yang bisa bergerak akan menyala. Klik untuk maju sesuai mata dadu.',
+        title: 'Buat atau gabung ruang privat',
+        body: 'Buat ruang lewat Create Room dan bagikan kodenya. Teman memasukkan kode lewat Join Room. Isi nama, pilih warna dan karakter, lalu pastikan semua kursi terisi dan siap sebelum host menekan Start.',
     },
     {
-        title: 'Amankan atau tangkap',
-        body: 'Petak bintang tidak bisa ditangkap. Mendarat di bidak lawan di luar petak aman memakannya dan memberi lemparan tambahan.',
+        title: 'Latihan melawan komputer',
+        body: 'Tekan Main sekarang di bawah. Pilih jumlah pemain, warna, dan karakter, isi nama, lalu tekan Mulai bermain.',
     },
     {
-        title: 'Masuk ke rumah dengan tepat',
-        body: 'Butuh angka dadu yang pas untuk finis. Bawa keempat bidak ke rumah lebih dulu untuk memenangkan pertandingan.',
+        title: 'Lempar dadu dan pilih bidak',
+        body: 'Saat giliranmu, lempar dadu lalu pilih bidak yang menyala. Bidak butuh angka 6 untuk keluar dari markas. Jika tiga lemparan pertamamu tidak menghasilkan 6, lemparan keempat menghasilkan 6. Jika tidak ada langkah yang bisa diambil, giliran langsung berpindah.',
+    },
+    {
+        title: 'Tangkap lawan dan lempar lagi',
+        body: 'Mendarat di petak yang ditempati lawan mengirim bidaknya kembali ke markas, kecuali di petak aman. Setelah bergerak dengan angka 6, menangkap lawan, atau membawa satu bidak ke finis, kamu boleh melempar lagi jika masih punya bidak yang belum finis.',
+    },
+    {
+        title: 'Finis dengan angka yang pas',
+        body: 'Mata dadu harus pas dengan sisa langkah ke finis. Pemain yang lebih dulu membawa keempat bidaknya ke finis jadi juara 1. Pertandingan berakhir saat tinggal satu pemain yang belum finis. Pemain itu menempati peringkat terakhir.',
     },
 ] as const;
 
@@ -109,8 +118,8 @@ export default function HowItWorksModal({
                                             Cara bermain
                                         </DialogTitle>
                                         <DialogDescription className="text-ink-muted mt-1 text-xs leading-relaxed">
-                                            Empat langkah dari markas ke garis
-                                            akhir.
+                                            Pilih cara main, lalu bawa bidakmu
+                                            dari markas ke finis.
                                         </DialogDescription>
                                     </div>
                                 </div>
@@ -145,7 +154,7 @@ export default function HowItWorksModal({
                                                     Pemain
                                                 </dt>
                                                 <dd className="text-xs font-semibold">
-                                                    2–7 orang
+                                                    2 sampai 7
                                                 </dd>
                                             </div>
                                             <div className="flex items-center justify-between gap-3 border-b border-white/10 py-2.5">
@@ -158,22 +167,24 @@ export default function HowItWorksModal({
                                             </div>
                                             <div className="flex items-center justify-between gap-3 py-2.5">
                                                 <dt className="text-xs text-white/65">
-                                                    Batas giliran
+                                                    Waktu per aksi
                                                 </dt>
                                                 <dd className="text-xs font-semibold">
-                                                    15 detik
+                                                    {TURN_TIMEOUT_SECONDS} detik
                                                 </dd>
                                             </div>
                                         </dl>
 
                                         <div className="mt-auto pt-5">
                                             <p className="text-[10px] font-semibold tracking-[0.16em] text-white/65 uppercase">
-                                                Aturan khusus
+                                                Waktu habis
                                             </p>
                                             <p className="mt-1.5 text-[11px] leading-5 text-white/80">
-                                                Tiga kali enam berturut-turut
-                                                membuat giliranmu hangus dan
-                                                berpindah ke pemain berikutnya.
+                                                Gim akan melempar dadu atau
+                                                memilih bidak secara otomatis.
+                                                Di Main Cepat, komputer dapat
+                                                mengambil alih setelah tiga
+                                                giliran otomatis berturut-turut.
                                             </p>
                                         </div>
                                     </aside>
@@ -186,7 +197,7 @@ export default function HowItWorksModal({
                                             id="how-it-works-steps"
                                             className="text-ink-muted text-[11px] font-semibold tracking-[0.14em] uppercase"
                                         >
-                                            Alur giliran
+                                            Dari awal sampai finis
                                         </h3>
 
                                         <ol className="border-line/70 divide-line/70 mt-2.5 divide-y border-y">
