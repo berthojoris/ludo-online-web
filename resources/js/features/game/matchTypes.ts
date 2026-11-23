@@ -33,7 +33,6 @@ export type MatchSnapshot = {
     winner: number | null;
     winners?: number[];
     stats?: { rolls: number; captures: number }[];
-    had_six?: boolean[];
     total_moves?: number;
     state_version?: number;
     last_roll?: LastRoll | null;
@@ -78,7 +77,7 @@ export type GameState = {
     log: LogEntry[];
     logId: number;
     rolls: Record<PlayerId, number>;
-    hadSix: Record<PlayerId, boolean>;
+    baseRollMisses: Record<PlayerId, number>;
     captures: Record<PlayerId, number>;
     totalMoves: number;
     startedAt: number | null;

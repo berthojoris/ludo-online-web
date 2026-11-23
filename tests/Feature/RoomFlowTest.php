@@ -518,7 +518,7 @@ class RoomFlowTest extends TestCase
         $this->assertSame(5, Room::firstOrFail()->max_players);
     }
 
-    public function test_opening_fourth_roll_guarantees_six_after_three_misses_then_returns_to_random(): void
+    public function test_private_room_guarantees_six_for_manual_timeout_and_computer_rolls(): void
     {
         Event::fake([RoomUpdated::class, MatchAction::class]);
 
@@ -532,42 +532,66 @@ class RoomFlowTest extends TestCase
         $this->post("/rooms/{$room->code}/seat", ['seat_color' => 'yellow'])->assertRedirect();
 
         $state = MatchRules::initial(0, ['red', 'yellow']);
-        $state['stats'][0]['rolls'] = 3;
-        $state['had_six'] = [false, false];
+        $state['turn_started_at'] = now()->subSeconds(11)->getTimestampMs();
+        $state['base_roll_misses'] = [3, 3];
+        $state['stats'][0]['rolls'] = 12;
+        $state['stats'][1]['rolls'] = 8;
 
         $room->update([
             'status' => 'started',
             'starting_player_id' => $host->id,
             'started_at' => now(),
-            'match_state' => $state,
+            'host_advantage' => true,
         ]);
 
-        // 4th roll after 3 misses at game start must be 6.
         $this->withSession(['ludo_player_token' => $hostToken]);
-        $this->postJson("/rooms/{$room->code}/match/roll")
-            ->assertOk()
-            ->assertJsonPath('action.value', 6);
+        $room->players()->where('id', '!=', $host->id)->update(['is_computer' => true]);
 
-        $freshState = $room->fresh()->match_state;
-        $this->assertSame(4, $freshState['stats'][0]['rolls']);
-        $this->assertTrue($freshState['had_six'][0]);
-        $this->assertFalse(MatchRules::shouldForceOpeningSix($freshState, 0));
+        foreach ([
+            [0, []],
+            [0, ['timeout' => true, 'state_version' => 0]],
+            [1, ['computer' => true, 'state_version' => 0]],
+        ] as [$player, $command]) {
+            $state['turn'] = $player;
+            $room->refresh()->update(['match_state' => $state]);
 
-        // After the 4th roll (or once a 6 has been rolled), subsequent rolls are random again
-        // even if all tokens return to base.
-        $alreadyHadSixState = MatchRules::initial(0, ['red', 'yellow']);
-        $alreadyHadSixState['stats'][0]['rolls'] = 3;
-        $alreadyHadSixState['had_six'][0] = true;
-        $this->assertFalse(MatchRules::shouldForceOpeningSix($alreadyHadSixState, 0));
+            $this->postJson("/rooms/{$room->code}/match/roll", $command)
+                ->assertOk()
+                ->assertJsonPath('action.value', 6)
+                ->assertJsonPath('action.match_state.dice', 6);
 
-        $afterFourthState = MatchRules::initial(0, ['red', 'yellow']);
-        $afterFourthState['stats'][0]['rolls'] = 4;
-        $afterFourthState['had_six'][0] = true;
-        $this->assertFalse(MatchRules::shouldForceOpeningSix($afterFourthState, 0));
+            $freshState = $room->fresh()->match_state;
+            $this->assertSame($state['stats'][$player]['rolls'] + 1, $freshState['stats'][$player]['rolls']);
+            $this->assertSame(0, $freshState['base_roll_misses'][$player]);
+            $this->assertSame(3, $freshState['base_roll_misses'][1 - $player]);
+        }
+    }
 
-        // Works with host_advantage enabled too: 4th roll after 3 misses still guarantees 6.
-        $room->update(['host_advantage' => true]);
-        $this->assertSame(6, MatchRules::rollDice($state, 0, true));
+    public function test_base_roll_misses_start_over_after_all_tokens_return(): void
+    {
+        $state = MatchRules::initial(0);
+        $state = MatchRules::recordRoll($state, 0, 2, true);
+        $state = MatchRules::recordRoll($state, 0, 6, true);
+        $this->assertSame(0, $state['base_roll_misses'][0]);
+
+        $state['tokens'][0][0] = 5;
+        $state = MatchRules::recordRoll($state, 0, 1, true);
+        $this->assertSame(0, $state['base_roll_misses'][0]);
+        $state['tokens'][0][0] = -1;
+
+        foreach ([1, 3, 5] as $index => $value) {
+            $state = MatchRules::recordRoll($state, 0, $value, true);
+            $this->assertSame($index + 1, $state['base_roll_misses'][0]);
+        }
+
+        $this->assertSame(6, MatchRules::rollDice($state, 0));
+        $this->assertSame(0, MatchRules::recordRoll($state, 0, 6, true)['base_roll_misses'][0]);
+        $this->assertSame(0, MatchRules::recordRoll($state, 1, 2, false)['base_roll_misses'][1]);
+
+        unset($state['base_roll_misses']);
+        $state['stats'][0]['rolls'] = 3;
+        $state['had_six'] = [false, false];
+        $this->assertSame(6, MatchRules::rollDice($state, 0));
     }
 
     public function test_host_can_rename_any_player_in_the_room_and_guests_cannot(): void
@@ -746,7 +770,7 @@ class RoomFlowTest extends TestCase
         $afterFirst['dice'] = null;
         $afterFirst['tokens'][2] = [-1, -1, -1, -1];
         $afterFirst['stats'][2]['rolls'] = 0;
-        $afterFirst['had_six'][2] = false;
+        $afterFirst['base_roll_misses'][2] = 0;
         $room->update(['match_state' => $afterFirst]);
         $this->withSession(['ludo_player_token' => $tokens[2]]);
         $rollRes = $this->postJson("/rooms/{$room->code}/match/roll")->assertOk()->json('action.value');

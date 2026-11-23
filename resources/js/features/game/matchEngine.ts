@@ -47,19 +47,6 @@ function createNumberMap(): Record<PlayerId, number> {
     };
 }
 
-function createBoolMap(): Record<PlayerId, boolean> {
-    return {
-        red: false,
-        green: false,
-        yellow: false,
-        blue: false,
-        purple: false,
-        orange: false,
-        teal: false,
-        pink: false,
-    };
-}
-
 export const DEFAULT_NAMES: SetupNames = {
     blue: 'Kamu',
     green: 'Lawan',
@@ -98,7 +85,7 @@ export const initialState: GameState = {
     ],
     logId: 1,
     rolls: createNumberMap(),
-    hadSix: createBoolMap(),
+    baseRollMisses: createNumberMap(),
     captures: createNumberMap(),
     totalMoves: 0,
     startedAt: null,
@@ -136,16 +123,17 @@ function randomDie(): number {
     return 1 + Math.floor(Math.random() * 6);
 }
 
-function shouldForceOpeningSix(state: GameState, player: PlayerId): boolean {
-    const hasTokenOut = state.tokens[player].some(
-        (position) => position !== BASE_POSITION,
+function allTokensInBase(state: GameState, player: PlayerId): boolean {
+    return state.tokens[player].every(
+        (position) => position === BASE_POSITION,
     );
-
-    return state.rolls[player] === 3 && !state.hadSix[player] && !hasTokenOut;
 }
 
 export function rollDieForTurn(state: GameState): number {
-    if (shouldForceOpeningSix(state, state.turn)) {
+    if (
+        allTokensInBase(state, state.turn) &&
+        state.baseRollMisses[state.turn] >= 3
+    ) {
         return 6;
     }
 
@@ -222,7 +210,7 @@ function createInitialState(
         ],
         logId: 1,
         rolls: createNumberMap(),
-        hadSix: createBoolMap(),
+        baseRollMisses: createNumberMap(),
         captures: createNumberMap(),
         totalMoves: 0,
         startedAt: now,
@@ -329,15 +317,11 @@ export function reducer(state: GameState, action: Action): GameState {
         const turn = order[action.match.turn];
         const tokens = createTokenMap();
         const rolls = createNumberMap();
-        const hadSix = createBoolMap();
         const captures = createNumberMap();
         order.forEach((color, index) => {
             tokens[color] = action.match.tokens[index] ?? [-1, -1, -1, -1];
             rolls[color] = action.match.stats?.[index]?.rolls ?? 0;
             captures[color] = action.match.stats?.[index]?.captures ?? 0;
-            hadSix[color] =
-                action.match.had_six?.[index] ??
-                tokens[color].some((position) => position !== BASE_POSITION);
         });
         const winners: PlayerId[] = Array.isArray(action.match.winners)
             ? action.match.winners
@@ -388,7 +372,6 @@ export function reducer(state: GameState, action: Action): GameState {
                 phase: 'rolling',
                 legalMoves: [],
                 rolls,
-                hadSix,
                 captures,
                 totalMoves: action.match.total_moves ?? state.totalMoves,
                 startedAt: Number.isNaN(restoredAt)
@@ -414,7 +397,6 @@ export function reducer(state: GameState, action: Action): GameState {
             phase: winner ? 'gameover' : dice === null ? 'idle' : 'choosing',
             legalMoves: moves,
             rolls,
-            hadSix,
             captures,
             totalMoves: action.match.total_moves ?? state.totalMoves,
             startedAt: Number.isNaN(restoredAt) ? state.startedAt : restoredAt,
@@ -472,10 +454,17 @@ export function reducer(state: GameState, action: Action): GameState {
                 ...state.rolls,
                 [state.turn]: state.rolls[state.turn] + 1,
             },
-            hadSix: {
-                ...state.hadSix,
-                [state.turn]: state.hadSix[state.turn] || action.value === 6,
-            },
+            baseRollMisses:
+                action.version !== undefined
+                    ? state.baseRollMisses
+                    : {
+                          ...state.baseRollMisses,
+                          [state.turn]:
+                              action.value !== 6 &&
+                              allTokensInBase(state, state.turn)
+                                  ? state.baseRollMisses[state.turn] + 1
+                                  : 0,
+                      },
             message:
                 state.turn === state.human
                     ? 'Melempar dadu…'

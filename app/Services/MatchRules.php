@@ -176,7 +176,7 @@ class MatchRules
             'winner' => null,
             'winners' => [],
             'stats' => array_fill(0, $count, ['rolls' => 0, 'captures' => 0]),
-            'had_six' => array_fill(0, $count, false),
+            'base_roll_misses' => array_fill(0, $count, 0),
             'consecutive_timeouts' => array_fill(0, $count, 0),
             'forfeited' => [],
             'turn_timed_out' => false,
@@ -226,21 +226,39 @@ class MatchRules
         return $state;
     }
 
-    /**
-     * Force a 6 on the player's 4th opening roll if their first 3 rolls produced no 6.
-     */
-    public static function shouldForceOpeningSix(array $state, int $player): bool
+    private static function allTokensInBase(array $state, int $player): bool
     {
-        $rolls = (int) ($state['stats'][$player]['rolls'] ?? 0);
-        $hasTokenOut = count(array_filter($state['tokens'][$player] ?? [], fn ($position) => $position !== -1)) > 0;
-        $hadSix = (bool) ($state['had_six'][$player] ?? $hasTokenOut);
+        $tokens = $state['tokens'][$player] ?? [];
 
-        return $rolls === 3 && ! $hadSix && ! $hasTokenOut;
+        return $tokens !== [] && count(array_keys($tokens, -1, true)) === count($tokens);
+    }
+
+    private static function baseRollMisses(array $state, int $player): int
+    {
+        if (isset($state['base_roll_misses'][$player])) {
+            return (int) $state['base_roll_misses'][$player];
+        }
+
+        // Older snapshots can recover the streak only if the player never rolled a six.
+        return ($state['had_six'][$player] ?? false) ? 0 : (int) ($state['stats'][$player]['rolls'] ?? 0);
+    }
+
+    public static function recordRoll(array $state, int $player, int $value, bool $trackBaseMisses): array
+    {
+        if ($trackBaseMisses) {
+            $state['base_roll_misses'][$player] = $value !== 6 && self::allTokensInBase($state, $player)
+                ? self::baseRollMisses($state, $player) + 1
+                : 0;
+        }
+
+        $state['stats'][$player]['rolls'] = ($state['stats'][$player]['rolls'] ?? 0) + 1;
+
+        return $state;
     }
 
     public static function rollDice(array $state, int $player, bool $hostAdvantage = false): int
     {
-        if (self::shouldForceOpeningSix($state, $player)) {
+        if (self::allTokensInBase($state, $player) && self::baseRollMisses($state, $player) >= 3) {
             return 6;
         }
 

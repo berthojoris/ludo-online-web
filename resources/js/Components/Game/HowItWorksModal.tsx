@@ -26,7 +26,7 @@ const STEPS = [
     },
     {
         title: 'Lempar dadu dan pilih bidak',
-        body: 'Saat giliranmu, lempar dadu lalu pilih bidak yang menyala. Bidak butuh angka 6 untuk keluar dari markas. Jika tiga lemparan pertamamu tidak menghasilkan 6, lemparan keempat menghasilkan 6. Jika tidak ada langkah yang bisa diambil, giliran langsung berpindah.',
+        body: 'Saat giliranmu, lempar dadu lalu pilih bidak yang menyala. Bidak butuh angka 6 untuk keluar dari markas. Di mode lokal dan ruang privat, jika semua bidakmu di markas dan tiga lemparan berturut-turut tidak menghasilkan 6, lemparan berikutnya pasti 6. Di Main Cepat, dadu selalu acak. Jika tidak ada langkah, giliran berpindah.',
     },
     {
         title: 'Tangkap lawan dan lempar lagi',

@@ -812,16 +812,10 @@ class RoomController extends Controller
             } elseif (! $isComputer) {
                 $seatChanged = self::reclaimForfeitedSeat($state, $player, $index);
             }
-            $value = ($room->is_quick || $player->is_computer || $isTimeout)
+            $value = $room->is_quick
                 ? random_int(1, 6)
-                : MatchRules::rollDice($state, $index, (bool) ($room->host_advantage && $player->is_host));
-            if (! isset($state['had_six']) || ! is_array($state['had_six'])) {
-                $state['had_six'] = array_fill(0, count($state['tokens']), false);
-            }
-            if ($value === 6 || count(array_filter($state['tokens'][$index], fn ($position) => $position !== -1)) > 0) {
-                $state['had_six'][$index] = true;
-            }
-            $state['stats'][$index]['rolls'] = ($state['stats'][$index]['rolls'] ?? 0) + 1;
+                : MatchRules::rollDice($state, $index, $room->host_advantage && $player->is_host && ! $player->is_computer && ! $isTimeout);
+            $state = MatchRules::recordRoll($state, $index, $value, ! $room->is_quick);
             if (MatchRules::moves($state, $index, $value)) {
                 $state['dice'] = $value;
                 $state['afk_auto_move'] = $isTimeout;

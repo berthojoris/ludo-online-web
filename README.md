@@ -128,13 +128,13 @@ The ruleset lives in `app/Services/MatchRules.php` and is applied server-side on
 - An exact roll is required to finish.
 - Tokens of the same color may share a cell. There are no blockades.
 - Captures hit every enemy token on a non-safe cell.
-- A forced 6 is granted on a player's 4th opening roll if the first 3 rolls produced no 6 and no token left base.
+- In local games and private rooms, three consecutive rolls without a 6 while all of a player's tokens are in base guarantee a 6 on that player's next roll. This also applies after all tokens return to base and to computer and timeout rolls. Quick Match has no guaranteed rolls.
 - Full placements are tracked (`winners` in order of finishing); the match finalizes when only one player remains, ranking that player last.
 - With the optional host advantage enabled, the host's dice are biased 50% toward a capture roll or a 6.
 - 4-player matches use the classic 52-cell track with 8 safe squares (4 starts + 4 star cells); 5-7 player matches use a multi-arm track with 11-cell sectors and 2 safe squares per arm.
 - A single legal move is executed automatically by the client when only one token can move.
 - Computer opponents pick moves with a server-side heuristic (release from base, capture, finish, progress).
-- No turn deadline blocks the game: each action (roll/move) gets 10 seconds. A timed-out turn is auto-played by the server (random roll, then a random legal move), so an AFK player never stalls the match. In Quick Match, three consecutive auto-played turns forfeit the seat to a computer (name and tokens stay); acting manually takes the seat back.
+- No turn deadline blocks the game: each action (roll/move) gets 10 seconds. A timed-out turn is auto-played by the server (using the mode's dice rules, then a random legal move), so an AFK player never stalls the match. In Quick Match, three consecutive auto-played turns forfeit the seat to a computer (name and tokens stay); acting manually takes the seat back.
 
 Open product decisions:
 
