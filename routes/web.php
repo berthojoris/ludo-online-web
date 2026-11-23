@@ -49,7 +49,7 @@ Route::post('/rooms/{code}/continue', [RoomHandoffController::class, 'claim'])->
 Route::get('/switch', [RoomHandoffController::class, 'showSwitch'])->name('switch');
 Route::post('/switch', [RoomHandoffController::class, 'claimByCode'])->middleware('throttle:10,1')->name('switch.store');
 Route::get('/rooms/{code}/chat', [RoomChatController::class, 'index'])->name('rooms.chat.index');
-Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->middleware('throttle:30,1')->name('rooms.chat.store');
+Route::post('/rooms/{code}/chat', [RoomChatController::class, 'store'])->name('rooms.chat.store');
 Route::post('/client-issues', [ClientIssueController::class, 'store'])
     ->middleware('throttle:12,1')
     ->name('client-issues.store');
