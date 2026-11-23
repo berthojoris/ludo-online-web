@@ -1,4 +1,5 @@
 import Dice from '@/Components/Game/Dice';
+import { CloseIcon } from '@/Components/Game/Icons';
 import Logo from '@/Components/Game/Logo';
 import { ARENA_BACKGROUND_IMAGE } from '@/lib/ludo';
 import { playUiSound, unlockAudio } from '@/lib/sound';
@@ -363,21 +364,42 @@ export default function QuickMatch() {
                         <div className="border-line shadow-card animate-fade-up rounded-3xl border bg-white/95 p-[clamp(1rem,3vw,1.5rem)] backdrop-blur-sm">
                             {phase === 'ready' ? (
                                 <form onSubmit={submitSearch} noValidate>
-                                    <div className="flex items-start gap-3">
-                                        <span className="bg-brand/10 grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
-                                            <Dice value={6} className="h-6 w-6" />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <h1 className="text-ink text-base font-semibold">
-                                                Main Cepat
-                                            </h1>
-                                            <p className="text-ink-muted mt-1 text-xs leading-relaxed">
-                                                Tanpa kode undangan: sistem
-                                                menjodohkanmu dengan pemain lain
-                                                yang juga sedang mencari, lalu
-                                                pertandingan langsung dimulai.
-                                            </p>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex min-w-0 items-start gap-3">
+                                            <span className="bg-brand/10 grid h-10 w-10 shrink-0 place-items-center rounded-2xl">
+                                                <Dice value={6} className="h-6 w-6" />
+                                            </span>
+                                            <div className="min-w-0">
+                                                <h1 className="text-ink text-base font-semibold">
+                                                    Main Cepat
+                                                </h1>
+                                                <p className="text-ink-muted mt-1 text-xs leading-relaxed">
+                                                    Tanpa kode undangan: sistem
+                                                    menjodohkanmu dengan pemain
+                                                    lain yang juga sedang
+                                                    mencari, lalu pertandingan
+                                                    langsung dimulai.
+                                                </p>
+                                            </div>
                                         </div>
+                                        <Link
+                                            href={route('home')}
+                                            aria-label="Tutup"
+                                            aria-disabled={busy !== 'idle' || undefined}
+                                            tabIndex={busy === 'idle' ? undefined : -1}
+                                            onClick={(event) => {
+                                                if (busy !== 'idle') {
+                                                    event.preventDefault();
+                                                }
+                                            }}
+                                            className={`btn btn-quiet btn-sm btn-icon shrink-0${
+                                                busy === 'idle'
+                                                    ? ''
+                                                    : ' pointer-events-none opacity-[0.55]'
+                                            }`}
+                                        >
+                                            <CloseIcon className="h-4 w-4" />
+                                        </Link>
                                     </div>
 
                                     <fieldset
@@ -500,12 +522,23 @@ export default function QuickMatch() {
                                                 </p>
                                             </div>
                                         </div>
-                                        <span
-                                            className="text-ink shrink-0 font-mono text-sm tabular-nums"
-                                            aria-label={`Waktu mencari ${formatElapsed(elapsedSeconds)}`}
-                                        >
-                                            {formatElapsed(elapsedSeconds)}
-                                        </span>
+                                        <div className="flex shrink-0 items-center gap-1">
+                                            <span
+                                                className="text-ink font-mono text-sm tabular-nums"
+                                                aria-label={`Waktu mencari ${formatElapsed(elapsedSeconds)}`}
+                                            >
+                                                {formatElapsed(elapsedSeconds)}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => void cancelSearch()}
+                                                disabled={busy !== 'idle'}
+                                                aria-label="Batalkan pencarian"
+                                                className="btn btn-quiet btn-sm btn-icon shrink-0"
+                                            >
+                                                <CloseIcon className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div
