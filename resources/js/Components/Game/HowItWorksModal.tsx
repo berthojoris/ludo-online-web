@@ -1,7 +1,5 @@
 import {
-    ArrowRightIcon,
     CloseIcon,
-    DiceIcon,
     InfoIcon,
     TrophyIcon,
 } from '@/Components/Game/Icons';
@@ -15,7 +13,6 @@ import {
     Transition,
     TransitionChild,
 } from '@headlessui/react';
-import { Link } from '@inertiajs/react';
 import { Fragment } from 'react';
 
 const STEPS = [
@@ -26,10 +23,6 @@ const STEPS = [
     {
         title: 'Buat atau gabung ruang privat',
         body: 'Buat ruang lewat Create Room dan bagikan kodenya. Teman memasukkan kode lewat Join Room. Isi nama, pilih warna dan karakter, lalu pastikan semua kursi terisi dan siap sebelum host menekan Start.',
-    },
-    {
-        title: 'Latihan melawan komputer',
-        body: 'Tekan Main sekarang di bawah. Pilih jumlah pemain, warna, dan karakter, isi nama, lalu tekan Mulai bermain.',
     },
     {
         title: 'Lempar dadu dan pilih bidak',
@@ -48,13 +41,11 @@ const STEPS = [
 type HowItWorksModalProps = {
     open: boolean;
     onClose: () => void;
-    onStart: () => void;
 };
 
 export default function HowItWorksModal({
     open,
     onClose,
-    onStart,
 }: HowItWorksModalProps) {
     const overlayStyle = useModalViewport(open);
 
@@ -234,15 +225,6 @@ export default function HowItWorksModal({
                                 >
                                     Tutup
                                 </button>
-                                <Link
-                                    href={route('play')}
-                                    onClick={onStart}
-                                    className="btn btn-primary min-w-[6.5rem] flex-1 gap-2 sm:flex-none"
-                                >
-                                    <DiceIcon className="h-4 w-4" />
-                                    Main sekarang
-                                    <ArrowRightIcon className="h-4 w-4" />
-                                </Link>
                             </footer>
                             </div>
                         </DialogPanel>

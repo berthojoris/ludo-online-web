@@ -158,10 +158,6 @@ export default function Home() {
         });
     }, []);
 
-    const startPlaying = useCallback(() => {
-        setHowItWorksOpen(false);
-    }, []);
-
     return (
         <>
             <Head
@@ -421,7 +417,6 @@ export default function Home() {
             <HowItWorksModal
                 open={howItWorksOpen}
                 onClose={closeHowItWorks}
-                onStart={startPlaying}
             />
 
             <CreateRoomPasswordModal
