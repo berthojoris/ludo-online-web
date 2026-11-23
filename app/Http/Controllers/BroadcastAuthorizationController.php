@@ -13,9 +13,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class BroadcastAuthorizationController extends Controller
 {
-    private const ROOM_CHANNEL_PATTERN = '/^private-room\.(?<code>[A-Z0-9]{6})$/';
+    private const ROOM_CHANNEL_PATTERN = '/^private-room\.(?<code>[A-Z0-9]{6})\z/';
 
-    private const QUICK_MATCH_CHANNEL_PATTERN = '/^private-quick-match\.(?<token>[A-Za-z0-9]{40,64})$/';
+    private const QUICK_MATCH_CHANNEL_PATTERN = '/^private-quick-match\.(?<token>[A-Za-z0-9]{40,64})\z/';
 
     /**
      * Authorize the private room and quick-match channels for both

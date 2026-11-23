@@ -356,14 +356,61 @@ class CharacterKillAnimationGenerator
             return $decoded;
         }
 
-        $download = Http::timeout(60)->get($candidateUrl);
-        if (! $download->successful() || $download->body() === '') {
+        $this->assertSafeImageUrl($candidateUrl, $characterId);
+
+        $download = Http::timeout(60)
+            ->withOptions(['allow_redirects' => false])
+            ->get($candidateUrl);
+        $body = $download->body();
+
+        if (! $download->successful() || $body === '') {
             throw new RuntimeException(
                 "Failed to download generated animation from OpenRouter URL for '{$characterId}' (HTTP {$download->status()})."
             );
         }
 
-        return $download->body();
+        if (strlen($body) > 20 * 1024 * 1024) {
+            throw new RuntimeException(
+                "Downloaded animation for '{$characterId}' exceeds the 20 MB size limit."
+            );
+        }
+
+        return $body;
+    }
+
+    /**
+     * Reject non-HTTPS, credentialed, non-standard-port, or private/reserved IP URLs
+     * returned by the image model before making an outbound fetch.
+     */
+    private function assertSafeImageUrl(string $url, string $characterId): void
+    {
+        $parts = parse_url($url);
+
+        if (
+            ! is_array($parts)
+            || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+            || empty($parts['host'])
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || (isset($parts['port']) && (int) $parts['port'] !== 443)
+        ) {
+            throw new RuntimeException("Blocked unsafe image URL for '{$characterId}'.");
+        }
+
+        $host = trim((string) $parts['host'], '[]');
+        $ips = filter_var($host, FILTER_VALIDATE_IP)
+            ? [$host]
+            : gethostbynamel($host);
+
+        if (! is_array($ips) || $ips === []) {
+            throw new RuntimeException("Could not resolve image host for '{$characterId}'.");
+        }
+
+        foreach ($ips as $ip) {
+            if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                throw new RuntimeException("Blocked non-public image host IP for '{$characterId}'.");
+            }
+        }
     }
 
     /**

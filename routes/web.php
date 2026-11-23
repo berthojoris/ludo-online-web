@@ -30,17 +30,17 @@ Route::post('/quick-match/join', [QuickMatchController::class, 'join'])->middlew
 Route::get('/quick-match/status', [QuickMatchController::class, 'status'])->middleware('throttle:120,1')->name('quick-match.status');
 Route::post('/quick-match/cancel', [QuickMatchController::class, 'cancel'])->middleware('throttle:20,1')->name('quick-match.cancel');
 Route::post('/quick-match/fill', [QuickMatchController::class, 'fill'])->middleware('throttle:10,1')->name('quick-match.fill');
-Route::post('/rooms', [RoomController::class, 'store'])->name('rooms.store');
-Route::patch('/rooms/{code}/settings', [RoomController::class, 'updateSettings'])->name('rooms.settings');
-Route::post('/rooms/{code}/randomize', [RoomController::class, 'randomize'])->name('rooms.randomize');
-Route::post('/rooms/{code}/seat', [RoomController::class, 'selectSeat'])->name('rooms.seat');
-Route::post('/rooms/{code}/name', [RoomController::class, 'updateName'])->name('rooms.name');
-Route::patch('/rooms/{code}/players/{player}/name', [RoomController::class, 'updatePlayerName'])->name('rooms.players.name');
-Route::post('/rooms/{code}/ready', [RoomController::class, 'toggleReady'])->name('rooms.ready');
-Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->name('rooms.start');
-Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->name('rooms.end');
-Route::post('/rooms/{code}/leave', [RoomController::class, 'leave'])->name('rooms.leave');
-Route::post('/rooms/{code}/heartbeat', [RoomController::class, 'heartbeat'])->name('rooms.heartbeat');
+Route::post('/rooms', [RoomController::class, 'store'])->middleware('throttle:15,1')->name('rooms.store');
+Route::patch('/rooms/{code}/settings', [RoomController::class, 'updateSettings'])->middleware('throttle:60,1')->name('rooms.settings');
+Route::post('/rooms/{code}/randomize', [RoomController::class, 'randomize'])->middleware('throttle:60,1')->name('rooms.randomize');
+Route::post('/rooms/{code}/seat', [RoomController::class, 'selectSeat'])->middleware('throttle:60,1')->name('rooms.seat');
+Route::post('/rooms/{code}/name', [RoomController::class, 'updateName'])->middleware('throttle:60,1')->name('rooms.name');
+Route::patch('/rooms/{code}/players/{player}/name', [RoomController::class, 'updatePlayerName'])->middleware('throttle:60,1')->name('rooms.players.name');
+Route::post('/rooms/{code}/ready', [RoomController::class, 'toggleReady'])->middleware('throttle:60,1')->name('rooms.ready');
+Route::post('/rooms/{code}/start', [RoomController::class, 'start'])->middleware('throttle:60,1')->name('rooms.start');
+Route::post('/rooms/{code}/end', [RoomController::class, 'end'])->middleware('throttle:60,1')->name('rooms.end');
+Route::post('/rooms/{code}/leave', [RoomController::class, 'leave'])->middleware('throttle:60,1')->name('rooms.leave');
+Route::post('/rooms/{code}/heartbeat', [RoomController::class, 'heartbeat'])->middleware('throttle:60,1')->name('rooms.heartbeat');
 Route::post('/rooms/{code}/match/roll', [RoomController::class, 'roll'])->middleware('throttle:60,1')->name('rooms.match.roll');
 Route::post('/rooms/{code}/match/move', [RoomController::class, 'move'])->middleware('throttle:60,1')->name('rooms.match.move');
 Route::post('/rooms/{code}/handoff', [RoomHandoffController::class, 'store'])->middleware('throttle:20,1')->name('rooms.handoff.store');
@@ -54,7 +54,7 @@ Route::post('/client-issues', [ClientIssueController::class, 'store'])
     ->middleware('throttle:12,1')
     ->name('client-issues.store');
 
-Route::prefix('api/sound-effects')->name('sound-effects.')->group(function () {
+Route::prefix('api/sound-effects')->name('sound-effects.')->middleware('asset-gen')->group(function () {
     Route::get('/characters', [CharacterSoundController::class, 'index'])->name('characters.index');
     Route::post('/characters/generate', [CharacterSoundController::class, 'generateAll'])
         ->middleware('throttle:6,1')
@@ -68,7 +68,7 @@ Route::prefix('api/sound-effects')->name('sound-effects.')->group(function () {
         ->name('background-music.generate');
 });
 
-Route::prefix('api/kill-animations')->name('kill-animations.')->group(function () {
+Route::prefix('api/kill-animations')->name('kill-animations.')->middleware('asset-gen')->group(function () {
     Route::get('/characters', [CharacterKillAnimationController::class, 'index'])->name('characters.index');
     Route::post('/characters/generate', [CharacterKillAnimationController::class, 'generateAll'])
         ->middleware('throttle:6,1')

@@ -155,7 +155,8 @@ class GameResumeTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Play')
                 ->where('me', null)
-                ->where('room.code', $room->code)
+                ->where('room', null)
+                ->where('blockedRoomCode', $room->code)
                 ->where('roomNotice', 'Kamu belum duduk di ruang ini. Minta kode undangan ke host untuk ikut bermain.'));
 
         $this->get("/room?code={$room->code}")

@@ -74,6 +74,7 @@ class PageController extends Controller
         $roomPayload = null;
         $mePayload = null;
         $roomNotice = null;
+        $blockedRoomCode = null;
 
         if ($request->filled('room')) {
             $code = strtoupper(trim((string) $request->query('room')));
@@ -106,12 +107,12 @@ class PageController extends Controller
                 if ($me) {
                     $this->presence->touch($me);
                     PlayerResume::remember($request, $me, $room->code);
+                    $roomPayload = $room->toLobbyPayload();
+                    $mePayload = $this->playerPayload($me);
                 } else {
                     $roomNotice = 'Kamu belum duduk di ruang ini. Minta kode undangan ke host untuk ikut bermain.';
+                    $blockedRoomCode = $room->code;
                 }
-
-                $roomPayload = $room->toLobbyPayload();
-                $mePayload = $me ? $this->playerPayload($me) : null;
             }
         }
 
@@ -119,6 +120,7 @@ class PageController extends Controller
             'room' => $roomPayload,
             'me' => $mePayload,
             'roomNotice' => $roomNotice,
+            'blockedRoomCode' => $blockedRoomCode,
         ]);
     }
 

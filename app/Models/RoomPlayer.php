@@ -46,6 +46,9 @@ class RoomPlayer extends Model
      */
     protected $hidden = [
         'handoff_code_hash',
+        'player_token',
+        'resume_token',
+        'user_id',
     ];
 
     protected function casts(): array

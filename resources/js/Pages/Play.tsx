@@ -179,7 +179,7 @@ export default function Play() {
                 : current);
         }, 7000);
     }, []);
-    const { auth, room, me, roomNotice } = usePage().props as unknown as {
+    const { auth, room, me, roomNotice, blockedRoomCode } = usePage().props as unknown as {
         auth?: { user: User | null };
         room?: {
             code: string;
@@ -208,6 +208,7 @@ export default function Play() {
             is_host: boolean;
         } | null;
         roomNotice?: string | null;
+        blockedRoomCode?: string | null;
     };
     const accountName = me?.name ?? auth?.user?.name?.split(' ')[0] ?? 'Pemain';
     const roomOrder = useMemo<PlayerId[]>(
@@ -2417,13 +2418,13 @@ export default function Play() {
                                 </span>
                                 <div className="min-w-0">
                                     <h1 className="text-ink text-lg font-semibold tracking-tight">
-                                        {room
+                                        {room?.code ?? blockedRoomCode
                                             ? 'Kamu belum duduk di ruang ini'
                                             : 'Ruang tidak ditemukan'}
                                     </h1>
                                     <p className="text-ink-muted text-xs">
-                                        {room
-                                            ? `Ruang ${room.code}`
+                                        {room?.code ?? blockedRoomCode
+                                            ? `Ruang ${room?.code ?? blockedRoomCode}`
                                             : 'Periksa kembali tautan ruangmu.'}
                                     </p>
                                 </div>
@@ -2444,10 +2445,13 @@ export default function Play() {
                                 >
                                     Kembali ke beranda
                                 </Link>
-                                {room ? (
+                                {room?.code ?? blockedRoomCode ? (
                                     <Link
                                         href={route('room', {
-                                            code: room.code,
+                                            code:
+                                                room?.code ??
+                                                blockedRoomCode ??
+                                                '',
                                         })}
                                         className="bg-brand hover:bg-brand-dark inline-flex h-11 flex-1 items-center justify-center rounded-xl text-xs font-semibold text-white transition"
                                     >

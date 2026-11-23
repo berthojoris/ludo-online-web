@@ -36,7 +36,7 @@ class CharacterSoundController extends Controller
 
         $validated = $request->validate([
             'characters' => ['nullable', 'array', 'min:1', 'max:7'],
-            'characters.*' => ['required', 'string', Rule::in(Room::ALL_CHARACTERS)],
+            'characters.*' => ['required', 'string', 'distinct', Rule::in(Room::ALL_CHARACTERS)],
             'format' => ['nullable', 'string', Rule::in(CharacterSoundGenerator::SUPPORTED_FORMATS)],
         ]);
 

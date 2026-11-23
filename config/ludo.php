@@ -16,4 +16,17 @@ return [
 
     'room_password' => env('ROOM_CREATE_PASSWORD'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Operator Asset Generation Token
+    |--------------------------------------------------------------------------
+    |
+    | Bearer token required to access the operator asset-generation API routes
+    | (sound effects, background music, kill animations). Fails closed when
+    | empty so an unconfigured environment never exposes paid API endpoints.
+    |
+    */
+
+    'asset_generation_token' => env('ASSET_GENERATION_TOKEN'),
+
 ];
