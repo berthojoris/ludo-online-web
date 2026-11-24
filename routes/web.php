@@ -10,6 +10,7 @@ use App\Http\Controllers\QuickMatchController;
 use App\Http\Controllers\RoomChatController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomHandoffController;
+use App\Http\Controllers\SpinWheelSoundController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
@@ -66,6 +67,13 @@ Route::prefix('api/sound-effects')->name('sound-effects.')->middleware('asset-ge
     Route::post('/background-music/generate', [BackgroundMusicController::class, 'generate'])
         ->middleware('throttle:3,1')
         ->name('background-music.generate');
+    Route::get('/spin-wheel', [SpinWheelSoundController::class, 'index'])->name('spin-wheel.index');
+    Route::post('/spin-wheel/generate', [SpinWheelSoundController::class, 'generateAll'])
+        ->middleware('throttle:3,1')
+        ->name('spin-wheel.generate-all');
+    Route::post('/spin-wheel/{track}/generate', [SpinWheelSoundController::class, 'generateOne'])
+        ->middleware('throttle:10,1')
+        ->name('spin-wheel.generate');
 });
 
 Route::prefix('api/kill-animations')->name('kill-animations.')->middleware('asset-gen')->group(function () {
